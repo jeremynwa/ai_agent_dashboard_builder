@@ -31,7 +31,7 @@ Frontend charge et affiche le dashboard
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│  🎨 AGENTIC DASHBOARD CREATOR                              [Session: abc123] │
+│  🎨 AI AGENT DASHBOARD BUILDER                             [Session: abc123] │
 ├──────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
 │  ┌─────────────────────────────────────────────────────────────────────────┐ │
@@ -88,7 +88,7 @@ Frontend charge et affiche le dashboard
 
 ## 📊 Diagrammes d'Architecture
 
-### Architecture Globale
+### Architecture Globale (Simplifiée avec MCP Docker)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -96,26 +96,28 @@ Frontend charge et affiche le dashboard
 │                                                                             │
 │  ┌─────────────┐      ┌─────────────┐      ┌─────────────────────────────┐ │
 │  │             │      │             │      │                             │ │
-│  │  FRONTEND   │◄────►│  BACKEND    │◄────►│  CLAUDE API + MCP SERVER    │ │
-│  │  (React)    │ HTTP │  (FastAPI)  │      │                             │ │
-│  │             │      │             │      │  Tools:                     │ │
-│  │  - Upload   │      │  - /upload  │      │  - get_db_schema()          │ │
-│  │  - Chat     │      │  - /generate│      │  - execute_sql()            │ │
-│  │  - Render   │      │  - /session │      │  - write_component()        │ │
-│  │             │      │             │      │                             │ │
-│  └──────▲──────┘      └──────┬──────┘      └──────────────┬──────────────┘ │
-│         │                    │                            │                 │
-│         │                    ▼                            ▼                 │
-│         │            ┌─────────────┐             ┌─────────────┐           │
-│         │            │   SQLite    │             │  GENERATED  │           │
-│         │            │   (temp)    │             │  COMPONENTS │           │
-│         │            │             │             │             │           │
-│         │            │ /data/      │             │ /generated/ │           │
-│         │            │ session_123/│             │ session_123/│           │
-│         │            │ data.db     │             │ Chart.jsx   │           │
-│         │            └─────────────┘             └──────┬──────┘           │
-│         │                                               │                   │
-│         └───────────────────────────────────────────────┘                   │
+│  │  FRONTEND   │◄────►│  BACKEND    │◄────►│      CLAUDE DESKTOP         │ │
+│  │  (React)    │ HTTP │  (FastAPI)  │      │            +                │ │
+│  │             │      │             │      │    MCP SERVERS (Docker)     │ │
+│  │  - Upload   │      │  - /upload  │      │                             │ │
+│  │  - Chat     │      │  - /generate│      │  ┌─────────┐ ┌───────────┐  │ │
+│  │  - Render   │      │  - /session │      │  │ SQLite  │ │ Filesystem│  │ │
+│  │             │      │             │      │  │  MCP    │ │    MCP    │  │ │
+│  └──────▲──────┘      └──────┬──────┘      │  └────┬────┘ └─────┬─────┘  │ │
+│         │                    │             │       │            │        │ │
+│         │                    │             └───────┼────────────┼────────┘ │
+│         │                    │                     │            │          │
+│         │                    ▼                     ▼            ▼          │
+│         │            ┌─────────────┐        ┌─────────────────────────┐   │
+│         │            │   SQLite    │        │   /generated/           │   │
+│         │            │   (temp)    │        │   session_123/          │   │
+│         │            │             │        │   ├── SalesChart.jsx    │   │
+│         │            │ /data/      │        │   └── TopProducts.jsx   │   │
+│         │            │ session_123/│        │                         │   │
+│         │            │ data.db     │        └────────────┬────────────┘   │
+│         │            └─────────────┘                     │                 │
+│         │                                                │                 │
+│         └────────────────────────────────────────────────┘                 │
 │                         (Frontend lit les composants)                       │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -123,42 +125,42 @@ Frontend charge et affiche le dashboard
 ### Flow Utilisateur
 
 ```
-┌──────┐     ┌──────────┐     ┌─────────┐     ┌───────┐     ┌──────────┐
-│ USER │     │ FRONTEND │     │ BACKEND │     │ CLAUDE│     │FILESYSTEM│
-└──┬───┘     └────┬─────┘     └────┬────┘     └───┬───┘     └────┬─────┘
-   │              │                │              │               │
-   │ Upload CSV   │                │              │               │
-   │─────────────►│                │              │               │
-   │              │ POST /upload   │              │               │
-   │              │───────────────►│              │               │
-   │              │                │ Parse & Store│               │
-   │              │                │─────────────────────────────►│
-   │              │    session_id  │              │               │
-   │              │◄───────────────│              │               │
-   │   "Générer"  │                │              │               │
-   │─────────────►│                │              │               │
-   │              │ POST /generate │              │               │
-   │              │───────────────►│              │               │
-   │              │                │  MCP Call    │               │
-   │              │                │─────────────►│               │
-   │              │                │              │ get_schema()  │
-   │              │                │              │──────────────►│
-   │              │                │              │◄──────────────│
-   │              │                │              │ execute_sql() │
-   │              │                │              │──────────────►│
-   │              │                │              │◄──────────────│
-   │              │                │              │write_component│
-   │              │                │              │──────────────►│
-   │              │                │◄─────────────│               │
-   │              │   component_id │              │               │
-   │              │◄───────────────│              │               │
-   │              │                │              │               │
-   │              │ GET /generated/session_123/Chart.jsx         │
-   │              │───────────────────────────────────────────────►
-   │              │◄───────────────────────────────────────────────
-   │  Dashboard!  │                │              │               │
-   │◄─────────────│                │              │               │
-   │              │                │              │               │
+┌──────┐     ┌──────────┐     ┌─────────┐     ┌───────────────────────┐
+│ USER │     │ FRONTEND │     │ BACKEND │     │ CLAUDE + MCP SERVERS  │
+└──┬───┘     └────┬─────┘     └────┬────┘     └───────────┬───────────┘
+   │              │                │                      │
+   │ Upload CSV   │                │                      │
+   │─────────────►│                │                      │
+   │              │ POST /upload   │                      │
+   │              │───────────────►│                      │
+   │              │                │ Parse CSV            │
+   │              │                │ Create SQLite        │
+   │              │    session_id  │                      │
+   │              │◄───────────────│                      │
+   │              │                │                      │
+   │   "Générer"  │                │                      │
+   │─────────────►│                │                      │
+   │              │ POST /generate │                      │
+   │              │───────────────►│                      │
+   │              │                │  Prompt + session_id │
+   │              │                │─────────────────────►│
+   │              │                │                      │
+   │              │                │      SQLite MCP:     │
+   │              │                │      - read schema   │
+   │              │                │      - execute query │
+   │              │                │                      │
+   │              │                │      Filesystem MCP: │
+   │              │                │      - write .jsx    │
+   │              │                │                      │
+   │              │                │◄─────────────────────│
+   │              │   components   │                      │
+   │              │◄───────────────│                      │
+   │              │                │                      │
+   │              │ Fetch .jsx files from /generated/     │
+   │              │───────────────────────────────────────►
+   │              │◄───────────────────────────────────────
+   │  Dashboard!  │                │                      │
+   │◄─────────────│                │                      │
 ```
 
 ### Structure des Sessions
@@ -166,35 +168,35 @@ Frontend charge et affiche le dashboard
 ```
 /data/                          /generated/
 ├── session_abc123/             ├── session_abc123/
-│   ├── data.db (SQLite)        │   ├── SalesChart.jsx
-│   └── schema.json             │   ├── TopProducts.jsx
-│                               │   └── KPICards.jsx
-├── session_xyz789/             │
-│   ├── data.db                 ├── session_xyz789/
-│   └── schema.json             │   └── RevenueChart.jsx
-│                               │
-└── session_user_jeremy/        └── session_user_jeremy/    ← (avec auth)
-    ├── data.db                     ├── Dashboard1.jsx
-    └── schema.json                 └── Dashboard2.jsx
+│   └── data.db (SQLite)        │   ├── SalesChart.jsx
+│                               │   ├── TopProducts.jsx
+├── session_xyz789/             │   └── KPICards.jsx
+│   └── data.db                 │
+│                               ├── session_xyz789/
+└── session_user_jeremy/        │   └── RevenueChart.jsx
+    └── data.db                 │
+                                └── session_user_jeremy/
+                                    ├── Dashboard1.jsx
+                                    └── Dashboard2.jsx
 ```
 
 ---
 
 ## ✅ POC vs 🚀 PRODUCTION
 
-| Feature | POC | Production |
-|---------|-----|------------|
-| **Upload** | CSV uniquement | CSV, Excel, connexion BDD directe |
-| **Stockage BDD** | SQLite temporaire | PostgreSQL ou connexion user |
-| **Sessions** | ID aléatoire, temporaire | Auth + compte user persistant |
-| **Cache** | En mémoire (dict Python) | Redis |
-| **Composants** | Dossier par session, supprimé après | Sauvegarde permanente, versioning |
-| **Sécurité** | Validation basique du code | Sandbox complet, rate limiting, audit |
-| **MCP** | Claude API + MCP | MCP Server dédié avec monitoring |
-| **Déploiement** | Docker local | GCP Cloud Run + CDN |
-| **Auth** | ❌ Aucune | ✅ Login/OAuth |
-| **Multi-user** | ❌ 1 user à la fois | ✅ Concurrent users |
-| **Données externes** | ❌ Non | ✅ APIs météo, économie, etc. |
+| Feature              | POC                                      | Production                            |
+| -------------------- | ---------------------------------------- | ------------------------------------- |
+| **Upload**           | CSV uniquement                           | CSV, Excel, connexion BDD directe     |
+| **Stockage BDD**     | SQLite temporaire                        | PostgreSQL ou connexion user          |
+| **Sessions**         | ID aléatoire, temporaire                 | Auth + compte user persistant         |
+| **Cache**            | En mémoire (dict Python)                 | Redis                                 |
+| **Composants**       | Dossier par session, supprimé après      | Sauvegarde permanente, versioning     |
+| **Sécurité**         | Validation basique du code               | Sandbox complet, rate limiting, audit |
+| **MCP**              | Docker MCP Toolkit (SQLite + Filesystem) | Idem + monitoring                     |
+| **Déploiement**      | Docker local                             | GCP Cloud Run + CDN                   |
+| **Auth**             | ❌ Aucune                                | ✅ Login/OAuth                        |
+| **Multi-user**       | ❌ 1 user à la fois                      | ✅ Concurrent users                   |
+| **Données externes** | ❌ Non                                   | ✅ APIs météo, économie, etc.         |
 
 ---
 
@@ -202,19 +204,20 @@ Frontend charge et affiche le dashboard
 
 ### Stack
 
-| Composant | POC | Production |
-|-----------|-----|------------|
-| Backend | FastAPI | FastAPI + Celery (async jobs) |
-| Frontend | React + Vite | React + Vite |
-| Renderer | react-live | react-live + sandbox custom |
-| Charts | recharts | recharts |
-| Style | Tailwind | Tailwind |
-| IA | Claude API + MCP | Claude API + MCP Server dédié |
-| DB User | SQLite temp | PostgreSQL / connexion directe |
-| Cache | dict Python | Redis |
-| Infra | Docker local | Docker + GCP |
+| Composant | POC                | Production                     |
+| --------- | ------------------ | ------------------------------ |
+| Backend   | FastAPI            | FastAPI + Celery (async jobs)  |
+| Frontend  | React + Vite       | React + Vite                   |
+| Renderer  | react-live         | react-live + sandbox custom    |
+| Charts    | recharts           | recharts                       |
+| Style     | Tailwind           | Tailwind                       |
+| IA        | Claude Desktop     | Claude API                     |
+| MCP       | Docker MCP Toolkit | Docker MCP Toolkit + custom    |
+| DB User   | SQLite temp        | PostgreSQL / connexion directe |
+| Cache     | dict Python        | Redis                          |
+| Infra     | Docker local       | Docker + GCP                   |
 
-### Structure du Projet
+### Structure du Projet (Simplifiée)
 
 ```
 ai_agent_dashboard_builder/
@@ -223,17 +226,11 @@ ai_agent_dashboard_builder/
 │   ├── main.py                 # FastAPI app
 │   ├── routers/
 │   │   ├── upload.py           # POST /upload (CSV → SQLite)
-│   │   ├── generate.py         # POST /generate (prompt → dashboard)
+│   │   ├── generate.py         # POST /generate (prompt → Claude)
 │   │   └── session.py          # GET /session/{id}
 │   ├── services/
-│   │   ├── claude_service.py   # Appels Claude + MCP
-│   │   ├── db_service.py       # Gestion SQLite temporaire
-│   │   └── cache_service.py    # Reproductibilité (POC: dict)
-│   ├── mcp/
-│   │   ├── server.py           # MCP Server
-│   │   └── tools/
-│   │       ├── db_tools.py     # get_schema, execute_sql
-│   │       └── fs_tools.py     # write_component, list_components
+│   │   ├── claude_service.py   # Appels Claude Desktop
+│   │   └── db_service.py       # Gestion SQLite temporaire
 │   ├── Dockerfile
 │   └── requirements.txt
 │
@@ -266,54 +263,93 @@ ai_agent_dashboard_builder/
 
 ---
 
-## 🔧 MCP Tools
+## 🔧 MCP Servers (Docker MCP Toolkit)
 
-### POC - 4 Tools essentiels
+### Serveurs utilisés (pré-faits, pas de code custom!)
 
-```python
-# 1. Lire le schema
-@tool
-def get_db_schema(session_id: str) -> dict:
-    """Retourne la structure des tables uploadées"""
-    # → {"sales": ["id", "product", "amount", "date"], ...}
+**1. SQLite MCP** (du catalogue Docker)
 
-# 2. Exécuter SQL
-@tool
-def execute_sql(session_id: str, query: str) -> list[dict]:
-    """Exécute une query sur la BDD de la session"""
-    # → [{"product": "iPhone", "total": 45000}, ...]
-
-# 3. Écrire un composant
-@tool
-def write_component(session_id: str, name: str, code: str) -> str:
-    """Écrit un fichier .jsx dans /generated/{session_id}/"""
-    # → "Component written: /generated/abc123/SalesChart.jsx"
-
-# 4. Lister les composants
-@tool
-def list_components(session_id: str) -> list[str]:
-    """Liste les composants générés"""
-    # → ["SalesChart.jsx", "TopProducts.jsx"]
+```
+✅ Déjà fait - juste à configurer
+- read_schema() → Retourne la structure des tables
+- execute_query() → Exécute des SQL queries
+- list_tables() → Liste les tables disponibles
 ```
 
-### PRODUCTION - Tools additionnels
+**2. Filesystem MCP** (du catalogue Docker)
+
+```
+✅ Déjà fait - juste à configurer
+- write_file() → Écrit les composants .jsx
+- read_file() → Lit les fichiers
+- list_directory() → Liste les composants générés
+```
+
+### Configuration dans Docker Desktop
+
+```
+MCP Toolkit → Catalog → Ajouter:
+1. "Filesystem (Reference)" - modelcontextprotocol
+2. "SQLite" - neverinfamous
+
+Puis configurer les paths autorisés:
+- /data/ (pour SQLite)
+- /generated/ (pour les composants)
+```
+
+---
+
+## 📄 Extraction Automatique du Schema
+
+Quand l'utilisateur upload un CSV, on extrait automatiquement la structure :
 
 ```python
-# 5. Données externes
-@tool
-def fetch_external_data(source: str, params: dict) -> dict:
-    """Récupère données météo, économie, etc."""
+import pandas as pd
 
-# 6. Update composant
-@tool
-def update_component(session_id: str, name: str, code: str) -> str:
-    """Met à jour un composant existant"""
+def extract_schema(file_path: str) -> dict:
+    df = pd.read_csv(file_path)
 
-# 7. Delete composant
-@tool
-def delete_component(session_id: str, name: str) -> bool:
-    """Supprime un composant"""
+    return {
+        "columns": df.columns.tolist(),
+        "dtypes": df.dtypes.astype(str).to_dict(),
+        "row_count": len(df),
+        "sample": df.head(3).to_dict()
+    }
 ```
+
+**Exemple :**
+
+```
+User upload: sales.csv
+
+product,region,amount,date
+iPhone,Paris,999,2024-01-15
+MacBook,Lyon,1299,2024-01-16
+...
+```
+
+**Schema extrait :**
+
+```json
+{
+  "columns": ["product", "region", "amount", "date"],
+  "dtypes": {
+    "product": "object",
+    "region": "object",
+    "amount": "int64",
+    "date": "object"
+  },
+  "row_count": 1245,
+  "sample": {
+    "product": { "0": "iPhone", "1": "MacBook" },
+    "region": { "0": "Paris", "1": "Lyon" },
+    "amount": { "0": 999, "1": 1299 },
+    "date": { "0": "2024-01-15", "1": "2024-01-16" }
+  }
+}
+```
+
+Ce schema est envoyé à Claude pour qu'il comprenne la structure et génère des SQL queries adaptées.
 
 ---
 
@@ -334,8 +370,7 @@ def delete_component(session_id: str, name: str) -> bool:
 │     1. Génère session_id = "abc123"                            │
 │     2. Parse le CSV avec pandas                                │
 │     3. Crée /data/abc123/data.db (SQLite)                      │
-│     4. Sauvegarde schema.json                                   │
-│     5. Retourne { session_id, tables, columns }                │
+│     4. Retourne { session_id, schema }                         │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
                               │
@@ -350,23 +385,16 @@ def delete_component(session_id: str, name: str) -> bool:
 │   Frontend envoie POST /generate { session_id, prompt }        │
 │           │                                                     │
 │           ▼                                                     │
-│   Backend:                                                      │
-│     1. Check cache (reproductibilité)                          │
-│     2. Si pas en cache → appelle Claude avec MCP               │
-│           │                                                     │
-│           ▼                                                     │
-│   Claude reçoit:                                                │
+│   Backend envoie à Claude Desktop:                             │
 │     - System prompt (règles de génération)                     │
-│     - Schema de la BDD                                          │
+│     - Chemin vers la BDD: /data/abc123/data.db                 │
+│     - Chemin output: /generated/abc123/                        │
 │     - Prompt user                                               │
-│     - Accès aux MCP tools                                       │
 │           │                                                     │
 │           ▼                                                     │
-│   Claude:                                                       │
-│     1. get_db_schema("abc123") → comprend la structure         │
-│     2. execute_sql("abc123", "SELECT...") → récupère data      │
-│     3. Génère le code React                                     │
-│     4. write_component("abc123", "TopProducts", code)          │
+│   Claude utilise les MCP Servers:                              │
+│     1. SQLite MCP → lit le schema, exécute query               │
+│     2. Filesystem MCP → écrit le composant .jsx                │
 │           │                                                     │
 │           ▼                                                     │
 │   Fichier créé: /generated/abc123/TopProducts.jsx              │
@@ -378,13 +406,12 @@ def delete_component(session_id: str, name: str) -> bool:
 │ ÉTAPE 3: AFFICHAGE                                              │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│   Backend retourne { component_id: "TopProducts" }             │
+│   Backend retourne { components: ["TopProducts.jsx"] }         │
 │           │                                                     │
 │           ▼                                                     │
 │   Frontend:                                                     │
 │     1. Fetch /generated/abc123/TopProducts.jsx                 │
-│     2. Fetch data associée                                      │
-│     3. react-live compile et render                            │
+│     2. react-live compile et render                            │
 │           │                                                     │
 │           ▼                                                     │
 │   Dashboard affiché! 🎉                                         │
@@ -400,6 +427,10 @@ def delete_component(session_id: str, name: str) -> bool:
 SYSTEM PROMPT:
 
 Tu es un générateur de composants React pour dashboards.
+
+Tu as accès à:
+- SQLite MCP: pour lire le schema et exécuter des queries
+- Filesystem MCP: pour écrire les composants .jsx
 
 ## RÈGLES STRICTES
 
@@ -418,19 +449,26 @@ Tu es un générateur de composants React pour dashboards.
      );
    }
 
-3. TYPES DE VIZ:
+3. WORKFLOW:
+   a) Utilise SQLite MCP pour lire le schema de la BDD
+   b) Génère une SQL query appropriée
+   c) Exécute la query pour obtenir les données
+   d) Génère le code React du composant
+   e) Utilise Filesystem MCP pour écrire le fichier .jsx
+
+4. TYPES DE VIZ:
    - Comparaisons → BarChart
    - Tendances temporelles → LineChart
    - Proportions → PieChart
    - Détails → Table
    - Métriques clés → KPI Cards
 
-4. REPRODUCTIBILITÉ:
+5. REPRODUCTIBILITÉ:
    - Jamais de Math.random()
    - Toujours trier les données (ORDER BY dans SQL)
    - Couleurs fixes, pas dynamiques
 
-5. STYLING:
+6. STYLING:
    - Utilise Tailwind
    - Responsive (flex, grid)
    - Couleurs sobres et pro
@@ -467,7 +505,6 @@ def validate_component(code: str) -> bool:
 
 ```python
 import hashlib
-import json
 
 def get_cache_key(session_id: str, prompt: str) -> str:
     """Même session + même prompt = même résultat"""
@@ -479,11 +516,11 @@ cache = {}
 
 async def generate_dashboard(session_id: str, prompt: str):
     key = get_cache_key(session_id, prompt)
-    
+
     if key in cache:
-        return cache[key]  # Retourne résultat précédent
-    
-    result = await call_claude_mcp(session_id, prompt)
+        return cache[key]
+
+    result = await call_claude(session_id, prompt)
     cache[key] = result
     return result
 ```
@@ -492,15 +529,21 @@ async def generate_dashboard(session_id: str, prompt: str):
 
 ## 📅 Planning
 
-### POC (5 jours)
+### POC (3-4 jours) ⚡ Accéléré grâce aux MCP Servers Docker
 
-| Jour | Matin | Après-midi |
-|------|-------|------------|
-| **J1** | Setup Docker + structure projet | Backend: endpoint /upload |
-| **J2** | Backend: endpoint /generate | MCP: tools get_schema + execute_sql |
-| **J3** | MCP: tool write_component | Test intégration Claude + MCP |
-| **J4** | Frontend: Upload + Prompt | Frontend: DynamicRenderer |
-| **J5** | Tests E2E | Polish + exemples démo |
+| Jour   | Matin                                            | Après-midi                |
+| ------ | ------------------------------------------------ | ------------------------- |
+| **J1** | Setup Docker + MCP Servers (SQLite, Filesystem)  | Backend: endpoint /upload |
+| **J2** | Backend: endpoint /generate + intégration Claude | Test Claude + MCP         |
+| **J3** | Frontend: Upload + Prompt + DynamicRenderer      | Tests E2E                 |
+| **J4** | Polish + exemples démo                           | Documentation             |
+
+### Ce qu'on ne code PAS (grâce aux MCP Servers Docker)
+
+- ❌ MCP Server custom
+- ❌ Tools get_schema, execute_sql
+- ❌ Tools write_component, list_components
+- ✅ On utilise SQLite MCP + Filesystem MCP du catalogue Docker!
 
 ### Production (estimé 2-3 semaines après POC)
 
@@ -510,15 +553,51 @@ async def generate_dashboard(session_id: str, prompt: str):
 
 ---
 
+## 🛠️ Setup Initial
+
+### 1. Docker Desktop
+
+```bash
+# Déjà installé ✅
+# WSL mis à jour ✅
+```
+
+### 2. MCP Servers à activer dans Docker Desktop
+
+```
+MCP Toolkit → Catalog → Ajouter:
+☑️ Filesystem (Reference) - modelcontextprotocol - 100K+ downloads
+☑️ SQLite - neverinfamous - 3.6K downloads
+```
+
+### 3. Connecter Claude Desktop
+
+```
+MCP Toolkit → Clients → Claude Desktop → Connect ✅
+```
+
+### 4. Créer le projet
+
+```bash
+mkdir ai_agent_dashboard_builder
+cd ai_agent_dashboard_builder
+# Structure à créer...
+```
+
+---
+
 ## ❓ Questions Ouvertes
 
 ### POC
+
 - [x] Upload fichier ou BDD existante ? → **Upload fichier (CSV)**
 - [x] Sessions liées à un compte ? → **Non pour POC, oui pour prod**
+- [x] Coder MCP Server custom ? → **Non, on utilise Docker MCP Toolkit**
 - [ ] Polling ou WebSocket pour détecter nouveaux composants ?
-- [ ] Formats de fichiers supportés ? (CSV seul ou aussi Excel ?)
+- [ ] Formats supportés ? (CSV seul ou aussi Excel ?)
 
 ### Production
+
 - [ ] Quels APIs externes intégrer ? (météo, économie...)
 - [ ] Limite de taille des fichiers ?
 - [ ] Durée de vie des sessions temporaires ?
@@ -528,8 +607,9 @@ async def generate_dashboard(session_id: str, prompt: str):
 
 ## 🔗 Ressources
 
+- [Docker MCP Toolkit](https://docs.docker.com/desktop/features/mcp-toolkit/)
 - [MCP Documentation](https://modelcontextprotocol.io/)
-- [Claude API Docs](https://docs.anthropic.com/)
+- [Claude Desktop](https://claude.ai/download)
 - [react-live](https://github.com/FormidableLabs/react-live)
 - [recharts](https://recharts.org/)
 - [FastAPI](https://fastapi.tiangolo.com/)
@@ -542,5 +622,8 @@ async def generate_dashboard(session_id: str, prompt: str):
 ```
 [Date] - Note
 ──────────────
-...
+- Docker Desktop installé
+- WSL mis à jour
+- Claude Desktop connecté au MCP Toolkit
+- MCP Servers à ajouter: Filesystem + SQLite
 ```
