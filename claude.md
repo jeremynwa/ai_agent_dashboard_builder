@@ -4,9 +4,9 @@
 
 **Nom**: `ai_app_builder`
 
-**Objectif**: Générer des applications React à partir d'un prompt, en respectant les règles métier de la compagnie et en utilisant les données du client.
+**Objectif**: SaaS permettant aux clients de générer des applications React via prompt. L'app générée tourne directement dans le browser du client (WebContainers).
 
-**Contexte**: POC pour impressionner Nicolas (nouveau partner). Démontrer l'expertise IA + Frontend.
+**Architecture**: WebContainers (browser) + AWS minimal (backend)
 
 ---
 
@@ -16,327 +16,201 @@
 ┌─────────────────────────────────────────────────────────────────┐
 │                       AI APP BUILDER                            │
 │                                                                 │
-│   INPUTS                           OUTPUT                       │
-│   ──────                           ──────                       │
-│   ┌─────────────┐                                               │
-│   │   Prompt    │ "Créer un calculateur                        │
-│   │   User      │  d'élasticité des prix"                      │
-│   └──────┬──────┘                                               │
-│          │                                                      │
-│   ┌──────┴──────┐                  ┌─────────────────────────┐ │
-│   │   Règles    │                  │                         │ │
-│   │   JSON      │ ──── CLAUDE ───► │   APP REACT GÉNÉRÉE     │ │
-│   │  (logique,  │    + MCP         │                         │ │
-│   │  formats)   │                  │   - Respecte vos règles │ │
-│   └──────┬──────┘                  │   - Utilise vos données │ │
-│          │                         │   - Style compagnie     │ │
-│   ┌──────┴──────┐                  │                         │ │
-│   │    BDD      │                  └─────────────────────────┘ │
-│   │   Client    │                                               │
-│   │  (CSV/SQL)  │                                               │
-│   └─────────────┘                                               │
+│   Client écrit: "Ajouter un module CRM"                        │
+│                          │                                      │
+│                          ▼                                      │
+│   ┌─────────────────────────────────────────────────────────┐  │
+│   │                 BROWSER DU CLIENT                        │  │
+│   │                                                          │  │
+│   │   ┌──────────────────────────────────────────────────┐  │  │
+│   │   │            WEBCONTAINER                          │  │  │
+│   │   │                                                  │  │  │
+│   │   │  • Node.js dans le browser                      │  │  │
+│   │   │  • Filesystem isolé (ce user seulement)         │  │  │
+│   │   │  • Build React (Vite)                           │  │  │
+│   │   │  • Hot reload instantané                        │  │  │
+│   │   │  • Preview live                                 │  │  │
+│   │   │                                                  │  │  │
+│   │   │  L'app générée TOURNE ICI                       │  │  │
+│   │   └──────────────────────────────────────────────────┘  │  │
+│   │                                                          │  │
+│   └─────────────────────────────────────────────────────────┘  │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 🛠️ Types d'Apps Générables
-
-| Type | Description | Exemple |
-|------|-------------|---------|
-| **Dashboards** | Visualisation de données, KPIs, charts | Sales dashboard, Marketing metrics |
-| **Calculateurs** | Outils de calcul métier | ROI calculator, Price elasticity, Margin calculator |
-| **Formulaires** | Collecte de données structurées | Lead capture, Survey, Onboarding |
-| **Landing Pages** | Pages marketing/produit | Product launch, Event registration |
-| **Outils internes** | Apps métier spécifiques | Inventory manager, Quote generator |
-
----
-
-## 📊 Architecture Complète
+## 🏗️ Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
+│  BROWSER DU CLIENT                                                          │
 │                                                                             │
-│  👤 CLIENT (navigateur)                                                     │
-│       │                                                                     │
-│       │ HTTP                                                                │
-│       ▼                                                                     │
-│  ┌──────────────────────────────────────────────────────────────────────┐  │
-│  │  🖥️ FRONTEND (React)                                                 │  │
-│  │                                                                       │  │
-│  │  - Upload CSV                                                        │  │
-│  │  - Input prompt                                                      │  │
-│  │  - Affiche apps générées                                             │  │
-│  │                                                                       │  │
-│  │  Hébergé sur: S3 (static hosting)                                    │  │
-│  └───────────────────────────┬──────────────────────────────────────────┘  │
-│                              │                                              │
-│                              │ HTTP                                         │
-│                              ▼                                              │
-│  ┌──────────────────────────────────────────────────────────────────────┐  │
-│  │  🖥️ BACKEND (FastAPI)                                                │  │
-│  │                                                                       │  │
-│  │  - POST /upload → reçoit CSV → stocke dans PostgreSQL                │  │
-│  │  - POST /generate → appelle Claude API                               │  │
-│  │  - GET /apps/{session} → liste apps générées                         │  │
-│  │                                                                       │  │
-│  │  Hébergé sur: EC2 ou Lambda (free tier)                              │  │
-│  └───────────────────────────┬──────────────────────────────────────────┘  │
-│                              │                                              │
-│                              │ Appelle Claude API                           │
-│                              ▼                                              │
-│  ┌──────────────────────────────────────────────────────────────────────┐  │
-│  │  🧠 CLAUDE API                                                        │  │
-│  │                                                                       │  │
-│  │  Claude reçoit le prompt + accès aux MCP servers                     │  │
-│  │                                                                       │  │
-│  │  Hébergé par: Anthropic                                              │  │
-│  └───────────────────────────┬──────────────────────────────────────────┘  │
-│                              │                                              │
-│                              │ Appelle les MCP tools                        │
-│                              ▼                                              │
-│  ┌──────────────────────────────────────────────────────────────────────┐  │
-│  │                        MCP SERVERS                                    │  │
-│  │                                                                       │  │
-│  │  ┌─────────────────────────┐    ┌─────────────────────────────────┐  │  │
-│  │  │  🔧 CUSTOM MCP          │    │  📊 AURORA POSTGRESQL MCP       │  │  │
-│  │  │     (toi)               │    │        (AWS)                    │  │  │
-│  │  │                         │    │                                 │  │  │
-│  │  │  📖 LIRE S3:            │    │  • execute_query(sql)           │  │  │
-│  │  │  • get_rules(type)      │    │  • get_schema()                 │  │  │
-│  │  │  • get_template(type)   │    │  • list_tables()                │  │  │
-│  │  │  • list_rules()         │    │                                 │  │  │
-│  │  │                         │    │  Hébergé par: AWS (managed)     │  │  │
-│  │  │  ✏️ ÉCRIRE S3:          │    │                                 │  │  │
-│  │  │  • save_app(...)        │    └─────────────────────────────────┘  │  │
-│  │  │  • list_apps(session)   │                                         │  │
-│  │  │                         │                                         │  │
-│  │  │  Hébergé sur:           │                                         │  │
-│  │  │  AGENTCORE RUNTIME      │                                         │  │
-│  │  └─────────────────────────┘                                         │  │
-│  │                                                                       │  │
-│  └───────────────────────────────────────────────────────────────────────┘  │
-│                              │                                              │
-│         ┌────────────────────┴────────────────────┐                        │
-│         │                                         │                        │
-│         ▼                                         ▼                        │
-│  ┌────────────────┐                      ┌─────────────────┐               │
-│  │      S3        │                      │ RDS POSTGRESQL  │               │
-│  │                │                      │                 │               │
-│  │  /rules/       │                      │ data_{session}  │               │
-│  │    pricing.json│                      │   (CSV data)    │               │
-│  │    design.json │                      │                 │               │
-│  │  /templates/   │                      │ sessions        │               │
-│  │    calculator. │                      │                 │               │
-│  │  /generated/   │                      └─────────────────┘               │
-│  │    session_123/│                                                        │
-│  │      App.jsx   │                                                        │
-│  └────────────────┘                                                        │
+│  ┌───────────────────────────────────────────────────────────────────────┐ │
+│  │                         WEBCONTAINER                                   │ │
+│  │                   (Node.js dans le browser)                           │ │
+│  │                                                                        │ │
+│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  │ │
+│  │  │ Filesystem  │  │    Vite     │  │ Hot Reload  │  │   Preview   │  │ │
+│  │  │   isolé     │  │   Build     │  │  instantané │  │    live     │  │ │
+│  │  │             │  │             │  │             │  │             │  │ │
+│  │  │ /src/       │  │ Compile     │  │ Auto-refresh│  │ localhost   │  │ │
+│  │  │ /api/       │  │ React       │  │ on change   │  │ :3000       │  │ │
+│  │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘  │ │
+│  │                                                                        │ │
+│  │  ┌─────────────────────────────────────────────────────────────────┐  │ │
+│  │  │  SQLite (DB locale par user)                                    │  │ │
+│  │  │  • Données de l'app générée                                     │  │ │
+│  │  │  • Isolé par user automatiquement                              │  │ │
+│  │  └─────────────────────────────────────────────────────────────────┘  │ │
+│  │                                                                        │ │
+│  └───────────────────────────────────────────────────────────────────────┘ │
+│         ▲                                                                   │
+│         │ Claude envoie le code généré                                     │
+│         │                                                                   │
+└─────────┼───────────────────────────────────────────────────────────────────┘
+          │
+          │
+┌─────────┴───────────────────────────────────────────────────────────────────┐
+│  AWS (Minimal)                                                              │
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  Lambda (Backend léger)                                             │   │
+│  │                                                                      │   │
+│  │  • Reçoit prompt du client                                          │   │
+│  │  • Lit règles/templates depuis S3                                   │   │
+│  │  • Appelle Claude API                                               │   │
+│  │  • Retourne le code généré au client                               │   │
+│  │  • Vérifie les erreurs de build (via logs)                         │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                          │                                                  │
+│         ┌────────────────┼────────────────┐                                │
+│         ▼                ▼                ▼                                │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                        │
+│  │     S3      │  │ Claude API  │  │ RDS/DynamoDB│                        │
+│  │             │  │             │  │ (optionnel) │                        │
+│  │ • rules/    │  │ Génère le   │  │             │                        │
+│  │ • templates/│  │ code React  │  │ • Users     │                        │
+│  │             │  │             │  │ • Apps      │                        │
+│  │             │  │             │  │   sauvées   │                        │
+│  └─────────────┘  └─────────────┘  └─────────────┘                        │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 🔧 MCP Servers - Tableau Récapitulatif
+## 🔧 MCP Servers
 
-| Fonction | Qui fait | MCP | Stockage |
-|----------|----------|-----|----------|
-| Lire règles métier (JSON) | Toi | Custom MCP | S3 |
-| Lire design system (JSON) | Toi | Custom MCP | S3 |
-| Lire templates (JSX) | Toi | Custom MCP | S3 |
-| Lire données client | AWS | Aurora PostgreSQL MCP | RDS PostgreSQL |
-| Query données client | AWS | Aurora PostgreSQL MCP | RDS PostgreSQL |
-| Écrire apps générées | Toi | Custom MCP | S3 |
-| Lister apps générées | Toi | Custom MCP | S3 |
+### Stack MCP selon Gemini (optimisée)
 
----
+| MCP | Rôle | Pourquoi |
+|-----|------|----------|
+| **Filesystem MCP** | Code Writer | Écrire les fichiers React générés |
+| **SQLite MCP** | Schema Architect | Créer tables pour l'app (données user) |
+| **Terminal MCP** | Error Catcher | Vérifier build, auto-corriger erreurs |
 
-## 🔧 Custom MCP - Code
+### MCP par source
 
-```python
-# mcp_server/server.py (~80 lignes)
+| MCP | Source | Usage |
+|-----|--------|-------|
+| Filesystem MCP | Anthropic | Écrire code dans WebContainer |
+| SQLite MCP | Anthropic | DB locale par user |
+| PostgreSQL MCP | Anthropic/AWS | DB persistante (si sauvegarde) |
+| GitHub MCP | Anthropic | Versionner les apps |
 
-import json
-import boto3
-from mcp.server.fastmcp import FastMCP
+### Ce qu'on enlève
 
-mcp = FastMCP(name="ai-app-builder", host="0.0.0.0", stateless_http=True)
-s3 = boto3.client('s3')
-BUCKET = "ai-app-builder"
-
-# ============ LIRE S3 ============
-
-@mcp.tool()
-def get_rules(rule_type: str) -> dict:
-    """Lit les règles métier (pricing, finance, marketing)"""
-    obj = s3.get_object(Bucket=BUCKET, Key=f'rules/{rule_type}.json')
-    return json.loads(obj['Body'].read())
-
-@mcp.tool()
-def get_template(app_type: str) -> str:
-    """Lit un template React (calculator, dashboard, form)"""
-    obj = s3.get_object(Bucket=BUCKET, Key=f'templates/{app_type}.jsx')
-    return obj['Body'].read().decode('utf-8')
-
-@mcp.tool()
-def list_rules() -> list:
-    """Liste toutes les règles disponibles"""
-    response = s3.list_objects_v2(Bucket=BUCKET, Prefix='rules/')
-    return [obj['Key'] for obj in response.get('Contents', [])]
-
-# ============ ÉCRIRE S3 ============
-
-@mcp.tool()
-def save_app(session_id: str, filename: str, code: str) -> dict:
-    """Sauvegarde l'app React générée dans S3"""
-    key = f'generated/{session_id}/{filename}'
-    s3.put_object(Bucket=BUCKET, Key=key, Body=code, ContentType='text/jsx')
-    return {"status": "success", "path": f"s3://{BUCKET}/{key}"}
-
-@mcp.tool()
-def list_apps(session_id: str) -> list:
-    """Liste les apps générées pour cette session"""
-    response = s3.list_objects_v2(Bucket=BUCKET, Prefix=f'generated/{session_id}/')
-    return [obj['Key'] for obj in response.get('Contents', [])]
-
-# ============ RUN ============
-
-def main():
-    mcp.run(transport="streamable-http")
-
-if __name__ == "__main__":
-    main()
-```
-
-**Déploiement sur AgentCore (2 commandes) :**
-```bash
-agentcore configure --entrypoint server.py --protocol MCP --name ai-app-builder
-agentcore launch
-```
-
----
-
-## 📦 Structure S3
-
-```
-s3://ai-app-builder/
-│
-├── rules/                      # Règles métier (JSON)
-│   ├── pricing.json            # Formules: élasticité, marge, markup
-│   ├── finance.json            # Formules: ROI, NPV, IRR
-│   ├── marketing.json          # Formules: CAC, LTV, conversion
-│   └── design.json             # Couleurs, fonts, spacing
-│
-├── templates/                  # Templates React de base (JSX)
-│   ├── calculator.jsx
-│   ├── dashboard.jsx
-│   ├── form.jsx
-│   └── landing.jsx
-│
-├── generated/                  # Apps générées par Claude
-│   ├── session_abc123/
-│   │   ├── ElasticityCalc.jsx
-│   │   └── SalesChart.jsx
-│   └── session_xyz789/
-│       └── ROICalculator.jsx
-│
-└── uploads/                    # CSVs uploadés (backup)
-    └── session_abc123/
-        └── data.csv
-```
-
----
-
-## 📄 Exemple de Règles JSON
-
-### `rules/pricing.json`
-```json
-{
-  "name": "Pricing Rules",
-  "formulas": {
-    "price_elasticity": {
-      "name": "Élasticité-prix",
-      "formula": "(ΔQ / Q) / (ΔP / P)",
-      "code": "const elasticity = (deltaQ / Q) / (deltaP / P);",
-      "interpretation": {
-        "abs > 1": "Demande élastique",
-        "abs < 1": "Demande inélastique"
-      }
-    },
-    "margin": {
-      "name": "Marge",
-      "formula": "(Prix - Coût) / Prix × 100",
-      "code": "const margin = ((price - cost) / price) * 100;"
-    },
-    "markup": {
-      "name": "Markup",
-      "formula": "(Prix - Coût) / Coût × 100",
-      "code": "const markup = ((price - cost) / cost) * 100;"
-    }
-  }
-}
-```
-
-### `rules/design.json`
-```json
-{
-  "name": "Design System",
-  "colors": {
-    "primary": "#3B82F6",
-    "secondary": "#10B981",
-    "error": "#EF4444",
-    "warning": "#F59E0B",
-    "background": "#F9FAFB",
-    "text": "#111827"
-  },
-  "fonts": {
-    "title": "text-2xl font-bold text-gray-900",
-    "subtitle": "text-lg font-medium text-gray-700",
-    "body": "text-base text-gray-600"
-  }
-}
-```
+| MCP | Pourquoi on enlève |
+|-----|-------------------|
+| ~~Puppeteer MCP~~ | L'utilisateur EST le testeur |
+| ~~ECS MCP~~ | Pas besoin, app tourne dans browser |
+| ~~CDK MCP~~ | Infra minimale, pas besoin |
 
 ---
 
 ## 🔄 Flow Complet
 
 ```
-1. User upload CSV sur Frontend
-2. Frontend → Backend: POST /upload {file}
-3. Backend parse CSV → stocke dans PostgreSQL (table data_{session_id})
-4. Backend retourne {session_id, schema}
+1. Client ouvre ton-app.com
+   → Frontend charge + WebContainer s'initialise
 
-5. User écrit prompt: "Créer un calculateur d'élasticité"
-6. Frontend → Backend: POST /generate {session_id, prompt}
-7. Backend → Claude API: prompt + MCP access
+2. Client upload son CSV (optionnel)
+   → Données chargées dans SQLite du WebContainer
 
-8. Claude utilise les MCP:
-   a) Custom MCP: get_rules("pricing") → formules
-   b) Custom MCP: get_template("calculator") → template JSX
-   c) Aurora MCP: get_schema() → colonnes du CSV
-   d) Aurora MCP: execute_query("SELECT...") → sample data
-   e) Claude génère le code React
-   f) Custom MCP: save_app(session_id, "ElasticityCalc.jsx", code)
+3. Client écrit: "Ajouter un module CRM avec table clients"
 
-9. Claude → Backend: {status: "done", path: "generated/abc/ElasticityCalc.jsx"}
-10. Backend → Frontend: {s3_url: "..."}
-11. Frontend fetch le .jsx depuis S3 → react-live render
+4. Frontend → Lambda (AWS):
+   → Lambda lit rules/templates depuis S3
+   → Lambda appelle Claude API
+
+5. Claude génère:
+   → CustomerList.tsx
+   → api/customers.ts
+   → SQL: CREATE TABLE customers...
+
+6. Lambda retourne le code au Frontend
+
+7. Frontend → WebContainer:
+   → Filesystem MCP écrit les fichiers
+   → SQLite MCP crée la table
+   → Vite build + hot reload
+
+8. Terminal MCP vérifie le build:
+   → ❌ Erreur? Claude corrige automatiquement
+   → ✅ Success? App se rafraîchit
+
+9. Client voit le nouveau module CRM apparaître live! 🎉
 ```
 
 ---
 
-## 💰 Coûts AWS
+## 📊 Comparaison avec architecture précédente
+
+| Aspect | Avant (100% AWS) | Maintenant (WebContainers) |
+|--------|------------------|----------------------------|
+| Où tourne l'app | Serveur AWS | Browser du client |
+| Filesystem | S3 | WebContainer (local) |
+| DB de l'app | RDS PostgreSQL | SQLite (WebContainer) |
+| Build/Hot reload | Serveur | Browser |
+| Isolation users | À gérer côté serveur | Automatique (chaque browser) |
+| Coût compute | ~$20-30/mois | ~$5/mois |
+| Latence | Requêtes réseau | Instantané |
+
+---
+
+## 💰 Coûts AWS (Minimal)
 
 | Service | Usage | Coût |
 |---------|-------|------|
-| **S3** | Rules + templates + apps | $0 (free tier) |
-| **RDS PostgreSQL** | db.t3.micro | ~$15-20/mois (crédits) |
-| **AgentCore Runtime** | Custom MCP hosting | $0 (free tier) |
-| **EC2 ou Lambda** | Backend | $0 (free tier) |
-| **Total POC** | 3-6 mois | **~$60-100** (couvert par crédits $100) |
+| **S3** | Rules + templates | ~$1/mois |
+| **Lambda** | API calls | ~$0-5/mois |
+| **RDS** (optionnel) | Sauvegarde apps | ~$15/mois ou $0 |
+| **CloudFront** | CDN frontend | ~$1/mois |
+| **Total** | | **~$5-20/mois** |
+
+---
+
+## 📦 Structure S3 (Minimal)
+
+```
+s3://ai-app-builder/
+│
+├── rules/                      # Règles métier (JSON)
+│   ├── pricing.json
+│   ├── finance.json
+│   └── design.json
+│
+├── templates/                  # Templates React de base
+│   ├── calculator.jsx
+│   ├── dashboard.jsx
+│   └── crm.jsx
+│
+└── saved-apps/                 # Apps sauvegardées (optionnel)
+    └── user_123/
+        └── my-crm-app.zip
+```
 
 ---
 
@@ -345,42 +219,39 @@ s3://ai-app-builder/
 ```
 ai_app_builder/
 │
-├── 📁 backend/
-│   ├── main.py                 # FastAPI app
-│   ├── routers/
-│   │   ├── upload.py           # POST /upload
-│   │   ├── generate.py         # POST /generate
-│   │   └── apps.py             # GET /apps/{session}
-│   ├── services/
-│   │   ├── claude_service.py   # Appels Claude API
-│   │   └── db_service.py       # PostgreSQL
-│   └── requirements.txt
-│
 ├── 📁 frontend/
 │   ├── src/
 │   │   ├── App.jsx
 │   │   ├── components/
-│   │   │   ├── UploadZone.jsx
 │   │   │   ├── PromptInput.jsx
-│   │   │   └── AppPreview.jsx
-│   │   └── services/
-│   │       └── api.js
+│   │   │   ├── AppPreview.jsx       # Affiche le WebContainer
+│   │   │   └── FileExplorer.jsx     # Montre les fichiers générés
+│   │   ├── services/
+│   │   │   ├── api.js               # Appels Lambda
+│   │   │   └── webcontainer.js      # Init WebContainer
+│   │   └── webcontainer/
+│   │       └── template/            # Template de base pour WebContainer
 │   └── package.json
 │
-├── 📁 mcp_server/              # Custom MCP
-│   ├── server.py
-│   └── requirements.txt
+├── 📁 backend/
+│   ├── lambda/
+│   │   └── generate/
+│   │       ├── handler.py           # Lambda function
+│   │       └── requirements.txt
+│   ├── services/
+│   │   ├── claude_service.py
+│   │   └── s3_service.py
+│   └── serverless.yml               # Déploiement Lambda
 │
-├── 📁 rules/                   # À uploader vers S3
+├── 📁 rules/                        # À uploader vers S3
 │   ├── pricing.json
 │   ├── finance.json
-│   ├── marketing.json
 │   └── design.json
 │
-├── 📁 templates/               # À uploader vers S3
+├── 📁 templates/                    # À uploader vers S3
 │   ├── calculator.jsx
 │   ├── dashboard.jsx
-│   └── form.jsx
+│   └── crm.jsx
 │
 ├── CLAUDE.md
 └── README.md
@@ -388,54 +259,71 @@ ai_app_builder/
 
 ---
 
-## 📅 Planning POC
+## 🛠️ Technologies
 
-| Jour | Focus |
-|------|-------|
-| **J1** | Setup AWS (S3, RDS) + structure projet |
-| **J2** | Custom MCP server + deploy AgentCore |
-| **J3** | Backend: /upload + /generate |
-| **J4** | Frontend: Upload + Prompt |
-| **J5** | Frontend: AppPreview + react-live |
-| **J6** | Écrire règles JSON + templates |
-| **J7** | Tests E2E + polish |
+| Composant | Techno |
+|-----------|--------|
+| Frontend | React + Vite |
+| WebContainer | @webcontainer/api (StackBlitz) |
+| Backend | AWS Lambda (Python) |
+| Storage | S3 |
+| IA | Claude API |
+| DB locale | SQLite (dans WebContainer) |
+| DB persistante | DynamoDB ou RDS (optionnel) |
 
 ---
 
-## 🚀 Améliorations Futures (Post-POC)
+## 📅 Planning
 
-### 1. Bedrock Knowledge Base (remplace JSON S3)
+| Phase | Durée | Focus |
+|-------|-------|-------|
+| **Phase 1** | 2-3 jours | Setup WebContainer + Frontend |
+| **Phase 2** | 2-3 jours | Lambda + Claude API integration |
+| **Phase 3** | 2-3 jours | Rules/Templates + Flow complet |
+| **Phase 4** | 1-2 jours | Error handling + Polish |
 
-Au lieu de fichiers JSON statiques, utiliser **Amazon Bedrock Knowledge Base** pour les règles :
+---
 
-| Actuel (POC) | Futur (Prod) |
-|--------------|--------------|
-| `get_rules("pricing")` → fichier exact | `"comment calculer l'élasticité"` → recherche sémantique |
-| Fichiers JSON dans S3 | Documents indexés dans Bedrock KB |
-| Custom MCP lit S3 | AWS Bedrock KB MCP (officiel) |
+## ⚠️ Limitations WebContainers
 
-**Avantages :**
-- Recherche intelligente (pas besoin de connaître le nom du fichier)
-- Claude trouve les passages pertinents automatiquement
-- Supporte plus de formats (PDF, Word, etc.)
+| Device/Browser | Support |
+|----------------|---------|
+| Chrome/Edge récent | ✅ |
+| Firefox récent | ✅ |
+| Safari | ⚠️ Limité |
+| Mobile | ⚠️ Lourd |
+| Vieux PC | ⚠️ Peut lagger |
 
-### 2. Autres améliorations
-- Auth avec Cognito
-- Multi-tenant
-- Historique des apps générées
-- Export/deploy des apps
-- Core MCP pour orchestrer plusieurs MCP
+**Audience cible**: Devs/consultants/business users sur desktop/laptop moderne.
+
+---
+
+## 🚀 Améliorations Futures
+
+| Amélioration | Description |
+|--------------|-------------|
+| **Bedrock KB** | Recherche sémantique dans les règles |
+| **GitHub sync** | Sauvegarder l'app dans un repo |
+| **Templates marketplace** | Partager des templates |
+| **Collaboration** | Plusieurs users sur une app |
+| **Export** | Télécharger l'app en .zip |
 
 ---
 
 ## 🔗 Ressources
 
-- [AWS MCP Servers](https://github.com/awslabs/mcp)
-- [Aurora PostgreSQL MCP](https://github.com/awslabs/mcp/tree/main/src/aurora-postgresql-mcp-server)
-- [AgentCore Runtime](https://docs.aws.amazon.com/bedrock/latest/userguide/agentcore.html)
-- [FastMCP](https://github.com/jlowin/fastmcp)
-- [react-live](https://github.com/FormidableLabs/react-live)
-- [recharts](https://recharts.org/)
+### WebContainers
+- [WebContainer API](https://webcontainers.io/)
+- [StackBlitz](https://stackblitz.com/)
+
+### MCP (Anthropic)
+- [Filesystem MCP](https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem)
+- [SQLite MCP](https://github.com/modelcontextprotocol/servers/tree/main/src/sqlite)
+- [GitHub MCP](https://github.com/modelcontextprotocol/servers/tree/main/src/github)
+
+### AWS
+- [AWS Lambda](https://aws.amazon.com/lambda/)
+- [S3](https://aws.amazon.com/s3/)
 
 ---
 
@@ -444,7 +332,10 @@ Au lieu de fichiers JSON statiques, utiliser **Amazon Bedrock Knowledge Base** p
 ```
 [Date] - Note
 ──────────────
-- Compte AWS Free Tier ($100 crédits, expire 27 Jul 2026)
-- Architecture: Custom MCP (S3) + Aurora PostgreSQL MCP (AWS)
-- Bedrock KB prévu pour amélioration future
+- Architecture: WebContainers + AWS minimal
+- App tourne dans le browser du client (pas sur serveur)
+- Coûts réduits (~$5-20/mois vs ~$30-40)
+- Puppeteer enlevé (user = testeur)
+- SQLite pour DB locale par user
+- Compte AWS ($100 crédits, expire 27 Jul 2026)
 ```
