@@ -8,6 +8,8 @@
 
 **Contexte**: POC pour impressionner Nicolas (nouveau partner). Démontrer l'expertise IA + Frontend.
 
+**Architecture**: 100% AWS (S3 + RDS PostgreSQL + AWS MCP Servers)
+
 ---
 
 ## 🎯 Le Concept Core
@@ -15,11 +17,11 @@
 ```
 User upload CSV + écrit "Montre-moi les ventes par région"
         ↓
-Claude (via MCP) analyse le schema → query les données → génère composant React
+Claude (via AWS MCP) analyse le schema → query PostgreSQL → génère composant React
         ↓
-Composant .jsx écrit dans Docker (dossier du user)
+Composant .jsx écrit dans S3 (bucket du user/session)
         ↓
-Frontend charge et affiche le dashboard
+Frontend fetch depuis S3 et affiche le dashboard
 ```
 
 **Ce que NOUS codons**: Layout + Interface + Upload + Zone de rendu
@@ -88,37 +90,38 @@ Frontend charge et affiche le dashboard
 
 ## 📊 Diagrammes d'Architecture
 
-### Architecture Globale (Simplifiée avec MCP Docker)
+### Architecture Globale (100% AWS)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                              DOCKER ENVIRONMENT                             │
+│                              AWS CLOUD                                      │
 │                                                                             │
 │  ┌─────────────┐      ┌─────────────┐      ┌─────────────────────────────┐ │
 │  │             │      │             │      │                             │ │
 │  │  FRONTEND   │◄────►│  BACKEND    │◄────►│      CLAUDE DESKTOP         │ │
 │  │  (React)    │ HTTP │  (FastAPI)  │      │            +                │ │
-│  │             │      │             │      │    MCP SERVERS (Docker)     │ │
-│  │  - Upload   │      │  - /upload  │      │                             │ │
-│  │  - Chat     │      │  - /generate│      │  ┌─────────┐ ┌───────────┐  │ │
-│  │  - Render   │      │  - /session │      │  │ SQLite  │ │ Filesystem│  │ │
-│  │             │      │             │      │  │  MCP    │ │    MCP    │  │ │
-│  └──────▲──────┘      └──────┬──────┘      │  └────┬────┘ └─────┬─────┘  │ │
-│         │                    │             │       │            │        │ │
-│         │                    │             └───────┼────────────┼────────┘ │
-│         │                    │                     │            │          │
-│         │                    ▼                     ▼            ▼          │
+│  │             │      │   on EC2    │      │    AWS MCP SERVERS          │ │
+│  │  - Upload   │      │   or Lambda │      │                             │ │
+│  │  - Chat     │      │             │      │  ┌───────────┐ ┌─────────┐  │ │
+│  │  - Render   │      │  - /upload  │      │  │  Aurora   │ │   S3    │  │ │
+│  │             │      │  - /generate│      │  │ PostgreSQL│ │   MCP   │  │ │
+│  └──────▲──────┘      │  - /session │      │  │    MCP    │ │         │  │ │
+│         │             └──────┬──────┘      │  └─────┬─────┘ └────┬────┘  │ │
+│         │                    │             │        │            │       │ │
+│         │                    │             └────────┼────────────┼───────┘ │
+│         │                    │                      │            │         │
+│         │                    ▼                      ▼            ▼         │
 │         │            ┌─────────────┐        ┌─────────────────────────┐   │
-│         │            │   SQLite    │        │   /generated/           │   │
-│         │            │   (temp)    │        │   session_123/          │   │
-│         │            │             │        │   ├── SalesChart.jsx    │   │
-│         │            │ /data/      │        │   └── TopProducts.jsx   │   │
-│         │            │ session_123/│        │                         │   │
-│         │            │ data.db     │        └────────────┬────────────┘   │
-│         │            └─────────────┘                     │                 │
+│         │            │     RDS     │        │        S3 BUCKET        │   │
+│         │            │  PostgreSQL │        │                         │   │
+│         │            │             │        │  /generated/            │   │
+│         │            │ - sessions  │        │    session_123/         │   │
+│         │            │ - user_data │        │      SalesChart.jsx     │   │
+│         │            │ - schemas   │        │      TopProducts.jsx    │   │
+│         │            └─────────────┘        └────────────┬────────────┘   │
 │         │                                                │                 │
 │         └────────────────────────────────────────────────┘                 │
-│                         (Frontend lit les composants)                       │
+│                         (Frontend fetch depuis S3)                         │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -126,7 +129,7 @@ Frontend charge et affiche le dashboard
 
 ```
 ┌──────┐     ┌──────────┐     ┌─────────┐     ┌───────────────────────┐
-│ USER │     │ FRONTEND │     │ BACKEND │     │ CLAUDE + MCP SERVERS  │
+│ USER │     │ FRONTEND │     │ BACKEND │     │ CLAUDE + AWS MCP      │
 └──┬───┘     └────┬─────┘     └────┬────┘     └───────────┬───────────┘
    │              │                │                      │
    │ Upload CSV   │                │                      │
@@ -134,7 +137,7 @@ Frontend charge et affiche le dashboard
    │              │ POST /upload   │                      │
    │              │───────────────►│                      │
    │              │                │ Parse CSV            │
-   │              │                │ Create SQLite        │
+   │              │                │ Insert PostgreSQL    │
    │              │    session_id  │                      │
    │              │◄───────────────│                      │
    │              │                │                      │
@@ -145,58 +148,103 @@ Frontend charge et affiche le dashboard
    │              │                │  Prompt + session_id │
    │              │                │─────────────────────►│
    │              │                │                      │
-   │              │                │      SQLite MCP:     │
-   │              │                │      - read schema   │
-   │              │                │      - execute query │
+   │              │                │  Aurora PostgreSQL   │
+   │              │                │  MCP:                │
+   │              │                │  - read schema       │
+   │              │                │  - execute query     │
    │              │                │                      │
-   │              │                │      Filesystem MCP: │
-   │              │                │      - write .jsx    │
+   │              │                │  S3 MCP:             │
+   │              │                │  - write .jsx file   │
    │              │                │                      │
    │              │                │◄─────────────────────│
    │              │   components   │                      │
    │              │◄───────────────│                      │
    │              │                │                      │
-   │              │ Fetch .jsx files from /generated/     │
-   │              │───────────────────────────────────────►
-   │              │◄───────────────────────────────────────
+   │              │ Fetch .jsx from S3                    │
+   │              │────────────────────────────────────────►
+   │              │◄────────────────────────────────────────
    │  Dashboard!  │                │                      │
    │◄─────────────│                │                      │
 ```
 
-### Structure des Sessions
+### Structure S3
 
 ```
-/data/                          /generated/
-├── session_abc123/             ├── session_abc123/
-│   └── data.db (SQLite)        │   ├── SalesChart.jsx
-│                               │   ├── TopProducts.jsx
-├── session_xyz789/             │   └── KPICards.jsx
-│   └── data.db                 │
-│                               ├── session_xyz789/
-└── session_user_jeremy/        │   └── RevenueChart.jsx
-    └── data.db                 │
-                                └── session_user_jeremy/
-                                    ├── Dashboard1.jsx
-                                    └── Dashboard2.jsx
+s3://ai-dashboard-builder/
+│
+├── uploads/                     # CSVs uploadés (temporaire)
+│   ├── session_abc123/
+│   │   └── sales_data.csv
+│   └── session_xyz789/
+│       └── inventory.csv
+│
+├── generated/                   # Composants React générés
+│   ├── session_abc123/
+│   │   ├── SalesChart.jsx
+│   │   ├── TopProducts.jsx
+│   │   └── KPICards.jsx
+│   └── session_xyz789/
+│       └── RevenueChart.jsx
+│
+└── schemas/                     # Schemas extraits (JSON)
+    ├── session_abc123.json
+    └── session_xyz789.json
 ```
+
+### Structure PostgreSQL
+
+```sql
+-- Table des sessions
+CREATE TABLE sessions (
+    session_id VARCHAR(50) PRIMARY KEY,
+    created_at TIMESTAMP DEFAULT NOW(),
+    expires_at TIMESTAMP,
+    user_id VARCHAR(50)  -- Pour auth future
+);
+
+-- Table des données uploadées (dynamique par session)
+-- Chaque session crée sa propre table: data_{session_id}
+-- Ex: data_abc123 avec les colonnes du CSV
+
+-- Table des composants générés
+CREATE TABLE components (
+    component_id SERIAL PRIMARY KEY,
+    session_id VARCHAR(50) REFERENCES sessions(session_id),
+    name VARCHAR(100),
+    s3_path VARCHAR(255),
+    prompt TEXT,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+---
+
+## 💰 Coûts AWS (Free Tier + Crédits)
+
+| Service | Usage estimé | Coût | Source |
+|---------|--------------|------|--------|
+| **S3** | < 5 GB | **$0** | Free tier (5 GB gratuit) |
+| **RDS PostgreSQL** | db.t3.micro | **~$15-20/mois** | Crédits $100 |
+| **Data Transfer** | < 1 GB | **$0** | Free tier |
+| **Total POC** | ~3 mois | **~$50-60** | Couvert par crédits |
+
+✅ **Tes $100 couvrent 5-6 mois de POC tranquille**
 
 ---
 
 ## ✅ POC vs 🚀 PRODUCTION
 
-| Feature              | POC                                      | Production                            |
-| -------------------- | ---------------------------------------- | ------------------------------------- |
-| **Upload**           | CSV uniquement                           | CSV, Excel, connexion BDD directe     |
-| **Stockage BDD**     | SQLite temporaire                        | PostgreSQL ou connexion user          |
-| **Sessions**         | ID aléatoire, temporaire                 | Auth + compte user persistant         |
-| **Cache**            | En mémoire (dict Python)                 | Redis                                 |
-| **Composants**       | Dossier par session, supprimé après      | Sauvegarde permanente, versioning     |
-| **Sécurité**         | Validation basique du code               | Sandbox complet, rate limiting, audit |
-| **MCP**              | Docker MCP Toolkit (SQLite + Filesystem) | Idem + monitoring                     |
-| **Déploiement**      | Docker local                             | GCP Cloud Run + CDN                   |
-| **Auth**             | ❌ Aucune                                | ✅ Login/OAuth                        |
-| **Multi-user**       | ❌ 1 user à la fois                      | ✅ Concurrent users                   |
-| **Données externes** | ❌ Non                                   | ✅ APIs météo, économie, etc.         |
+| Feature | POC | Production |
+|---------|-----|------------|
+| **Upload** | CSV uniquement | CSV, Excel, connexion BDD directe |
+| **Base de données** | RDS PostgreSQL (t3.micro) | Aurora PostgreSQL Serverless |
+| **Stockage fichiers** | S3 Standard | S3 + CloudFront CDN |
+| **Sessions** | ID aléatoire, temporaire | Auth + compte user persistant |
+| **Cache** | Aucun | ElastiCache Redis |
+| **Sécurité** | IAM basique | IAM + VPC + WAF |
+| **Déploiement** | EC2 ou local + AWS MCP | ECS/Lambda + API Gateway |
+| **Auth** | ❌ Aucune | ✅ Cognito |
+| **Multi-user** | ❌ 1 user à la fois | ✅ Concurrent users |
 
 ---
 
@@ -204,20 +252,19 @@ Frontend charge et affiche le dashboard
 
 ### Stack
 
-| Composant | POC                | Production                     |
-| --------- | ------------------ | ------------------------------ |
-| Backend   | FastAPI            | FastAPI + Celery (async jobs)  |
-| Frontend  | React + Vite       | React + Vite                   |
-| Renderer  | react-live         | react-live + sandbox custom    |
-| Charts    | recharts           | recharts                       |
-| Style     | Tailwind           | Tailwind                       |
-| IA        | Claude Desktop     | Claude API                     |
-| MCP       | Docker MCP Toolkit | Docker MCP Toolkit + custom    |
-| DB User   | SQLite temp        | PostgreSQL / connexion directe |
-| Cache     | dict Python        | Redis                          |
-| Infra     | Docker local       | Docker + GCP                   |
+| Composant | Techno |
+|-----------|--------|
+| Backend | FastAPI (Python) |
+| Frontend | React + Vite |
+| Renderer | react-live |
+| Charts | recharts |
+| Style | Tailwind |
+| IA | Claude Desktop + AWS MCP |
+| DB | RDS PostgreSQL |
+| Storage | S3 |
+| Infra | AWS Free Tier + Crédits |
 
-### Structure du Projet (Simplifiée)
+### Structure du Projet
 
 ```
 ai_agent_dashboard_builder/
@@ -225,12 +272,13 @@ ai_agent_dashboard_builder/
 ├── 📁 backend/
 │   ├── main.py                 # FastAPI app
 │   ├── routers/
-│   │   ├── upload.py           # POST /upload (CSV → SQLite)
+│   │   ├── upload.py           # POST /upload (CSV → PostgreSQL)
 │   │   ├── generate.py         # POST /generate (prompt → Claude)
 │   │   └── session.py          # GET /session/{id}
 │   ├── services/
-│   │   ├── claude_service.py   # Appels Claude Desktop
-│   │   └── db_service.py       # Gestion SQLite temporaire
+│   │   ├── claude_service.py   # Appels Claude + AWS MCP
+│   │   ├── db_service.py       # Connexion RDS PostgreSQL
+│   │   └── s3_service.py       # Upload/download S3
 │   ├── Dockerfile
 │   └── requirements.txt
 │
@@ -247,15 +295,16 @@ ai_agent_dashboard_builder/
 │   ├── Dockerfile
 │   └── package.json
 │
-├── 📁 data/                    # Volume Docker - BDD temporaires
-│   └── session_{id}/
-│       └── data.db
+├── 📁 infrastructure/          # (Optionnel) IaC
+│   ├── terraform/
+│   │   ├── main.tf
+│   │   ├── rds.tf
+│   │   ├── s3.tf
+│   │   └── variables.tf
+│   └── scripts/
+│       └── setup_aws.sh
 │
-├── 📁 generated/               # Volume Docker - Composants générés
-│   └── session_{id}/
-│       └── Component.jsx
-│
-├── docker-compose.yml
+├── docker-compose.yml          # Pour dev local
 ├── .env.example
 ├── CLAUDE.md                   # Ce fichier
 └── README.md
@@ -263,93 +312,91 @@ ai_agent_dashboard_builder/
 
 ---
 
-## 🔧 MCP Servers (Docker MCP Toolkit)
+## 🔧 AWS MCP Servers Utilisés
 
-### Serveurs utilisés (pré-faits, pas de code custom!)
-
-**1. SQLite MCP** (du catalogue Docker)
-
+### 1. Aurora PostgreSQL MCP
 ```
-✅ Déjà fait - juste à configurer
-- read_schema() → Retourne la structure des tables
-- execute_query() → Exécute des SQL queries
-- list_tables() → Liste les tables disponibles
-```
+Depuis: AWS MCP Catalog (awslabs)
+Nom: awslabs.aurora-postgresql-mcp-server
 
-**2. Filesystem MCP** (du catalogue Docker)
-
-```
-✅ Déjà fait - juste à configurer
-- write_file() → Écrit les composants .jsx
-- read_file() → Lit les fichiers
-- list_directory() → Liste les composants générés
+Tools disponibles:
+- execute_query(sql) → Exécute une query SQL
+- get_schema() → Retourne la structure des tables
+- list_tables() → Liste les tables
 ```
 
-### Configuration dans Docker Desktop
-
+**Configuration:**
+```json
+{
+  "mcpServers": {
+    "aurora-postgresql": {
+      "command": "uvx",
+      "args": ["awslabs.aurora-postgresql-mcp-server@latest"],
+      "env": {
+        "DATABASE_URL": "postgresql://user:pass@host:5432/db",
+        "AWS_REGION": "us-east-1"
+      }
+    }
+  }
+}
 ```
-MCP Toolkit → Catalog → Ajouter:
-1. "Filesystem (Reference)" - modelcontextprotocol
-2. "SQLite" - neverinfamous
 
-Puis configurer les paths autorisés:
-- /data/ (pour SQLite)
-- /generated/ (pour les composants)
+### 2. S3 MCP
+```
+Depuis: Community MCP ou AWS MCP
+Nom: aws-s3-mcp
+
+Tools disponibles:
+- write_file(bucket, key, content) → Écrit un fichier
+- read_file(bucket, key) → Lit un fichier
+- list_objects(bucket, prefix) → Liste les fichiers
+- delete_file(bucket, key) → Supprime un fichier
+```
+
+**Configuration:**
+```json
+{
+  "mcpServers": {
+    "s3": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-aws-s3-mcp"],
+      "env": {
+        "AWS_ACCESS_KEY_ID": "...",
+        "AWS_SECRET_ACCESS_KEY": "...",
+        "AWS_REGION": "us-east-1",
+        "BUCKET_NAME": "ai-dashboard-builder"
+      }
+    }
+  }
+}
 ```
 
 ---
 
 ## 📄 Extraction Automatique du Schema
 
-Quand l'utilisateur upload un CSV, on extrait automatiquement la structure :
+Quand l'utilisateur upload un CSV :
 
 ```python
 import pandas as pd
+import json
 
 def extract_schema(file_path: str) -> dict:
     df = pd.read_csv(file_path)
-
+    
     return {
         "columns": df.columns.tolist(),
         "dtypes": df.dtypes.astype(str).to_dict(),
         "row_count": len(df),
         "sample": df.head(3).to_dict()
     }
+
+def csv_to_postgresql(df: pd.DataFrame, session_id: str, engine):
+    """Crée une table PostgreSQL depuis un DataFrame"""
+    table_name = f"data_{session_id}"
+    df.to_sql(table_name, engine, if_exists='replace', index=False)
+    return table_name
 ```
-
-**Exemple :**
-
-```
-User upload: sales.csv
-
-product,region,amount,date
-iPhone,Paris,999,2024-01-15
-MacBook,Lyon,1299,2024-01-16
-...
-```
-
-**Schema extrait :**
-
-```json
-{
-  "columns": ["product", "region", "amount", "date"],
-  "dtypes": {
-    "product": "object",
-    "region": "object",
-    "amount": "int64",
-    "date": "object"
-  },
-  "row_count": 1245,
-  "sample": {
-    "product": { "0": "iPhone", "1": "MacBook" },
-    "region": { "0": "Paris", "1": "Lyon" },
-    "amount": { "0": 999, "1": 1299 },
-    "date": { "0": "2024-01-15", "1": "2024-01-16" }
-  }
-}
-```
-
-Ce schema est envoyé à Claude pour qu'il comprenne la structure et génère des SQL queries adaptées.
 
 ---
 
@@ -369,8 +416,10 @@ Ce schema est envoyé à Claude pour qu'il comprenne la structure et génère de
 │   Backend:                                                      │
 │     1. Génère session_id = "abc123"                            │
 │     2. Parse le CSV avec pandas                                │
-│     3. Crée /data/abc123/data.db (SQLite)                      │
-│     4. Retourne { session_id, schema }                         │
+│     3. Upload CSV vers S3 (backup)                             │
+│     4. Crée table data_abc123 dans PostgreSQL                  │
+│     5. Sauvegarde schema dans S3                               │
+│     6. Retourne { session_id, schema }                         │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
                               │
@@ -387,17 +436,17 @@ Ce schema est envoyé à Claude pour qu'il comprenne la structure et génère de
 │           ▼                                                     │
 │   Backend envoie à Claude Desktop:                             │
 │     - System prompt (règles de génération)                     │
-│     - Chemin vers la BDD: /data/abc123/data.db                 │
-│     - Chemin output: /generated/abc123/                        │
+│     - Infos connexion PostgreSQL                               │
+│     - Bucket S3 pour output                                    │
 │     - Prompt user                                               │
 │           │                                                     │
 │           ▼                                                     │
-│   Claude utilise les MCP Servers:                              │
-│     1. SQLite MCP → lit le schema, exécute query               │
-│     2. Filesystem MCP → écrit le composant .jsx                │
+│   Claude utilise les AWS MCP Servers:                          │
+│     1. Aurora PostgreSQL MCP → lit schema, exécute query       │
+│     2. S3 MCP → écrit le composant .jsx                        │
 │           │                                                     │
 │           ▼                                                     │
-│   Fichier créé: /generated/abc123/TopProducts.jsx              │
+│   Fichier créé: s3://bucket/generated/abc123/TopProducts.jsx   │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
                               │
@@ -406,11 +455,11 @@ Ce schema est envoyé à Claude pour qu'il comprenne la structure et génère de
 │ ÉTAPE 3: AFFICHAGE                                              │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│   Backend retourne { components: ["TopProducts.jsx"] }         │
+│   Backend retourne { components: ["TopProducts.jsx"], s3_urls } │
 │           │                                                     │
 │           ▼                                                     │
 │   Frontend:                                                     │
-│     1. Fetch /generated/abc123/TopProducts.jsx                 │
+│     1. Fetch depuis S3 (pre-signed URL ou public)              │
 │     2. react-live compile et render                            │
 │           │                                                     │
 │           ▼                                                     │
@@ -429,8 +478,8 @@ SYSTEM PROMPT:
 Tu es un générateur de composants React pour dashboards.
 
 Tu as accès à:
-- SQLite MCP: pour lire le schema et exécuter des queries
-- Filesystem MCP: pour écrire les composants .jsx
+- Aurora PostgreSQL MCP: pour lire le schema et exécuter des queries
+- S3 MCP: pour écrire les composants .jsx
 
 ## RÈGLES STRICTES
 
@@ -442,7 +491,7 @@ Tu as accès à:
 2. STRUCTURE DU COMPOSANT:
    export default function ComponentName({ data }) {
      if (!data || data.length === 0) {
-       return <div>Pas de données</div>;
+       return <div className="text-gray-500">Pas de données</div>;
      }
      return (
        // Ton code ici
@@ -450,170 +499,148 @@ Tu as accès à:
    }
 
 3. WORKFLOW:
-   a) Utilise SQLite MCP pour lire le schema de la BDD
+   a) Utilise Aurora PostgreSQL MCP pour lire le schema
    b) Génère une SQL query appropriée
    c) Exécute la query pour obtenir les données
    d) Génère le code React du composant
-   e) Utilise Filesystem MCP pour écrire le fichier .jsx
+   e) Utilise S3 MCP pour écrire le fichier .jsx
+   f) Retourne le path S3
 
 4. TYPES DE VIZ:
    - Comparaisons → BarChart
    - Tendances temporelles → LineChart
    - Proportions → PieChart
-   - Détails → Table
+   - Détails → Table HTML avec Tailwind
    - Métriques clés → KPI Cards
 
 5. REPRODUCTIBILITÉ:
    - Jamais de Math.random()
-   - Toujours trier les données (ORDER BY dans SQL)
-   - Couleurs fixes, pas dynamiques
+   - Toujours ORDER BY dans SQL
+   - Couleurs fixes
 
 6. STYLING:
-   - Utilise Tailwind
+   - Tailwind uniquement
    - Responsive (flex, grid)
-   - Couleurs sobres et pro
+   - Couleurs: blue-500, green-500, red-500, etc.
 ```
 
 ---
 
-## 🔒 Sécurité
+## 🛠️ Setup AWS
 
-### POC (Minimum viable)
+### 1. Créer le bucket S3
+```bash
+aws s3 mb s3://ai-dashboard-builder --region us-east-1
 
-```python
-def validate_component(code: str) -> bool:
-    dangerous = [
-        'import os', 'import fs', 'require(',
-        'eval(', 'exec(', 'fetch(', 'axios',
-        'localStorage', 'sessionStorage', 'document.',
-        'window.', 'process.'
-    ]
-    return not any(d in code for d in dangerous)
+# Configurer CORS pour le frontend
+aws s3api put-bucket-cors --bucket ai-dashboard-builder --cors-configuration '{
+  "CORSRules": [{
+    "AllowedOrigins": ["*"],
+    "AllowedMethods": ["GET", "PUT"],
+    "AllowedHeaders": ["*"]
+  }]
+}'
 ```
 
-### Production (Complet)
+### 2. Créer l'instance RDS PostgreSQL
+```bash
+aws rds create-db-instance \
+  --db-instance-identifier dashboard-db \
+  --db-instance-class db.t3.micro \
+  --engine postgres \
+  --master-username admin \
+  --master-user-password <password> \
+  --allocated-storage 20 \
+  --region us-east-1
+```
 
-- Sandbox avec VM isolée
-- Rate limiting par user
-- Audit log de toutes les générations
-- Timeout sur les queries SQL
-- Taille max des fichiers uploadés
+### 3. Configurer les credentials AWS
+```bash
+# ~/.aws/credentials
+[default]
+aws_access_key_id = AKIA...
+aws_secret_access_key = ...
 
----
+# ~/.aws/config
+[default]
+region = us-east-1
+```
 
-## 🔁 Reproductibilité
+### 4. Configurer Claude Desktop avec AWS MCP
+```json
+// ~/.config/claude/claude_desktop_config.json (Linux)
+// ~/Library/Application Support/Claude/claude_desktop_config.json (Mac)
 
-```python
-import hashlib
-
-def get_cache_key(session_id: str, prompt: str) -> str:
-    """Même session + même prompt = même résultat"""
-    content = f"{session_id}:{prompt}"
-    return hashlib.sha256(content.encode()).hexdigest()
-
-# POC: cache en mémoire
-cache = {}
-
-async def generate_dashboard(session_id: str, prompt: str):
-    key = get_cache_key(session_id, prompt)
-
-    if key in cache:
-        return cache[key]
-
-    result = await call_claude(session_id, prompt)
-    cache[key] = result
-    return result
+{
+  "mcpServers": {
+    "aurora-postgresql": {
+      "command": "uvx",
+      "args": ["awslabs.aurora-postgresql-mcp-server@latest"],
+      "env": {
+        "DATABASE_URL": "postgresql://admin:pass@dashboard-db.xxx.us-east-1.rds.amazonaws.com:5432/postgres"
+      }
+    },
+    "s3": {
+      "command": "npx",
+      "args": ["-y", "mcp-server-s3"],
+      "env": {
+        "AWS_REGION": "us-east-1",
+        "S3_BUCKET_NAME": "ai-dashboard-builder"
+      }
+    }
+  }
+}
 ```
 
 ---
 
 ## 📅 Planning
 
-### POC (3-4 jours) ⚡ Accéléré grâce aux MCP Servers Docker
+### POC (5-6 jours)
 
-| Jour   | Matin                                            | Après-midi                |
-| ------ | ------------------------------------------------ | ------------------------- |
-| **J1** | Setup Docker + MCP Servers (SQLite, Filesystem)  | Backend: endpoint /upload |
-| **J2** | Backend: endpoint /generate + intégration Claude | Test Claude + MCP         |
-| **J3** | Frontend: Upload + Prompt + DynamicRenderer      | Tests E2E                 |
-| **J4** | Polish + exemples démo                           | Documentation             |
+| Jour | Matin | Après-midi |
+|------|-------|------------|
+| **J1** | Setup AWS (S3, RDS) | Configurer AWS MCP Servers |
+| **J2** | Backend: endpoint /upload | Backend: connexion PostgreSQL |
+| **J3** | Backend: endpoint /generate | Test Claude + AWS MCP |
+| **J4** | Frontend: Upload + Prompt | Frontend: DynamicRenderer |
+| **J5** | Intégration S3 fetch | Tests E2E |
+| **J6** | Polish + exemples démo | Documentation |
 
-### Ce qu'on ne code PAS (grâce aux MCP Servers Docker)
+### Production (2-3 semaines après POC)
 
-- ❌ MCP Server custom
-- ❌ Tools get_schema, execute_sql
-- ❌ Tools write_component, list_components
-- ✅ On utilise SQLite MCP + Filesystem MCP du catalogue Docker!
-
-### Production (estimé 2-3 semaines après POC)
-
-- Semaine 1: Auth + persistence + Redis
-- Semaine 2: Sécurité + données externes + UI polish
-- Semaine 3: Tests + déploiement GCP + documentation
-
----
-
-## 🛠️ Setup Initial
-
-### 1. Docker Desktop
-
-```bash
-# Déjà installé ✅
-# WSL mis à jour ✅
-```
-
-### 2. MCP Servers à activer dans Docker Desktop
-
-```
-MCP Toolkit → Catalog → Ajouter:
-☑️ Filesystem (Reference) - modelcontextprotocol - 100K+ downloads
-☑️ SQLite - neverinfamous - 3.6K downloads
-```
-
-### 3. Connecter Claude Desktop
-
-```
-MCP Toolkit → Clients → Claude Desktop → Connect ✅
-```
-
-### 4. Créer le projet
-
-```bash
-mkdir ai_agent_dashboard_builder
-cd ai_agent_dashboard_builder
-# Structure à créer...
-```
+- Semaine 1: Auth Cognito + sessions persistantes
+- Semaine 2: Aurora Serverless + CloudFront CDN
+- Semaine 3: ECS/Lambda + monitoring CloudWatch
 
 ---
 
 ## ❓ Questions Ouvertes
 
 ### POC
-
 - [x] Upload fichier ou BDD existante ? → **Upload fichier (CSV)**
-- [x] Sessions liées à un compte ? → **Non pour POC, oui pour prod**
-- [x] Coder MCP Server custom ? → **Non, on utilise Docker MCP Toolkit**
-- [ ] Polling ou WebSocket pour détecter nouveaux composants ?
-- [ ] Formats supportés ? (CSV seul ou aussi Excel ?)
+- [x] Docker MCP ou AWS MCP ? → **AWS MCP (S3 + PostgreSQL)**
+- [x] Coûts ? → **$100 crédits couvrent 5-6 mois**
+- [ ] Région AWS ? (us-east-1 recommandé pour coûts)
+- [ ] Nom du bucket S3 ?
 
 ### Production
-
-- [ ] Quels APIs externes intégrer ? (météo, économie...)
-- [ ] Limite de taille des fichiers ?
-- [ ] Durée de vie des sessions temporaires ?
-- [ ] Pricing model ?
+- [ ] Multi-tenant avec Cognito ?
+- [ ] Aurora Serverless v2 ?
+- [ ] CloudFront pour les .jsx ?
+- [ ] Monitoring/alertes ?
 
 ---
 
 ## 🔗 Ressources
 
-- [Docker MCP Toolkit](https://docs.docker.com/desktop/features/mcp-toolkit/)
-- [MCP Documentation](https://modelcontextprotocol.io/)
-- [Claude Desktop](https://claude.ai/download)
+- [AWS MCP Servers (awslabs)](https://github.com/awslabs/mcp)
+- [Aurora PostgreSQL MCP](https://awslabs.github.io/mcp/servers/aurora-postgresql-mcp-server)
+- [S3 MCP Server](https://github.com/aws-samples/sample-mcp-server-s3)
+- [AWS Free Tier](https://aws.amazon.com/free/)
 - [react-live](https://github.com/FormidableLabs/react-live)
 - [recharts](https://recharts.org/)
 - [FastAPI](https://fastapi.tiangolo.com/)
-- [Tailwind CSS](https://tailwindcss.com/)
 
 ---
 
@@ -622,8 +649,6 @@ cd ai_agent_dashboard_builder
 ```
 [Date] - Note
 ──────────────
-- Docker Desktop installé
-- WSL mis à jour
-- Claude Desktop connecté au MCP Toolkit
-- MCP Servers à ajouter: Filesystem + SQLite
+- Compte AWS Free Tier créé ($100 crédits)
+- Expiration: 27 Jul 2026
 ```
