@@ -1,0 +1,14 @@
+{
+  "name": "Exemple",
+  "description": "Règles d'exemple",
+  "formulas": {
+    "elasticity": "((Q2-Q1)/Q1) / ((P2-P1)/P1)",
+    "margin": "revenue - costs",
+    "roi": "(gain - cost) / cost * 100"
+  },
+  "ui_guidelines": [
+    "Utiliser des couleurs claires",
+    "Afficher les résultats avec 2 décimales",
+    "Ajouter des labels explicatifs"
+  ]
+}
