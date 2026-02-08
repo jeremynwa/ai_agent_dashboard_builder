@@ -241,7 +241,7 @@ function App() {
           </div>
         ) : (
           <div style={styles.centerContent}>
-            <h1 style={styles.title}>Quelle analyse voulez-vous creer ?</h1>
+            <h1 style={styles.title}>Quelle analyse voulez-vous créer ?</h1>
             
             <div style={styles.promptContainer}>
               <textarea
