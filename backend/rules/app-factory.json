@@ -1,0 +1,207 @@
+{
+  "name": "App Factory Design System",
+  "description": "Design system pour génération d'applications d'analyse professionnelles",
+  
+  "appStructure": {
+    "description": "Chaque app générée doit avoir une structure complète avec sidebar et navigation",
+    "components": [
+      "Header avec titre de l'app",
+      "Sidebar avec navigation contextuelle (Overview, Analytics, etc.)",
+      "Zone de contenu principal",
+      "KPI cards en haut",
+      "Graphiques et tableaux"
+    ],
+    "sidebarItems": ["Overview", "Analytics", "Reports", "Settings"]
+  },
+
+  "colors": {
+    "surface": {
+      "base": "#0F0F12",
+      "raised": "#16161A",
+      "overlay": "#1C1C21",
+      "subtle": "#232329",
+      "border": "#2E2E36",
+      "muted": "#3D3D47"
+    },
+    "text": {
+      "primary": "#FFFFFF",
+      "secondary": "#A1A1AA",
+      "tertiary": "#71717A",
+      "muted": "#52525B"
+    },
+    "accent": {
+      "primary": "#00765F",
+      "primaryHover": "#00A382",
+      "amber": "#F59E0B",
+      "emerald": "#34D399",
+      "sky": "#38BDF8",
+      "coral": "#EF6461",
+      "violet": "#A78BFA"
+    },
+    "status": {
+      "success": "#34D399",
+      "warning": "#F59E0B",
+      "error": "#EF4444"
+    },
+    "themesByContext": {
+      "finance": { "accent": "#3B82F6", "secondary": "#F59E0B" },
+      "marketing": { "accent": "#EC4899", "secondary": "#8B5CF6" },
+      "operations": { "accent": "#10B981", "secondary": "#6B7280" },
+      "hr": { "accent": "#F59E0B", "secondary": "#10B981" },
+      "research": { "accent": "#8B5CF6", "secondary": "#06B6D4" }
+    }
+  },
+
+  "typography": {
+    "fontFamily": "Inter, system-ui, -apple-system, sans-serif",
+    "fontDisplay": "Sora, system-ui, sans-serif",
+    "fontMono": "JetBrains Mono, monospace",
+    "sizes": {
+      "xs": "10px",
+      "sm": "12px",
+      "base": "14px",
+      "lg": "16px",
+      "xl": "20px",
+      "2xl": "24px",
+      "3xl": "28px",
+      "4xl": "32px"
+    },
+    "weights": {
+      "normal": "400",
+      "medium": "500",
+      "semibold": "600",
+      "bold": "700"
+    }
+  },
+
+  "spacing": {
+    "micro": "4px",
+    "xs": "8px",
+    "sm": "16px",
+    "md": "24px",
+    "lg": "32px",
+    "xl": "48px",
+    "2xl": "64px"
+  },
+
+  "borderRadius": {
+    "sm": "6px",
+    "md": "8px",
+    "lg": "12px",
+    "xl": "16px",
+    "2xl": "24px"
+  },
+
+  "shadows": {
+    "card": "0 4px 24px -4px rgba(0, 0, 0, 0.4)",
+    "cardHover": "0 8px 40px -8px rgba(0, 0, 0, 0.6)",
+    "glow": "0 0 40px -10px rgba(0, 118, 95, 0.5)"
+  },
+
+  "animations": {
+    "sidebarSwap": "400ms cubic-bezier(0.4, 0, 0.2, 1)",
+    "contentFade": "300ms ease-out",
+    "cardHover": "200ms ease",
+    "default": "all 0.2s ease"
+  },
+
+  "layout": {
+    "sidebar": {
+      "width": "240px",
+      "background": "#16161A",
+      "borderRight": "1px solid #2E2E36"
+    },
+    "header": {
+      "height": "56px",
+      "background": "rgba(15, 15, 18, 0.8)",
+      "backdropFilter": "blur(16px)",
+      "borderBottom": "1px solid #2E2E36"
+    },
+    "content": {
+      "maxWidth": "1400px",
+      "padding": "24px"
+    }
+  },
+
+  "components": {
+    "sidebar": {
+      "container": "{ width: '240px', minHeight: '100vh', background: '#16161A', borderRight: '1px solid #2E2E36', padding: '16px', display: 'flex', flexDirection: 'column' }",
+      "logo": "{ fontSize: '14px', fontWeight: '600', color: '#FFFFFF', padding: '8px 12px', marginBottom: '24px' }",
+      "section": "{ marginBottom: '24px' }",
+      "sectionLabel": "{ fontSize: '10px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#52525B', padding: '8px 12px' }",
+      "navItem": "{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', borderRadius: '8px', fontSize: '14px', color: '#A1A1AA', cursor: 'pointer', transition: 'all 0.2s ease' }",
+      "navItemActive": "{ background: 'rgba(0, 118, 95, 0.15)', color: '#00765F' }",
+      "navItemHover": "{ background: '#232329', color: '#FFFFFF' }"
+    },
+    "header": {
+      "container": "{ height: '56px', background: 'rgba(15, 15, 18, 0.8)', backdropFilter: 'blur(16px)', borderBottom: '1px solid #2E2E36', padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }",
+      "title": "{ fontSize: '16px', fontWeight: '600', color: '#FFFFFF' }",
+      "actions": "{ display: 'flex', alignItems: 'center', gap: '12px' }"
+    },
+    "kpiCard": {
+      "container": "{ background: '#16161A', borderRadius: '16px', padding: '20px', border: '1px solid #2E2E36', transition: 'all 0.2s ease' }",
+      "label": "{ fontSize: '10px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#71717A' }",
+      "value": "{ fontSize: '28px', fontWeight: '600', color: '#FFFFFF', marginTop: '8px' }",
+      "change": "{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', marginTop: '8px' }",
+      "changeUp": "{ color: '#34D399' }",
+      "changeDown": "{ color: '#EF4444' }"
+    },
+    "card": {
+      "container": "{ background: '#16161A', borderRadius: '16px', padding: '24px', border: '1px solid #2E2E36', boxShadow: '0 4px 24px -4px rgba(0, 0, 0, 0.4)' }",
+      "title": "{ fontSize: '14px', fontWeight: '600', color: '#FFFFFF', marginBottom: '16px' }",
+      "content": "{ color: '#A1A1AA' }"
+    },
+    "button": {
+      "primary": "{ background: '#00765F', color: 'white', padding: '10px 20px', borderRadius: '8px', border: 'none', fontWeight: '500', fontSize: '14px', cursor: 'pointer', transition: 'all 0.2s ease' }",
+      "secondary": "{ background: '#232329', color: '#A1A1AA', padding: '10px 20px', borderRadius: '8px', border: '1px solid #2E2E36', fontWeight: '500', fontSize: '14px', cursor: 'pointer', transition: 'all 0.2s ease' }",
+      "ghost": "{ background: 'transparent', color: '#71717A', padding: '8px 12px', borderRadius: '6px', border: 'none', fontSize: '14px', cursor: 'pointer', transition: 'all 0.2s ease' }"
+    },
+    "input": {
+      "container": "{ width: '100%', padding: '12px 16px', background: '#1C1C21', border: '1px solid #2E2E36', borderRadius: '8px', color: '#FFFFFF', fontSize: '14px', outline: 'none', transition: 'all 0.2s ease' }",
+      "focus": "{ borderColor: '#00765F', boxShadow: '0 0 0 3px rgba(0, 118, 95, 0.1)' }",
+      "placeholder": "#52525B"
+    },
+    "select": {
+      "container": "{ width: '100%', padding: '10px 14px', background: '#1C1C21', border: '1px solid #2E2E36', borderRadius: '8px', color: '#FFFFFF', fontSize: '12px', cursor: 'pointer' }"
+    },
+    "table": {
+      "container": "{ background: '#16161A', borderRadius: '16px', border: '1px solid #2E2E36', overflow: 'hidden' }",
+      "header": "{ background: '#1C1C21', padding: '12px 16px' }",
+      "headerCell": "{ fontSize: '10px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#71717A', textAlign: 'left' }",
+      "row": "{ borderBottom: '1px solid #2E2E36', transition: 'background 0.2s ease' }",
+      "rowHover": "{ background: '#1C1C21' }",
+      "cell": "{ padding: '12px 16px', fontSize: '14px', color: '#FFFFFF' }"
+    },
+    "badge": {
+      "default": "{ display: 'inline-flex', alignItems: 'center', padding: '4px 10px', background: '#232329', borderRadius: '6px', fontSize: '11px', fontWeight: '500', color: '#A1A1AA' }",
+      "success": "{ background: 'rgba(52, 211, 153, 0.15)', color: '#34D399' }",
+      "warning": "{ background: 'rgba(245, 158, 11, 0.15)', color: '#F59E0B' }",
+      "error": "{ background: 'rgba(239, 68, 68, 0.15)', color: '#EF4444' }"
+    },
+    "chart": {
+      "container": "{ background: '#16161A', borderRadius: '16px', padding: '24px', border: '1px solid #2E2E36' }",
+      "title": "{ fontSize: '14px', fontWeight: '600', color: '#FFFFFF', marginBottom: '20px' }",
+      "colors": ["#00765F", "#F59E0B", "#38BDF8", "#A78BFA", "#34D399", "#EF6461"]
+    }
+  },
+
+  "patterns": {
+    "dashboardLayout": "{ display: 'grid', gridTemplateColumns: '240px 1fr', minHeight: '100vh', background: '#0F0F12' }",
+    "kpiGrid": "{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '24px' }",
+    "chartGrid": "{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px' }",
+    "flexBetween": "{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }",
+    "flexCenter": "{ display: 'flex', alignItems: 'center', justifyContent: 'center' }",
+    "flexGap": "{ display: 'flex', alignItems: 'center', gap: '12px' }"
+  },
+
+  "rules": [
+    "JAMAIS d'emojis nulle part",
+    "Toujours inclure une sidebar avec navigation",
+    "KPI cards en haut du dashboard (3-5 cards)",
+    "Graphiques et visualisations sous les KPIs",
+    "Hover states sur tous les éléments interactifs",
+    "Transitions fluides (200-400ms)",
+    "Typographie hiérarchique claire",
+    "Espacement généreux et cohérent"
+  ]
+}
