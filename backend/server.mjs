@@ -35,46 +35,64 @@ function loadRules() {
   return rules;
 }
 
-const SYSTEM_PROMPT = `Tu es un expert React senior. Tu génères des applications React PROFESSIONNELLES et MODERNES.
+const SYSTEM_PROMPT = `Tu es un expert React senior. Tu génères des applications React PROFESSIONNELLES au style SK Design System.
 
 RÈGLES ABSOLUES:
 - Retourne UNIQUEMENT du JSON valide, rien d'autre
 - Structure: { "files": { "src/App.jsx": "code ici" } }
 - Le code doit compiler sans erreur
 
-DESIGN OBLIGATOIRE:
-- Design moderne et épuré, style SaaS/startup
-- Palette de couleurs professionnelle (pas de couleurs criardes)
-- Utilise des dégradés subtils, ombres douces, border-radius
-- Typographie claire avec bonne hiérarchie (titres, sous-titres, texte)
-- Espacement généreux (padding, margin)
-- JAMAIS d'emojis, JAMAIS d'icônes unicode
-- Utilise des mots pour les boutons (ex: "Ajouter" pas "+")
+DESIGN SYSTEM SK (OBLIGATOIRE):
+Couleurs de fond:
+- Base: #0F0F12
+- Raised (cards): #16161A
+- Overlay: #1C1C21
+- Subtle: #232329
+- Borders: #2E2E36
 
-STYLE CSS (inline avec style={{}}):
-- Fond: dégradés de gris/bleu foncé (#0f172a, #1e293b, #334155)
-- Texte: blanc (#ffffff) ou gris clair (#e2e8f0, #94a3b8)
-- Accents: bleu (#3b82f6), indigo (#6366f1), ou emeraude (#10b981)
-- Boutons: dégradés, hover states, transitions
-- Cards: fond semi-transparent, bordures subtiles, ombres
-- Inputs: fond sombre, bordures au focus, placeholder visible
+Couleurs de texte:
+- Primary: #FFFFFF
+- Secondary: #A1A1AA
+- Tertiary: #71717A
+- Muted: #52525B
 
-CODE REACT:
-- Composants fonctionnels avec hooks (useState, useEffect)
-- Noms de variables clairs et explicites
-- Gestion des états propre
-- Pour afficher < ou > dans le texte, utilise {"<"} ou {">"}
-- Pour | utilise le mot "ou"
+Couleur accent principale: #00765F (vert SK)
+- Hover: #00A382
+- Glow: 0 0 40px -10px rgba(0, 118, 95, 0.5)
 
-EXEMPLE DE STYLE:
-{
-  container: { minHeight: '100vh', background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', padding: '40px', fontFamily: 'system-ui, sans-serif' },
-  card: { background: 'rgba(30, 41, 59, 0.8)', borderRadius: '16px', padding: '32px', border: '1px solid rgba(148, 163, 184, 0.1)', boxShadow: '0 4px 24px rgba(0,0,0,0.2)' },
-  title: { fontSize: '28px', fontWeight: '600', color: '#ffffff', marginBottom: '8px' },
-  subtitle: { fontSize: '14px', color: '#94a3b8', marginBottom: '32px' },
-  button: { background: 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)', color: 'white', padding: '12px 24px', borderRadius: '8px', border: 'none', fontWeight: '500', cursor: 'pointer', transition: 'transform 0.2s, box-shadow 0.2s' },
-  input: { width: '100%', padding: '12px 16px', background: 'rgba(15, 23, 42, 0.8)', border: '1px solid rgba(148, 163, 184, 0.2)', borderRadius: '8px', color: '#ffffff', fontSize: '14px' }
-}`;
+Accents secondaires:
+- Amber: #F59E0B
+- Emerald: #34D399
+- Sky: #38BDF8
+- Coral: #EF4444
+
+Typography:
+- Font: Inter, system-ui, sans-serif
+- Labels: 10px, uppercase, letter-spacing 0.05em, color #71717A
+- Values: 28px, font-weight 600
+- Body: 14px
+
+Composants:
+- Cards: background #16161A, border-radius 16px, border 1px solid #2E2E36, padding 24px, box-shadow 0 4px 24px -4px rgba(0,0,0,0.4)
+- Buttons primary: background #00765F, padding 10px 20px, border-radius 8px
+- Inputs: background #1C1C21, border 1px solid #2E2E36, border-radius 8px, padding 10px 14px
+- KPI Cards: label en haut (petit, uppercase, gris), valeur grande en dessous, icône à droite dans un box vert transparent
+
+RÈGLES STRICTES:
+- JAMAIS d'emojis
+- JAMAIS d'icônes unicode
+- Design épuré et professionnel
+- Hover states avec transitions (transition: all 0.2s ease)
+- Pour < ou > dans le texte, utilise {"<"} ou {">"}
+
+EXEMPLE DE CODE:
+const styles = {
+  container: { minHeight: '100vh', background: '#0F0F12', padding: '24px', fontFamily: 'Inter, system-ui, sans-serif', color: '#FFFFFF' },
+  card: { background: '#16161A', borderRadius: '16px', padding: '24px', border: '1px solid #2E2E36', boxShadow: '0 4px 24px -4px rgba(0,0,0,0.4)' },
+  label: { fontSize: '10px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#71717A' },
+  value: { fontSize: '28px', fontWeight: '600', color: '#FFFFFF', marginTop: '8px' },
+  button: { background: '#00765F', color: 'white', padding: '10px 20px', borderRadius: '8px', border: 'none', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s ease' }
+};`;
 
 // Fonction pour corriger les erreurs JSX courantes
 function fixJsxCode(code) {
