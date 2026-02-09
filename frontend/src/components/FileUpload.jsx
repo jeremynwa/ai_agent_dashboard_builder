@@ -15,19 +15,17 @@ function FileUpload({ onDataLoaded }) {
       const data = event.target.result;
       const workbook = XLSX.read(data, { type: 'binary' });
       
-      // Prendre la première feuille
       const sheetName = workbook.SheetNames[0];
       const sheet = workbook.Sheets[sheetName];
-      
-      // Convertir en JSON
       const jsonData = XLSX.utils.sheet_to_json(sheet);
       const headers = Object.keys(jsonData[0] || {});
       
       onDataLoaded({
         fileName: file.name,
         headers,
-        data: jsonData,
-        preview: jsonData.slice(0, 5) // 5 premières lignes
+        sample: jsonData.slice(0, 30),
+        totalRows: jsonData.length,
+        fullData: jsonData,
       });
     };
 
@@ -39,11 +37,11 @@ function FileUpload({ onDataLoaded }) {
       <label className="flex flex-col items-center justify-center w-full h-24 border border-dashed border-slate-600 rounded-lg cursor-pointer hover:border-slate-500 hover:bg-slate-800/30 transition-all">
         <div className="flex flex-col items-center justify-center pt-5 pb-6">
           {fileName ? (
-            <span className="text-sm text-slate-300">{fileName}</span>
+            <span className="text-sm text-slate-300">{fileName} ✓</span>
           ) : (
             <>
               <span className="text-sm text-slate-400">Importer un fichier Excel ou CSV</span>
-              <span className="text-xs text-slate-500 mt-1">Cliquez ou glissez-déposez</span>
+              <span className="text-xs text-slate-500 mt-1">Cliquez ou glissez-deposez</span>
             </>
           )}
         </div>

@@ -69,9 +69,17 @@ function App() {
       const appFiles = JSON.parse(JSON.stringify(baseFiles));
       
       for (const [path, content] of Object.entries(result.files)) {
+        let fileContent = content;
+        
+        // Injecter les vraies données à la place du placeholder
+        if (path === 'src/data.js' && excelData?.fullData) {
+          const jsonData = JSON.stringify(excelData.fullData);
+          fileContent = fileContent.replace('"__INJECT_DATA__"', jsonData);
+        }
+        
         const parts = path.split('/');
         if (parts[0] === 'src' && parts.length === 2) {
-          appFiles.src.directory[parts[1]] = { file: { contents: content } };
+          appFiles.src.directory[parts[1]] = { file: { contents: fileContent } };
         }
       }
 
@@ -254,9 +262,9 @@ function App() {
               
               <FileUpload onDataLoaded={handleDataLoaded} />
               {excelData && (
-                <div style={styles.fileInfo}>
-                  Fichier: {excelData.fileName} ({excelData.data.length} lignes)
-                </div>
+              <div style={styles.fileInfo}>
+                Fichier: {excelData.fileName} ({excelData.totalRows} lignes)
+              </div>
               )}
 
               <button 
@@ -572,7 +580,7 @@ const styles = {
   },
   floatingActions: {
     position: 'fixed',
-    top: '16px',
+    bottom: '16px',
     left: '16px',
     zIndex: 1000,
     display: 'flex',
@@ -604,6 +612,8 @@ const styles = {
     width: '100%',
     height: '100%',
     border: 'none',
+    paddingBottom: '60px',
+    boxSizing: 'border-box',
   },
 };
 
