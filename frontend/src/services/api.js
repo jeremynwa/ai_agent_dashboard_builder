@@ -1,7 +1,7 @@
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 const GENERATE_URL = import.meta.env.VITE_GENERATE_URL || (API_BASE + '/generate');
 
-export async function generateApp(prompt, excelData = null) {
+export async function generateApp(prompt, excelData = null, existingFiles = null) {
   const dataForApi = excelData ? {
     fileName: excelData.fileName,
     headers: excelData.headers,
@@ -12,7 +12,7 @@ export async function generateApp(prompt, excelData = null) {
   const res = await fetch(GENERATE_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, useRules: true, excelData: dataForApi }),
+    body: JSON.stringify({ prompt, useRules: true, excelData: dataForApi, existingFiles }),
   });
   if (!res.ok) throw new Error((await res.json()).error || 'Generation failed');
   return res.json();

@@ -16,6 +16,8 @@ function App() {
   const [generatedApp, setGeneratedApp] = useState(null);
   const [savedApps, setSavedApps] = useState([]);
   const [generationStep, setGenerationStep] = useState(0);
+  const [feedback, setFeedback] = useState('');
+  const [currentFiles, setCurrentFiles] = useState({});
   const webcontainerRef = useRef(null);
   const bootedRef = useRef(false);
 
@@ -35,7 +37,7 @@ function App() {
     bootedRef.current = true;
 
     addLog('Initialisation...');
-    
+
     WebContainer.boot()
       .then((wc) => {
         webcontainerRef.current = wc;
@@ -52,6 +54,44 @@ function App() {
     addLog(`Fichier charge: ${data.fileName}`);
   };
 
+  const mountAndRun = async (resultFiles) => {
+    const appFiles = JSON.parse(JSON.stringify(baseFiles));
+
+    for (const [path, content] of Object.entries(resultFiles)) {
+      let fileContent = content;
+      if (path === 'src/data.js' && excelData?.fullData) {
+        const jsonData = JSON.stringify(excelData.fullData);
+        fileContent = fileContent.replace('"__INJECT_DATA__"', jsonData);
+      }
+      const parts = path.split('/');
+      if (parts[0] === 'src' && parts.length === 2) {
+        appFiles.src.directory[parts[1]] = { file: { contents: fileContent } };
+      }
+    }
+
+    setFiles(appFiles);
+    setCurrentFiles(resultFiles);
+    await webcontainerRef.current.mount(appFiles);
+    addLog('Fichiers montes');
+
+    const installProcess = await webcontainerRef.current.spawn('npm', ['install']);
+    installProcess.output.pipeTo(new WritableStream({
+      write(data) { addLog(data); }
+    }));
+    await installProcess.exit;
+    addLog('Dependances installees');
+
+    await webcontainerRef.current.spawn('npm', ['run', 'dev']);
+
+    return new Promise((resolve) => {
+      webcontainerRef.current.on('server-ready', (port, url) => {
+        addLog('Serveur pret');
+        setPreviewUrl(url);
+        resolve(url);
+      });
+    });
+  };
+
   const handleGenerate = async () => {
     if (!prompt.trim() || !webcontainerRef.current) return;
 
@@ -66,52 +106,43 @@ function App() {
       addLog('Code genere');
 
       setGenerationStep(2);
-      const appFiles = JSON.parse(JSON.stringify(baseFiles));
-      
-      for (const [path, content] of Object.entries(result.files)) {
-        let fileContent = content;
-        
-        // Injecter les vraies données à la place du placeholder
-        if (path === 'src/data.js' && excelData?.fullData) {
-          const jsonData = JSON.stringify(excelData.fullData);
-          fileContent = fileContent.replace('"__INJECT_DATA__"', jsonData);
-        }
-        
-        const parts = path.split('/');
-        if (parts[0] === 'src' && parts.length === 2) {
-          appFiles.src.directory[parts[1]] = { file: { contents: fileContent } };
-        }
-      }
-
-      setFiles(appFiles);
-      await webcontainerRef.current.mount(appFiles);
-      addLog('Fichiers montes');
-
       setGenerationStep(3);
-      const installProcess = await webcontainerRef.current.spawn('npm', ['install']);
-      installProcess.output.pipeTo(new WritableStream({
-        write(data) { addLog(data); }
-      }));
-
-      await installProcess.exit;
-      addLog('Dependances installees');
-
+      const url = await mountAndRun(result.files);
       setGenerationStep(4);
-      await webcontainerRef.current.spawn('npm', ['run', 'dev']);
 
-      webcontainerRef.current.on('server-ready', (port, url) => {
-        addLog(`Serveur pret`);
-        setPreviewUrl(url);
-        setGeneratedApp({ name: prompt.slice(0, 30), prompt, url });
-        setSavedApps(prev => [...prev, { id: Date.now(), name: prompt.slice(0, 30), prompt }]);
-        setIsLoading(false);
-        setGenerationStep(5);
-      });
-
+      setGeneratedApp({ name: prompt.slice(0, 30), prompt, url });
+      setSavedApps(prev => [...prev, { id: Date.now(), name: prompt.slice(0, 30), prompt }]);
+      setIsLoading(false);
+      setGenerationStep(5);
     } catch (error) {
       addLog(`Erreur: ${error.message}`);
       setIsLoading(false);
       setGenerationStep(0);
+    }
+  };
+
+  const handleRefine = async () => {
+    if (!feedback.trim() || !webcontainerRef.current) return;
+
+    setIsLoading(true);
+    addLog(`Modification: "${feedback}"`);
+
+    try {
+      const filesToSend = {};
+      for (const [path, code] of Object.entries(currentFiles)) {
+        if (path !== 'src/data.js') filesToSend[path] = code;
+      }
+      const result = await generateApp(feedback, excelData, filesToSend);
+      addLog('Code modifie');
+
+      const url = await mountAndRun(result.files);
+      setPreviewUrl(url);
+      setIsLoading(false);
+      setFeedback('');
+      addLog('App mise a jour');
+    } catch (error) {
+      addLog(`Erreur: ${error.message}`);
+      setIsLoading(false);
     }
   };
 
@@ -139,6 +170,8 @@ function App() {
     setGeneratedApp(null);
     setPreviewUrl(null);
     setPrompt('');
+    setFeedback('');
+    setCurrentFiles({});
     setGenerationStep(0);
   };
 
@@ -155,23 +188,41 @@ function App() {
   if (generatedApp && previewUrl) {
     return (
       <div style={styles.appFullScreen}>
-        <div style={styles.floatingActions}>
-          <button onClick={handleBackToFactory} style={styles.floatingButton}>
-            ← Factory
-          </button>
-          <button onClick={handleExport} style={styles.floatingButton}>
-            Exporter
-          </button>
-          <button onClick={handlePublish} style={styles.floatingButtonPrimary}>
-            Publier
-          </button>
-        </div>
-
         <iframe
           src={previewUrl}
           style={styles.fullScreenPreview}
           title="Generated App"
         />
+        <div style={styles.bottomBar}>
+          <div style={styles.bottomActions}>
+            <button onClick={handleBackToFactory} style={styles.floatingButton}>
+              ← Factory
+            </button>
+            <button onClick={handleExport} style={styles.floatingButton}>
+              Exporter
+            </button>
+            <button onClick={handlePublish} style={styles.floatingButtonPrimary}>
+              Publier
+            </button>
+          </div>
+          <div style={styles.feedbackContainer}>
+            <input
+              style={styles.feedbackInput}
+              placeholder="Modifie l'app... ex: ajoute un graphique, change les couleurs..."
+              value={feedback}
+              onChange={(e) => setFeedback(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleRefine()}
+              disabled={isLoading}
+            />
+            <button
+              style={{...styles.floatingButtonPrimary, opacity: (isLoading || !feedback.trim()) ? 0.5 : 1}}
+              onClick={handleRefine}
+              disabled={isLoading || !feedback.trim()}
+            >
+              {isLoading ? 'Modification...' : 'Envoyer'}
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -181,8 +232,8 @@ function App() {
     <div style={styles.container}>
       <aside style={styles.sidebar}>
         <div style={styles.logo}>FACTORY</div>
-        
-        <button 
+
+        <button
           style={styles.newAppButton}
           onClick={() => { setPrompt(''); setGenerationStep(0); setIsLoading(false); }}
         >
@@ -234,7 +285,7 @@ function App() {
                       ...styles.stepIcon,
                       color: step.done ? '#34D399' : generationStep === index + 1 ? '#F59E0B' : '#52525B'
                     }}>
-                      {step.done ? '✓' : generationStep === index + 1 ? '◐' : '○'}
+                      {step.done ? 'V' : generationStep === index + 1 ? 'O' : 'o'}
                     </span>
                     <span style={{
                       ...styles.stepLabel,
@@ -250,7 +301,7 @@ function App() {
         ) : (
           <div style={styles.centerContent}>
             <h1 style={styles.title}>Quelle analyse voulez-vous créer ?</h1>
-            
+
             <div style={styles.promptContainer}>
               <textarea
                 style={styles.promptInput}
@@ -259,15 +310,15 @@ function App() {
                 onChange={(e) => setPrompt(e.target.value)}
                 rows={3}
               />
-              
+
               <FileUpload onDataLoaded={handleDataLoaded} />
               {excelData && (
-              <div style={styles.fileInfo}>
-                Fichier: {excelData.fileName} ({excelData.totalRows} lignes)
-              </div>
+                <div style={styles.fileInfo}>
+                  Fichier: {excelData.fileName} ({excelData.totalRows} lignes)
+                </div>
               )}
 
-              <button 
+              <button
                 style={{
                   ...styles.generateButton,
                   opacity: (!prompt.trim() || !isReady) ? 0.5 : 1
@@ -275,7 +326,7 @@ function App() {
                 onClick={handleGenerate}
                 disabled={!prompt.trim() || !isReady}
               >
-                Generer l'App →
+                Generer l'App
               </button>
             </div>
 
@@ -578,17 +629,49 @@ const styles = {
     height: '100vh',
     background: '#0F0F12',
   },
-  floatingActions: {
+  fullScreenPreview: {
+    width: '100%',
+    height: 'calc(100% - 60px)',
+    border: 'none',
+  },
+  bottomBar: {
     position: 'fixed',
-    bottom: '16px',
-    left: '16px',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: '60px',
+    background: 'rgba(22, 22, 26, 0.95)',
+    backdropFilter: 'blur(8px)',
+    borderTop: '1px solid #2E2E36',
+    padding: '0 16px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
     zIndex: 1000,
+  },
+  bottomActions: {
     display: 'flex',
     gap: '8px',
+    flexShrink: 0,
+  },
+  feedbackContainer: {
+    display: 'flex',
+    gap: '8px',
+    flex: 1,
+  },
+  feedbackInput: {
+    flex: 1,
+    background: '#1C1C21',
+    border: '1px solid #2E2E36',
+    borderRadius: '8px',
+    padding: '10px 16px',
+    color: '#FFFFFF',
+    fontSize: '13px',
+    fontFamily: 'inherit',
+    outline: 'none',
   },
   floatingButton: {
     background: 'rgba(22, 22, 26, 0.95)',
-    backdropFilter: 'blur(8px)',
     color: '#A1A1AA',
     border: '1px solid #2E2E36',
     padding: '10px 16px',
@@ -607,13 +690,6 @@ const styles = {
     fontWeight: '500',
     cursor: 'pointer',
     transition: 'all 0.2s ease',
-  },
-  fullScreenPreview: {
-    width: '100%',
-    height: '100%',
-    border: 'none',
-    paddingBottom: '60px',
-    boxSizing: 'border-box',
   },
 };
 

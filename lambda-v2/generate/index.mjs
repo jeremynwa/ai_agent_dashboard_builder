@@ -92,7 +92,7 @@ export const handler = async (event) => {
   if (event.requestContext?.http?.method === 'OPTIONS') return reply(200, {});
 
   try {
-    const { prompt, useRules, excelData } = JSON.parse(event.body || '{}');
+    const { prompt, useRules, excelData, existingFiles } = JSON.parse(event.body || '{}');
     if (!prompt) return reply(400, { error: 'Prompt is required' });
 
     let rulesContext = '';
@@ -116,11 +116,22 @@ ${JSON.stringify(sample, null, 2)}
 Rappel: utilise le placeholder "__INJECT_DATA__" dans src/data.js. Les vraies donnees (${excelData.totalRows || excelData.data.length} lignes) seront injectees automatiquement.`;
     }
 
+    let userMessage = '';
+    if (existingFiles) {
+      userMessage = `Voici le code actuel de l'application:\n\n`;
+      for (const [path, code] of Object.entries(existingFiles)) {
+        userMessage += `--- ${path} ---\n${code}\n\n`;
+      }
+      userMessage += `\nMODIFICATION DEMANDEE: ${prompt}${rulesContext}${dataContext}\n\nRetourne le JSON complet avec TOUS les fichiers (modifies ou non).`;
+    } else {
+      userMessage = `Genere une application React pour: ${prompt}${rulesContext}${dataContext}`;
+    }
+
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 8192,
+      max_tokens: 16384,
       system: systemWithData,
-      messages: [{ role: 'user', content: `Genere une application React pour: ${prompt}${rulesContext}${dataContext}` }],
+      messages: [{ role: 'user', content: userMessage }],
     });
 
     const content = message.content[0].text;

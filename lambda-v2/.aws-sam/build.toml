@@ -28,6 +28,10 @@ Banner = ["js=import { createRequire } from 'module'; const require = createRequ
 
 
 
+
+
+
+
 [function_build_definitions.462cef72-d8cc-4f52-935b-cd832ac29b8b]
 codeuri = "C:\\Users\\jerem\\Documents\\Projects\\ai_agent_dashboard_builder\\ai_agent_dashboard_builder\\lambda-v2\\rules"
 runtime = "nodejs20.x"
@@ -56,6 +60,10 @@ Banner = ["js=import { createRequire } from 'module'; const require = createRequ
 
 
 
+
+
+
+
 [function_build_definitions.66bd4c27-4837-4a7c-8f3c-b1bd4857c99f]
 codeuri = "C:\\Users\\jerem\\Documents\\Projects\\ai_agent_dashboard_builder\\ai_agent_dashboard_builder\\lambda-v2\\publish"
 runtime = "nodejs20.x"
@@ -76,6 +84,10 @@ OutExtension = [".js=.mjs"]
 EntryPoints = ["index.mjs"]
 External = ["@aws-sdk/*"]
 Banner = ["js=import { createRequire } from 'module'; const require = createRequire(import.meta.url);"]
+
+
+
+
 
 
 
