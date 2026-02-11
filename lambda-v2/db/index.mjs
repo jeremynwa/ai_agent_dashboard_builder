@@ -1,4 +1,5 @@
 import pg from 'pg';
+import mysql from 'mysql2/promise';
 
 const HEADERS = {
   'Content-Type': 'application/json',
@@ -16,15 +17,16 @@ function validateQuery(sql) {
   }
 }
 
-async function getConnection(credentials) {
-  const { host, port, user, password, database, ssl } = credentials;
+// ============ POSTGRESQL ============
+
+async function pgConnect(credentials) {
   const client = new pg.Client({
-    host,
-    port: port || 5432,
-    user,
-    password,
-    database,
-    ssl: ssl !== false ? { rejectUnauthorized: false } : false,
+    host: credentials.host,
+    port: credentials.port || 5432,
+    user: credentials.user,
+    password: credentials.password,
+    database: credentials.database,
+    ssl: credentials.ssl !== false ? { rejectUnauthorized: false } : false,
     connectionTimeoutMillis: 10000,
     query_timeout: 25000,
   });
@@ -32,23 +34,19 @@ async function getConnection(credentials) {
   return client;
 }
 
-async function readSchema(credentials) {
-  const client = await getConnection(credentials);
+async function pgReadSchema(credentials) {
+  const client = await pgConnect(credentials);
   try {
-    // Get all tables
     const tablesResult = await client.query(`
       SELECT table_name 
       FROM information_schema.tables 
-      WHERE table_schema = 'public' 
-      AND table_type = 'BASE TABLE'
+      WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
       ORDER BY table_name
     `);
 
     const schema = {};
     for (const row of tablesResult.rows) {
       const tableName = row.table_name;
-
-      // Get columns
       const colsResult = await client.query(`
         SELECT column_name, data_type, is_nullable
         FROM information_schema.columns 
@@ -56,42 +54,106 @@ async function readSchema(credentials) {
         ORDER BY ordinal_position
       `, [tableName]);
 
-      // Get row count
       const countResult = await client.query(`SELECT COUNT(*) as count FROM "${tableName}"`);
-
-      // Get sample rows
       const sampleResult = await client.query(`SELECT * FROM "${tableName}" LIMIT 5`);
 
       schema[tableName] = {
-        columns: colsResult.rows.map(c => ({
-          name: c.column_name,
-          type: c.data_type,
-          nullable: c.is_nullable === 'YES',
-        })),
+        columns: colsResult.rows.map(c => ({ name: c.column_name, type: c.data_type, nullable: c.is_nullable === 'YES' })),
         rowCount: parseInt(countResult.rows[0].count),
         sample: sampleResult.rows,
       };
     }
-
     return schema;
   } finally {
     await client.end();
   }
 }
 
-async function executeQuery(credentials, sql) {
+async function pgQuery(credentials, sql) {
   validateQuery(sql);
-  const client = await getConnection(credentials);
+  const client = await pgConnect(credentials);
   try {
     const result = await client.query(sql);
-    return {
-      rows: result.rows,
-      rowCount: result.rowCount,
-      fields: result.fields.map(f => ({ name: f.name, dataTypeID: f.dataTypeID })),
-    };
+    return { rows: result.rows, rowCount: result.rowCount, fields: result.fields.map(f => ({ name: f.name })) };
   } finally {
     await client.end();
   }
+}
+
+// ============ MYSQL ============
+
+async function mysqlConnect(credentials) {
+  return mysql.createConnection({
+    host: credentials.host,
+    port: credentials.port || 3306,
+    user: credentials.user,
+    password: credentials.password,
+    database: credentials.database,
+    ssl: credentials.ssl !== false ? { rejectUnauthorized: false } : undefined,
+    connectTimeout: 10000,
+  });
+}
+
+async function mysqlReadSchema(credentials) {
+  const conn = await mysqlConnect(credentials);
+  try {
+    const [tables] = await conn.query(`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = ? AND table_type = 'BASE TABLE'
+      ORDER BY table_name
+    `, [credentials.database]);
+
+    const schema = {};
+    for (const row of tables) {
+      const tableName = row.TABLE_NAME || row.table_name;
+      const [cols] = await conn.query(`
+        SELECT column_name, data_type, is_nullable
+        FROM information_schema.columns 
+        WHERE table_schema = ? AND table_name = ?
+        ORDER BY ordinal_position
+      `, [credentials.database, tableName]);
+
+      const [countRows] = await conn.query(`SELECT COUNT(*) as count FROM \`${tableName}\``);
+      const [sampleRows] = await conn.query(`SELECT * FROM \`${tableName}\` LIMIT 5`);
+
+      schema[tableName] = {
+        columns: cols.map(c => ({
+          name: c.COLUMN_NAME || c.column_name,
+          type: c.DATA_TYPE || c.data_type,
+          nullable: (c.IS_NULLABLE || c.is_nullable) === 'YES',
+        })),
+        rowCount: parseInt(countRows[0].count),
+        sample: sampleRows,
+      };
+    }
+    return schema;
+  } finally {
+    await conn.end();
+  }
+}
+
+async function mysqlQuery(credentials, sql) {
+  validateQuery(sql);
+  const conn = await mysqlConnect(credentials);
+  try {
+    const [rows, fields] = await conn.query(sql);
+    return { rows, rowCount: rows.length, fields: fields.map(f => ({ name: f.name })) };
+  } finally {
+    await conn.end();
+  }
+}
+
+// ============ ROUTER ============
+
+async function readSchema(credentials) {
+  if (credentials.type === 'mysql') return mysqlReadSchema(credentials);
+  return pgReadSchema(credentials);
+}
+
+async function executeQuery(credentials, sql) {
+  if (credentials.type === 'mysql') return mysqlQuery(credentials, sql);
+  return pgQuery(credentials, sql);
 }
 
 export const handler = async (event) => {

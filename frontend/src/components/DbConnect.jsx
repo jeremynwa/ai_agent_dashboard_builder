@@ -5,9 +5,10 @@ function DbConnect({ onSchemaLoaded, apiBase }) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [connected, setConnected] = useState(false);
+  const [dbType, setDbType] = useState('postgresql');
   const [credentials, setCredentials] = useState({
     host: '',
-    port: '5432',
+    port: '',
     user: '',
     password: '',
     database: '',
@@ -17,11 +18,17 @@ function DbConnect({ onSchemaLoaded, apiBase }) {
     setIsLoading(true);
     setError(null);
 
+    const creds = {
+      ...credentials,
+      port: credentials.port || (dbType === 'mysql' ? '3306' : '5432'),
+      type: dbType === 'mysql' ? 'mysql' : undefined,
+    };
+
     try {
       const res = await fetch(`${apiBase}/db/schema`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ credentials }),
+        body: JSON.stringify({ credentials: creds }),
       });
 
       if (!res.ok) {
@@ -34,8 +41,8 @@ function DbConnect({ onSchemaLoaded, apiBase }) {
       setIsOpen(false);
 
       onSchemaLoaded({
-        type: 'postgresql',
-        credentials,
+        type: dbType,
+        credentials: creds,
         schema,
         tableNames: Object.keys(schema),
         totalTables: Object.keys(schema).length,
@@ -70,6 +77,20 @@ function DbConnect({ onSchemaLoaded, apiBase }) {
     marginBottom: '12px',
   };
 
+  const tabStyle = (active) => ({
+    flex: 1,
+    padding: '8px',
+    background: active ? 'rgba(0,118,95,0.15)' : '#1C1C21',
+    border: active ? '1px solid rgba(0,118,95,0.4)' : '1px solid #2E2E36',
+    borderRadius: '6px',
+    color: active ? '#00A382' : '#71717A',
+    fontSize: '13px',
+    fontWeight: active ? '600' : '400',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    textAlign: 'center',
+  });
+
   if (connected) {
     return (
       <div style={{
@@ -83,7 +104,7 @@ function DbConnect({ onSchemaLoaded, apiBase }) {
         fontSize: '13px',
         color: '#34D399',
       }}>
-        <span>PostgreSQL connecte: {credentials.database}@{credentials.host}</span>
+        <span>{dbType === 'mysql' ? 'MySQL' : 'PostgreSQL'} connecte: {credentials.database}@{credentials.host}</span>
         <button
           onClick={() => { setConnected(false); setIsOpen(true); }}
           style={{ background: 'none', border: 'none', color: '#71717A', cursor: 'pointer', fontSize: '12px' }}
@@ -114,7 +135,7 @@ function DbConnect({ onSchemaLoaded, apiBase }) {
           transition: 'all 0.2s ease',
         }}
       >
-        Connecter une base PostgreSQL
+        Connecter une base de donnees
       </button>
 
       {isOpen && (
@@ -125,6 +146,16 @@ function DbConnect({ onSchemaLoaded, apiBase }) {
           border: '1px solid #2E2E36',
           borderRadius: '8px',
         }}>
+          {/* DB type selector */}
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+            <button style={tabStyle(dbType === 'postgresql')} onClick={() => { setDbType('postgresql'); setCredentials(c => ({ ...c, port: '' })); }}>
+              PostgreSQL
+            </button>
+            <button style={tabStyle(dbType === 'mysql')} onClick={() => { setDbType('mysql'); setCredentials(c => ({ ...c, port: '' })); }}>
+              MySQL
+            </button>
+          </div>
+
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px', gap: '12px' }}>
             <div style={fieldStyle}>
               <label style={labelStyle}>Host</label>
@@ -139,7 +170,7 @@ function DbConnect({ onSchemaLoaded, apiBase }) {
               <label style={labelStyle}>Port</label>
               <input
                 style={inputStyle}
-                placeholder="5432"
+                placeholder={dbType === 'mysql' ? '3306' : '5432'}
                 value={credentials.port}
                 onChange={(e) => setCredentials(prev => ({ ...prev, port: e.target.value }))}
               />
@@ -161,7 +192,7 @@ function DbConnect({ onSchemaLoaded, apiBase }) {
               <label style={labelStyle}>User</label>
               <input
                 style={inputStyle}
-                placeholder="postgres"
+                placeholder={dbType === 'mysql' ? 'root' : 'postgres'}
                 value={credentials.user}
                 onChange={(e) => setCredentials(prev => ({ ...prev, user: e.target.value }))}
               />
