@@ -60,8 +60,8 @@ REGLES DE CODE:
 
 const DATA_INJECTION_PROMPT = `
 
-REGLES DONNEES EXTERNES (fichier CSV/Excel):
-Quand des donnees de fichier sont fournies, tu DOIS:
+REGLES DONNEES EXTERNES:
+Quand des donnees sont fournies, tu DOIS:
 1. Creer un fichier SEPARE "src/data.js" contenant EXACTEMENT: export const DATA = "__INJECT_DATA__";
 2. Dans App.jsx, importer: import { DATA } from './data';
 3. Utiliser DATA partout dans l'app (graphiques, tableaux, KPIs)
@@ -95,16 +95,32 @@ export async function queryDb(sql) {
 4. Chaque KPI, graphique, tableau doit faire sa propre requete SQL
 5. Utiliser useEffect + useState pour charger les donnees au mount
 6. Afficher "Chargement..." pendant que les donnees se chargent
-7. Les requetes SQL doivent etre optimisees (utiliser SUM, AVG, GROUP BY, COUNT cote serveur)
-8. NE JAMAIS hardcoder de donnees, TOUT doit venir de queryDb()
-
-PATTERN A SUIVRE:
-const [revenue, setRevenue] = useState(null);
-useEffect(() => {
-  queryDb('SELECT SUM(amount) as total FROM orders').then(rows => setRevenue(rows[0].total));
-}, []);
+7. NE JAMAIS hardcoder de donnees, TOUT doit venir de queryDb()
 
 IMPORTANT: Les placeholders "__DB_PROXY_URL__" et "__DB_CREDENTIALS__" seront remplaces automatiquement.`;
+
+const VISION_SYSTEM_PROMPT = `Tu es un expert UI/UX et React senior. Tu analyses des screenshots de dashboards et ameliores le code.
+
+REGLES:
+- Retourne UNIQUEMENT du JSON valide
+- Structure: { "files": { "src/App.jsx": "code" } }
+- Le code doit compiler sans erreur
+- Respecte le design system (fond #0F0F12, cards #16161A, accent #00765F)`;
+
+const VISION_USER_PROMPT = `Voici le screenshot du dashboard genere et son code source.
+
+Analyse visuellement le rendu et corrige ces problemes si tu les detectes:
+1. LAYOUT: Les elements sont-ils bien repartis? Pas de zones vides inutiles?
+2. CHEVAUCHEMENT: Des elements se superposent-ils?
+3. LISIBILITE: Le texte est-il assez grand? Les contrastes sont-ils suffisants?
+4. GRAPHIQUES: Les graphiques sont-ils visibles et lisibles? Ont-ils des legendes?
+5. KPIS: Les cartes KPI sont-elles bien alignees et lisibles?
+6. ESPACEMENT: Y a-t-il assez d'espace entre les elements?
+7. COHERENCE: Le design est-il professionnel et harmonieux?
+8. SCROLL: Le contenu tient-il dans l'ecran sans scroll horizontal?
+
+CODE ACTUEL:
+`;
 
 async function loadRules() {
   const rules = {};
@@ -125,7 +141,55 @@ export const handler = async (event) => {
   if (event.requestContext?.http?.method === 'OPTIONS') return reply(200, {});
 
   try {
-    const { prompt, useRules, excelData, existingFiles, dbContext, dbProxyUrl } = JSON.parse(event.body || '{}');
+    const body = JSON.parse(event.body || '{}');
+    const { prompt, useRules, excelData, existingFiles, dbContext, vision } = body;
+
+    // ============ VISION MODE ============
+    if (vision) {
+      const { screenshot } = vision;
+      const visionExistingFiles = body.existingFiles || {};
+
+      let codeContext = '';
+      for (const [path, code] of Object.entries(visionExistingFiles)) {
+        codeContext += `--- ${path} ---\n${code}\n\n`;
+      }
+
+      const message = await anthropic.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 16384,
+        system: VISION_SYSTEM_PROMPT,
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: 'image/png',
+                data: screenshot,
+              },
+            },
+            {
+              type: 'text',
+              text: VISION_USER_PROMPT + codeContext + '\n\nRetourne le JSON complet avec TOUS les fichiers ameliores. Si le rendu est deja bon, retourne le code tel quel.',
+            },
+          ],
+        }],
+      });
+
+      const content = message.content[0].text;
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error('Pas de JSON trouve (vision)');
+
+      const parsed = JSON.parse(jsonMatch[0]);
+      for (const [fp, code] of Object.entries(parsed.files)) {
+        parsed.files[fp] = fixJsxCode(code);
+      }
+
+      return reply(200, parsed);
+    }
+
+    // ============ GENERATE / REFINE MODE ============
     if (!prompt) return reply(400, { error: 'Prompt is required' });
 
     let rulesContext = '';
@@ -134,12 +198,10 @@ export const handler = async (event) => {
       if (Object.keys(rules).length > 0) rulesContext = `\n\nREGLES METIER:\n${JSON.stringify(rules, null, 2)}`;
     }
 
-    // Build system prompt based on data source
     let systemWithData = SYSTEM_PROMPT;
     let dataContext = '';
 
     if (dbContext) {
-      // DB mode: proxy queries
       systemWithData = SYSTEM_PROMPT + DB_PROXY_PROMPT;
       const schemaDesc = Object.entries(dbContext.schema).map(([table, info]) => {
         const cols = info.columns.map(c => `  - ${c.name} (${c.type})`).join('\n');
@@ -147,12 +209,8 @@ export const handler = async (event) => {
         return `Table "${table}" (${info.rowCount} lignes):\n${cols}${sampleStr}`;
       }).join('\n\n');
 
-      dataContext = `\n\nBASE DE DONNEES CONNECTEE (${dbContext.type}):
-${schemaDesc}
-
-Utilise queryDb() pour toutes les donnees. Ecris des requetes SQL SELECT optimisees.`;
+      dataContext = `\n\nBASE DE DONNEES CONNECTEE (${dbContext.type}):\n${schemaDesc}\n\nUtilise queryDb() pour toutes les donnees.`;
     } else if (excelData) {
-      // File mode: data injection
       systemWithData = SYSTEM_PROMPT + DATA_INJECTION_PROMPT;
       const sample = excelData.data.slice(0, 30);
       dataContext = `\n\nDONNEES FOURNIES:

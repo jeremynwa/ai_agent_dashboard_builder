@@ -1,10 +1,53 @@
 import { useState, useEffect, useRef } from 'react';
 import { WebContainer } from '@webcontainer/api';
 import { baseFiles } from './services/files-template';
-import { generateApp, publishApp, API_BASE, DB_PROXY_URL } from './services/api';
+import { generateApp, visionAnalyze, publishApp, API_BASE, DB_PROXY_URL } from './services/api';
 import { exportToZip } from './services/export';
 import FileUpload from './components/FileUpload';
 import DbConnect from './components/DbConnect';
+
+const MAX_FIX_ATTEMPTS = 3;
+const MAX_VISION_ATTEMPTS = 2;
+const SCREENSHOT_DELAY = 4000; // wait for app to fully render
+const SCREENSHOT_TIMEOUT = 10000;
+
+const REVIEW_PROMPT = `Review et ameliore ce code React. Verifie et corrige SYSTEMATIQUEMENT:
+
+1. LABELS: Chaque graphique a un titre clair et une legende explicite
+2. UNITES: Les KPIs affichent les unites correctes (EUR, %, unites, etc.)
+3. FORMATAGE: Les nombres sont formates (separateurs de milliers, decimales appropriees)
+4. ESPACEMENT: Le layout est aere, pas de contenus colles ou trop serres
+5. COULEURS: Le design system est respecte (fond #0F0F12, cards #16161A, accent #00765F)
+6. RESPONSIVE: Les graphiques et tableaux s'adaptent a la largeur disponible
+7. HOVER STATES: Tous les elements cliquables ont un etat hover
+8. CHARGEMENT: Si donnees async, afficher "Chargement..." pendant le fetch
+9. VIDE: Gerer les cas ou les donnees sont vides ou undefined (pas de crash)
+10. LISIBILITE: Les textes secondaires utilisent #A1A1AA, pas du blanc pur
+
+Retourne le JSON complet avec TOUS les fichiers ameliores.`;
+
+// Script injected into the generated app's index.html for screenshot capture
+const CAPTURE_SCRIPT = `
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/script>
+<script>
+window.addEventListener('message', function(e) {
+  if (e.data && e.data.type === 'capture') {
+    setTimeout(function() {
+      html2canvas(document.body, {
+        backgroundColor: '#0F0F12',
+        scale: 0.5,
+        logging: false,
+        useCORS: true,
+      }).then(function(canvas) {
+        var base64 = canvas.toDataURL('image/png').split(',')[1];
+        window.parent.postMessage({ type: 'screenshot', data: base64 }, '*');
+      }).catch(function(err) {
+        window.parent.postMessage({ type: 'screenshot_error', error: err.message }, '*');
+      });
+    }, 500);
+  }
+});
+<\/script>`;
 
 function App() {
   const [files, setFiles] = useState({});
@@ -18,16 +61,19 @@ function App() {
   const [generatedApp, setGeneratedApp] = useState(null);
   const [savedApps, setSavedApps] = useState([]);
   const [generationStep, setGenerationStep] = useState(0);
+  const [agentStatus, setAgentStatus] = useState('');
   const [feedback, setFeedback] = useState('');
   const [currentFiles, setCurrentFiles] = useState({});
   const webcontainerRef = useRef(null);
   const bootedRef = useRef(false);
+  const iframeRef = useRef(null);
 
   const generationSteps = [
-    { label: 'Structure', done: generationStep > 0 },
-    { label: 'Composants', done: generationStep > 1 },
-    { label: 'Visualisations', done: generationStep > 2 },
-    { label: 'Donnees', done: generationStep > 3 },
+    { label: 'Génération du code', done: generationStep > 0 },
+    { label: 'Compilation', done: generationStep > 1 },
+    { label: 'Review qualité', done: generationStep > 2 },
+    { label: 'Analyse visuelle', done: generationStep > 3 },
+    { label: 'Finalisation', done: generationStep > 4 },
   ];
 
   const addLog = (message) => {
@@ -37,9 +83,7 @@ function App() {
   useEffect(() => {
     if (bootedRef.current) return;
     bootedRef.current = true;
-
     addLog('Initialisation...');
-
     WebContainer.boot()
       .then((wc) => {
         webcontainerRef.current = wc;
@@ -63,51 +107,243 @@ function App() {
     addLog(`DB connectee: ${data.totalTables} tables`);
   };
 
-  const mountAndRun = async (resultFiles) => {
-    const appFiles = JSON.parse(JSON.stringify(baseFiles));
-
+  const injectData = (resultFiles) => {
+    const injected = {};
     for (const [path, content] of Object.entries(resultFiles)) {
       let fileContent = content;
-
-      // Inject Excel data
       if (path === 'src/data.js' && excelData?.fullData) {
-        const jsonData = JSON.stringify(excelData.fullData);
-        fileContent = fileContent.replace('"__INJECT_DATA__"', jsonData);
+        fileContent = fileContent.replace('"__INJECT_DATA__"', JSON.stringify(excelData.fullData));
       }
-
-      // Inject DB proxy config
       if (path === 'src/db.js' && dbData) {
         fileContent = fileContent.replace('"__DB_PROXY_URL__"', JSON.stringify(DB_PROXY_URL));
         fileContent = fileContent.replace('"__DB_CREDENTIALS__"', JSON.stringify(dbData.credentials));
       }
+      injected[path] = fileContent;
+    }
+    return injected;
+  };
 
+  // Inject capture script into index.html
+  const injectCaptureScript = (appFiles) => {
+    if (appFiles['index.html'] && appFiles['index.html'].file) {
+      const html = appFiles['index.html'].file.contents;
+      appFiles['index.html'].file.contents = html.replace('</body>', CAPTURE_SCRIPT + '\n</body>');
+    }
+    return appFiles;
+  };
+
+  const tryCompile = async (resultFiles) => {
+    const injectedFiles = injectData(resultFiles);
+    let appFiles = JSON.parse(JSON.stringify(baseFiles));
+
+    for (const [path, content] of Object.entries(injectedFiles)) {
       const parts = path.split('/');
       if (parts[0] === 'src' && parts.length === 2) {
-        appFiles.src.directory[parts[1]] = { file: { contents: fileContent } };
+        appFiles.src.directory[parts[1]] = { file: { contents: content } };
       }
     }
 
+    // Inject html2canvas + capture listener
+    appFiles = injectCaptureScript(appFiles);
+
     setFiles(appFiles);
-    setCurrentFiles(resultFiles);
     await webcontainerRef.current.mount(appFiles);
-    addLog('Fichiers montes');
 
     const installProcess = await webcontainerRef.current.spawn('npm', ['install']);
+    let installOutput = '';
     installProcess.output.pipeTo(new WritableStream({
-      write(data) { addLog(data); }
+      write(data) {
+        installOutput += data;
+        addLog(data);
+      }
     }));
-    await installProcess.exit;
-    addLog('Dependances installees');
+    const installExit = await installProcess.exit;
+    if (installExit !== 0) {
+      return { success: false, error: `npm install failed:\n${installOutput.slice(-500)}` };
+    }
 
-    await webcontainerRef.current.spawn('npm', ['run', 'dev']);
+    const devProcess = await webcontainerRef.current.spawn('npm', ['run', 'dev']);
+    let devOutput = '';
+    devProcess.output.pipeTo(new WritableStream({
+      write(data) {
+        devOutput += data;
+        addLog(data);
+      }
+    }));
 
     return new Promise((resolve) => {
+      let resolved = false;
+
       webcontainerRef.current.on('server-ready', (port, url) => {
-        addLog('Serveur pret');
-        setPreviewUrl(url);
-        resolve(url);
+        if (resolved) return;
+        resolved = true;
+        resolve({ success: true, url });
       });
+
+      setTimeout(() => {
+        if (resolved) return;
+        resolved = true;
+        const errorLines = devOutput.split('\n')
+          .filter(line => /error|failed|cannot|unexpected|not defined|not found/i.test(line))
+          .slice(-10)
+          .join('\n');
+        resolve({ success: false, error: errorLines || devOutput.slice(-500) || 'Timeout: serveur non demarre apres 30s' });
+      }, 30000);
     });
+  };
+
+  // Capture screenshot from iframe via postMessage
+  const captureScreenshot = () => {
+    return new Promise((resolve) => {
+      const handler = (e) => {
+        if (e.data && e.data.type === 'screenshot') {
+          window.removeEventListener('message', handler);
+          resolve(e.data.data); // base64 PNG
+        }
+        if (e.data && e.data.type === 'screenshot_error') {
+          window.removeEventListener('message', handler);
+          resolve(null);
+        }
+      };
+
+      window.addEventListener('message', handler);
+
+      // Wait for render, then ask iframe to capture
+      setTimeout(() => {
+        if (iframeRef.current && iframeRef.current.contentWindow) {
+          iframeRef.current.contentWindow.postMessage({ type: 'capture' }, '*');
+        }
+      }, SCREENSHOT_DELAY);
+
+      // Timeout fallback
+      setTimeout(() => {
+        window.removeEventListener('message', handler);
+        resolve(null);
+      }, SCREENSHOT_DELAY + SCREENSHOT_TIMEOUT);
+    });
+  };
+
+  const stripDataFiles = (codeFiles) => {
+    const stripped = {};
+    for (const [path, code] of Object.entries(codeFiles)) {
+      if (path !== 'src/data.js' && path !== 'src/db.js') stripped[path] = code;
+    }
+    return stripped;
+  };
+
+  // ============ FULL AGENT LOOP ============
+  const agentGenerate = async (userPrompt, existingCode = null, skipReview = false, skipVision = false) => {
+    const dbContext = dbData ? { type: dbData.type, schema: dbData.schema } : null;
+
+    let currentCode = existingCode;
+    let lastError = null;
+
+    // ============ PHASE 1: Generate + Auto-fix ============
+    for (let attempt = 0; attempt <= MAX_FIX_ATTEMPTS; attempt++) {
+      if (attempt === 0) {
+        setAgentStatus('Génération du code...');
+        setGenerationStep(1);
+        addLog('Agent: génération initiale');
+        const result = await generateApp(userPrompt, excelData, currentCode, dbContext);
+        currentCode = result.files;
+        addLog('Agent: code generé');
+      } else {
+        setAgentStatus(`Correction automatique (tentative ${attempt}/${MAX_FIX_ATTEMPTS})...`);
+        addLog(`Agent: fix tentative ${attempt}/${MAX_FIX_ATTEMPTS}`);
+        const fixPrompt = `L'application a une erreur de compilation. Corrige le code.\n\nERREUR:\n${lastError}\n\nCorrige cette erreur et retourne le JSON complet avec TOUS les fichiers.`;
+        const result = await generateApp(fixPrompt, excelData, stripDataFiles(currentCode), dbContext);
+        currentCode = result.files;
+        addLog('Agent: code corrigé');
+      }
+
+      setAgentStatus(attempt === 0 ? 'Compilation...' : `Recompilation (tentative ${attempt})...`);
+      setGenerationStep(2);
+      addLog('Agent: compilation...');
+
+      const compileResult = await tryCompile(currentCode);
+
+      if (compileResult.success) {
+        addLog(`Agent: compilation reussie${attempt > 0 ? ` (apres ${attempt} fix)` : ''}`);
+        setPreviewUrl(compileResult.url);
+
+        // ============ PHASE 2: Quality Review ============
+        if (!skipReview) {
+          setAgentStatus('Review qualité en cours...');
+          setGenerationStep(3);
+          addLog('Agent: review qualité...');
+
+          try {
+            const reviewResult = await generateApp(REVIEW_PROMPT, excelData, stripDataFiles(currentCode), dbContext);
+            addLog('Agent: code amelioré');
+
+            setAgentStatus('Recompilation apres review...');
+            const reviewCompile = await tryCompile(reviewResult.files);
+
+            if (reviewCompile.success) {
+              currentCode = reviewResult.files;
+              setPreviewUrl(reviewCompile.url);
+              addLog('Agent: review compilée avec succès');
+            } else {
+              addLog('Agent: review a cassé le code, version pre-review gardée');
+            }
+          } catch (reviewError) {
+            addLog(`Agent: review échouée (${reviewError.message}), version pre-review gardée`);
+          }
+        }
+
+        // ============ PHASE 3: Vision Analysis ============
+        if (!skipVision) {
+          setAgentStatus('Capture du screenshot...');
+          setGenerationStep(4);
+          addLog('Agent: capture screenshot...');
+
+          // Need to display the iframe temporarily for capture
+          const screenshot = await captureScreenshot();
+
+          if (screenshot) {
+            addLog('Agent: screenshot capture, analyse visuelle...');
+            setAgentStatus('Analyse visuelle par l\'IA...');
+
+            try {
+              const visionResult = await visionAnalyze(
+                screenshot,
+                stripDataFiles(currentCode),
+                excelData,
+                dbContext
+              );
+              addLog('Agent: améliorations visuelles reçues');
+
+              setAgentStatus('Recompilation après analyse visuelle...');
+              const visionCompile = await tryCompile(visionResult.files);
+
+              if (visionCompile.success) {
+                currentCode = visionResult.files;
+                setPreviewUrl(visionCompile.url);
+                addLog('Agent: version visuelle compilée avec succès');
+              } else {
+                addLog('Agent: corrections visuelles ont cassé le code, version précédente gardée');
+              }
+            } catch (visionError) {
+              addLog(`Agent: analyse visuelle échouée (${visionError.message}), version précédente gardée`);
+            }
+          } else {
+            addLog('Agent: screenshot echoué, phase vision ignorée');
+          }
+        }
+
+        setCurrentFiles(currentCode);
+        return { success: true, url: previewUrl };
+      }
+
+      // Compile failed
+      lastError = compileResult.error;
+      addLog(`Agent: erreur detectée — ${lastError.slice(0, 100)}...`);
+
+      if (attempt === MAX_FIX_ATTEMPTS) {
+        addLog(`Agent: échec après ${MAX_FIX_ATTEMPTS} tentatives`);
+        return { success: false, error: lastError };
+      }
+    }
   };
 
   const handleGenerate = async () => {
@@ -116,30 +352,26 @@ function App() {
     setIsLoading(true);
     setPreviewUrl(null);
     setGenerationStep(0);
-    addLog(`Generation: "${prompt}"`);
+    setAgentStatus('Demarrage de l\'agent...');
+    addLog(`Agent: "${prompt}"`);
 
     try {
-      setGenerationStep(1);
+      const result = await agentGenerate(prompt);
 
-      const dbContext = dbData ? {
-        type: dbData.type,
-        schema: dbData.schema,
-      } : null;
+      if (result.success) {
+        setGenerationStep(5);
+        setAgentStatus('');
+        setGeneratedApp({ name: prompt.slice(0, 30), prompt, url: result.url });
+        setSavedApps(prev => [...prev, { id: Date.now(), name: prompt.slice(0, 30), prompt }]);
+      } else {
+        setAgentStatus(`Erreur: ${result.error.slice(0, 200)}`);
+        addLog(`Erreur finale: ${result.error}`);
+      }
 
-      const result = await generateApp(prompt, excelData, null, dbContext);
-      addLog('Code genere');
-
-      setGenerationStep(2);
-      setGenerationStep(3);
-      const url = await mountAndRun(result.files);
-      setGenerationStep(4);
-
-      setGeneratedApp({ name: prompt.slice(0, 30), prompt, url });
-      setSavedApps(prev => [...prev, { id: Date.now(), name: prompt.slice(0, 30), prompt }]);
       setIsLoading(false);
-      setGenerationStep(5);
     } catch (error) {
       addLog(`Erreur: ${error.message}`);
+      setAgentStatus('');
       setIsLoading(false);
       setGenerationStep(0);
     }
@@ -149,30 +381,34 @@ function App() {
     if (!feedback.trim() || !webcontainerRef.current) return;
 
     setIsLoading(true);
-    addLog(`Modification: "${feedback}"`);
+    setAgentStatus('Modification en cours...');
+    addLog(`Agent refine: "${feedback}"`);
 
     try {
-      const filesToSend = {};
-      for (const [path, code] of Object.entries(currentFiles)) {
-        if (path !== 'src/data.js' && path !== 'src/db.js') filesToSend[path] = code;
+      const dbContext = dbData ? { type: dbData.type, schema: dbData.schema } : null;
+      const result = await generateApp(feedback, excelData, stripDataFiles(currentFiles), dbContext);
+
+      const compileResult = await tryCompile(result.files);
+
+      if (compileResult.success) {
+        setCurrentFiles(result.files);
+        setPreviewUrl(compileResult.url);
+        addLog('Agent: modification reussie');
+      } else {
+        addLog('Agent: erreur sur le refine, tentative de fix...');
+        const fixResult = await agentGenerate(feedback, result.files, true, true);
+        if (!fixResult.success) {
+          addLog(`Agent: echec du fix — ${fixResult.error.slice(0, 100)}`);
+        }
       }
 
-      const dbContext = dbData ? {
-        type: dbData.type,
-        schema: dbData.schema,
-      } : null;
-
-      const result = await generateApp(feedback, excelData, filesToSend, dbContext);
-      addLog('Code modifie');
-
-      const url = await mountAndRun(result.files);
-      setPreviewUrl(url);
       setIsLoading(false);
       setFeedback('');
-      addLog('App mise a jour');
+      setAgentStatus('');
     } catch (error) {
       addLog(`Erreur: ${error.message}`);
       setIsLoading(false);
+      setAgentStatus('');
     }
   };
 
@@ -203,6 +439,7 @@ function App() {
     setFeedback('');
     setCurrentFiles({});
     setGenerationStep(0);
+    setAgentStatus('');
   };
 
   const handleTemplate = (template) => {
@@ -219,6 +456,7 @@ function App() {
     return (
       <div style={styles.appFullScreen}>
         <iframe
+          ref={iframeRef}
           src={previewUrl}
           style={styles.fullScreenPreview}
           title="Generated App"
@@ -257,15 +495,26 @@ function App() {
     );
   }
 
-  // ETAT 1 & 2: Factory Home + Generation
+  // ETAT 2: Generation en cours — with hidden iframe for screenshot
+  // ETAT 1: Factory Home
   return (
     <div style={styles.container}>
+      {/* Hidden iframe for screenshot capture during generation */}
+      {previewUrl && isLoading && (
+        <iframe
+          ref={iframeRef}
+          src={previewUrl}
+          style={styles.hiddenIframe}
+          title="Capture"
+        />
+      )}
+
       <aside style={styles.sidebar}>
         <div style={styles.logo}>FACTORY</div>
 
         <button
           style={styles.newAppButton}
-          onClick={() => { setPrompt(''); setGenerationStep(0); setIsLoading(false); }}
+          onClick={() => { setPrompt(''); setGenerationStep(0); setIsLoading(false); setAgentStatus(''); }}
         >
           + New App
         </button>
@@ -302,11 +551,15 @@ function App() {
               <div style={styles.progressBar}>
                 <div style={{
                   ...styles.progressFill,
-                  width: `${(generationStep / 4) * 100}%`
+                  width: `${(generationStep / 5) * 100}%`
                 }}></div>
               </div>
 
-              <div style={styles.generationTitle}>Construction de votre app...</div>
+              <div style={styles.generationTitle}>Agent IA en action</div>
+
+              {agentStatus && (
+                <div style={styles.agentStatus}>{agentStatus}</div>
+              )}
 
               <div style={styles.stepsList}>
                 {generationSteps.map((step, index) => (
@@ -326,6 +579,14 @@ function App() {
                   </div>
                 ))}
               </div>
+
+              {logs.length > 0 && (
+                <div style={styles.agentLogs}>
+                  {logs.slice(-4).map((log, i) => (
+                    <div key={i} style={styles.agentLogLine}>{log}</div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         ) : (
@@ -456,9 +717,7 @@ const styles = {
     padding: '8px 12px',
     marginBottom: '8px',
   },
-  appList: {
-    flex: 1,
-  },
+  appList: { flex: 1 },
   appItem: {
     padding: '10px 12px',
     borderRadius: '8px',
@@ -495,21 +754,14 @@ const styles = {
     fontSize: '12px',
     color: '#71717A',
   },
-  dot: {
-    width: '8px',
-    height: '8px',
-    borderRadius: '50%',
-  },
+  dot: { width: '8px', height: '8px', borderRadius: '50%' },
   main: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     padding: '40px',
   },
-  centerContent: {
-    maxWidth: '600px',
-    width: '100%',
-  },
+  centerContent: { maxWidth: '600px', width: '100%' },
   title: {
     fontSize: '24px',
     fontWeight: '600',
@@ -552,15 +804,8 @@ const styles = {
     gap: '12px',
     margin: '12px 0',
   },
-  separatorLine: {
-    flex: 1,
-    height: '1px',
-    background: '#2E2E36',
-  },
-  separatorText: {
-    fontSize: '12px',
-    color: '#52525B',
-  },
+  separatorLine: { flex: 1, height: '1px', background: '#2E2E36' },
+  separatorText: { fontSize: '12px', color: '#52525B' },
   fileInfo: {
     fontSize: '12px',
     color: '#71717A',
@@ -610,16 +855,8 @@ const styles = {
     fontSize: '16px',
     color: '#A1A1AA',
   },
-  templateName: {
-    fontSize: '14px',
-    fontWeight: '500',
-    color: '#FFFFFF',
-    marginBottom: '4px',
-  },
-  templateDesc: {
-    fontSize: '12px',
-    color: '#71717A',
-  },
+  templateName: { fontSize: '14px', fontWeight: '500', color: '#FFFFFF', marginBottom: '4px' },
+  templateDesc: { fontSize: '12px', color: '#71717A' },
   logsContainer: {
     background: '#16161A',
     borderRadius: '12px',
@@ -641,9 +878,7 @@ const styles = {
     maxHeight: '100px',
     overflow: 'auto',
   },
-  logLine: {
-    padding: '2px 0',
-  },
+  logLine: { padding: '2px 0' },
   generationScreen: {
     display: 'flex',
     alignItems: 'center',
@@ -656,7 +891,8 @@ const styles = {
     padding: '40px',
     border: '1px solid #2E2E36',
     textAlign: 'center',
-    minWidth: '320px',
+    minWidth: '400px',
+    maxWidth: '500px',
   },
   progressBar: {
     height: '4px',
@@ -675,25 +911,35 @@ const styles = {
     fontSize: '18px',
     fontWeight: '600',
     color: '#FFFFFF',
-    marginBottom: '32px',
+    marginBottom: '12px',
   },
-  stepsList: {
-    textAlign: 'left',
+  agentStatus: {
+    fontSize: '13px',
+    color: '#F59E0B',
+    marginBottom: '24px',
+    fontFamily: 'JetBrains Mono, monospace',
   },
+  stepsList: { textAlign: 'left', marginBottom: '24px' },
   stepItem: {
     display: 'flex',
     alignItems: 'center',
     gap: '12px',
-    padding: '10px 0',
+    padding: '8px 0',
   },
-  stepIcon: {
-    fontSize: '16px',
-    width: '20px',
-    textAlign: 'center',
+  stepIcon: { fontSize: '16px', width: '20px', textAlign: 'center' },
+  stepLabel: { fontSize: '14px' },
+  agentLogs: {
+    background: '#0F0F12',
+    borderRadius: '8px',
+    padding: '12px',
+    fontFamily: 'JetBrains Mono, monospace',
+    fontSize: '11px',
+    color: '#71717A',
+    textAlign: 'left',
+    maxHeight: '80px',
+    overflow: 'auto',
   },
-  stepLabel: {
-    fontSize: '14px',
-  },
+  agentLogLine: { padding: '2px 0' },
   appFullScreen: {
     position: 'relative',
     width: '100vw',
@@ -704,6 +950,16 @@ const styles = {
     width: '100%',
     height: 'calc(100% - 60px)',
     border: 'none',
+  },
+  hiddenIframe: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    width: '1280px',
+    height: '800px',
+    opacity: 0,
+    pointerEvents: 'none',
+    zIndex: -1,
   },
   bottomBar: {
     position: 'fixed',

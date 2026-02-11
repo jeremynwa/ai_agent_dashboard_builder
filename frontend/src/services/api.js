@@ -26,6 +26,29 @@ export async function generateApp(prompt, excelData = null, existingFiles = null
   return res.json();
 }
 
+export async function visionAnalyze(screenshot, existingFiles, excelData = null, dbContext = null) {
+  const dataForApi = excelData ? {
+    fileName: excelData.fileName,
+    headers: excelData.headers,
+    data: excelData.sample,
+    totalRows: excelData.totalRows,
+  } : null;
+
+  const res = await fetch(GENERATE_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      vision: { screenshot },
+      existingFiles,
+      excelData: dataForApi,
+      dbContext,
+      useRules: true,
+    }),
+  });
+  if (!res.ok) throw new Error((await res.json()).error || 'Vision analysis failed');
+  return res.json();
+}
+
 export async function publishApp(builtFiles, appName) {
   const res = await fetch(API_BASE + '/publish', {
     method: 'POST',

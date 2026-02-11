@@ -1,144 +1,198 @@
-# 🧠 CLAUDE.md — App Factory (AI App Builder)
+# CLAUDE.md — App Factory (AI App Builder)
 
-## 📋 Résumé du Projet
+## Resume du Projet
 
 **Nom**: `ai_app_builder` / **App Factory**
 
-**Objectif**: SaaS permettant aux clients de générer des applications React via prompt. L'app générée tourne directement dans le browser du client (WebContainers).
+**Objectif**: SaaS permettant aux clients de generer des applications React via prompt. L'app generee tourne directement dans le browser du client (WebContainers). Un agent IA autonome genere, corrige, et ameliore le code jusqu'a obtenir un resultat professionnel.
 
-**Architecture**: WebContainers (browser) + AWS Lambda (backend) + S3 (storage)
+**Architecture**: WebContainers (browser) + AWS Lambda (backend) + Agent IA (boucle autonome)
 
 **Design System**: SK Design System (vert #00765F, fond sombre #0F0F12)
 
 ---
 
-## ✅ État Actuel du Projet
+## Etat Actuel du Projet
 
-### Complété
+### Complete
 
 - [x] Frontend React + Vite + Tailwind
-- [x] WebContainer intégration
-- [x] Génération d'apps React via prompt (Claude API)
-- [x] Interface App Factory (3 états)
-- [x] Upload fichiers Excel/CSV avec injection de données
+- [x] WebContainer integration
+- [x] Generation d'apps React via prompt (Claude API)
+- [x] Interface App Factory (3 etats)
+- [x] Upload fichiers Excel/CSV avec injection de donnees
 - [x] Export .zip avec Dockerfile
 - [x] Publication S3
-- [x] SK Design System intégré
-- [x] Écran de génération avec progress
-- [x] Backend déployé sur AWS Lambda (SAM)
+- [x] SK Design System integre
+- [x] Ecran de generation avec progress
+- [x] Backend deploye sur AWS Lambda (SAM)
 - [x] API Gateway + Function URLs
-- [x] Rules stockées sur S3
+- [x] Rules stockees sur S3
 - [x] Feedback loop (refine apps via prompt)
-- [x] Data injection (Excel/CSV → placeholder → vraies données)
+- [x] Data injection (Excel/CSV -> placeholder -> vraies donnees)
 - [x] Connexion PostgreSQL (DB proxy via Lambda)
 
-### En cours / À faire
+### En cours
+
+- [ ] Agent IA Phase 1: Auto-fix erreurs de build
+- [ ] Agent IA Phase 2: Review qualite du code
+- [ ] Agent IA Phase 3: Vision (screenshot + analyse visuelle)
+
+### A faire
 
 - [ ] Tester connexion PostgreSQL end-to-end
-- [ ] Auto-fix erreurs de build (Terminal MCP)
 - [ ] Multi-pages (routing React)
-- [ ] Améliorer qualité du code généré (prompt engineering)
 - [ ] Authentification users
 - [ ] Sauvegarde des apps (DynamoDB)
-- [ ] Templates marketplace
 - [ ] Support MySQL
+- [ ] Templates marketplace
 
 ---
 
-## 🏗️ Architecture Technique
+## Agent IA — Architecture
+
+L'agent IA est le coeur de la plateforme. Contrairement a un simple generateur (1 prompt -> 1 reponse), l'agent fonctionne en boucle autonome jusqu'a obtenir un resultat satisfaisant.
+
+### Principe
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  BROWSER DU CLIENT                                                          │
-│                                                                             │
-│  ┌───────────────────────────────────────────────────────────────────────┐ │
-│  │                         WEBCONTAINER                                   │ │
-│  │                   (Node.js dans le browser)                           │ │
-│  │                                                                        │ │
-│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  │ │
-│  │  │ Filesystem  │  │    Vite     │  │ Hot Reload  │  │   Preview   │  │ │
-│  │  │   isolé     │  │   Build     │  │  instantané │  │    live     │  │ │
-│  │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘  │ │
-│  └───────────────────────────────────────────────────────────────────────┘ │
-│         ▲                                                                   │
-│         │ Code généré par Claude                                           │
-└─────────┼───────────────────────────────────────────────────────────────────┘
-          │
-┌─────────┴───────────────────────────────────────────────────────────────────┐
-│  AWS LAMBDA BACKEND (SAM deployed)                                          │
-│                                                                             │
-│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐         │
-│  │  GenerateFunction │  │  DbFunction      │  │  RulesFunction   │         │
-│  │  (Function URL)   │  │  (Function URL)  │  │  (API Gateway)   │         │
-│  │  120s timeout     │  │  30s timeout     │  │  30s timeout     │         │
-│  │  512MB            │  │  256MB           │  │  256MB           │         │
-│  │                   │  │                  │  │                   │         │
-│  │  Claude API call  │  │  /db/schema      │  │  GET /rules      │         │
-│  │  + rules from S3  │  │  /db/query       │  │  (reads S3)      │         │
-│  └──────────────────┘  └──────────────────┘  └──────────────────┘         │
-│                                                                             │
-│  ┌──────────────────┐  ┌──────────────────┐                                │
-│  │  PublishFunction  │  │  S3 Bucket       │                                │
-│  │  (API Gateway)    │  │  ai-app-builder- │                                │
-│  │  60s timeout      │  │  sk-2026         │                                │
-│  │  POST /publish    │  │  - rules/        │                                │
-│  │                   │  │  - published apps │                                │
-│  └──────────────────┘  └──────────────────┘                                │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
+Prompt utilisateur
+    |
+    v
+Claude genere V1
+    |
+    v
+WebContainer compile
+    | erreur ?
+    v
+Phase 1: Auto-fix (max 3 tentatives)
+    - Capture l'erreur stderr
+    - Renvoie code + erreur a Claude
+    - Claude corrige, recompile
+    |
+    v compile OK
+Phase 2: Review qualite
+    - Envoie le code a Claude avec prompt de review
+    - Claude ameliore labels, espacement, legendes, unites
+    - Recompile le code ameliore
+    |
+    v
+Phase 3: Vision
+    - Capture screenshot du rendu (html2canvas)
+    - Envoie screenshot + code a Claude (API vision)
+    - Claude analyse visuellement (layout, chevauchements, lisibilite)
+    - Corrige si necessaire, recompile
+    |
+    v
+Affiche a l'utilisateur
+```
+
+### Comparaison
+
+|                  | Generateur (avant)      | Agent IA (maintenant)       |
+| ---------------- | ----------------------- | --------------------------- |
+| Comportement     | 1 prompt -> 1 reponse   | Boucle autonome             |
+| Erreurs          | Ecran blanc, fix manuel | Detection + correction auto |
+| Qualite          | Variable                | Review systematique         |
+| Visuel           | Pas de verification     | Screenshot + analyse vision |
+| Appels Claude    | 1 par generation        | 3-4 par generation          |
+| Temps            | ~40 secondes            | ~2 minutes                  |
+| Taux de reussite | ~70%                    | ~95%                        |
+
+### Implementation
+
+- **Pas de MCP** : l'orchestration se fait dans App.jsx via des appels HTTP classiques
+- **Claude = cerveau** : decide quoi corriger, comment ameliorer
+- **App.jsx = corps** : execute les actions (compiler, capturer erreurs, screenshot)
+- **Lambda = outils** : genere le code, proxy DB
+
+---
+
+## Architecture Technique
+
+```
+BROWSER DU CLIENT
++-------------------------------------------------------------------+
+|  WEBCONTAINER (Node.js dans le browser)                           |
+|  +-------------+ +-----------+ +------------+ +-----------+      |
+|  | Filesystem  | |   Vite    | | Hot Reload | |  Preview  |      |
+|  |   isole     | |   Build   | | instantane | |   live    |      |
+|  +-------------+ +-----------+ +------------+ +-----------+      |
++-------------------------------------------------------------------+
+         ^
+         | Code genere + corrige par l'Agent IA
+         |
+AWS LAMBDA BACKEND (SAM deployed)
++-------------------------------------------------------------------+
+|  +------------------+ +------------------+ +------------------+   |
+|  | GenerateFunction | | DbFunction       | | RulesFunction    |   |
+|  | (Function URL)   | | (Function URL)   | | (API Gateway)    |   |
+|  | 120s timeout     | | 30s timeout      | | 30s timeout      |   |
+|  | 512MB            | | 256MB            | | 256MB            |   |
+|  |                  | |                  | |                  |   |
+|  | - Generation     | | - /db/schema     | | - GET /rules     |   |
+|  | - Auto-fix       | | - /db/query      | | - (reads S3)     |   |
+|  | - Review qualite | | - SELECT only    | |                  |   |
+|  | - Vision analyse | |                  | |                  |   |
+|  +------------------+ +------------------+ +------------------+   |
+|                                                                   |
+|  +------------------+ +------------------+                        |
+|  | PublishFunction  | | S3 Bucket        |                        |
+|  | (API Gateway)    | | ai-app-builder-  |                        |
+|  | 60s timeout      | | sk-2026          |                        |
+|  | POST /publish    | | - rules/         |                        |
+|  |                  | | - published apps |                        |
+|  +------------------+ +------------------+                        |
++-------------------------------------------------------------------+
 ```
 
 ---
 
-## 📁 Structure du Projet
+## Structure du Projet
 
 ```
 ai_agent_dashboard_builder/
-│
-├── 📁 frontend/
-│   ├── src/
-│   │   ├── App.jsx                    # App principale (3 états + feedback loop)
-│   │   ├── components/
-│   │   │   ├── FileUpload.jsx         # Upload Excel/CSV (sample + fullData)
-│   │   │   └── DbConnect.jsx          # Connexion PostgreSQL
-│   │   ├── services/
-│   │   │   ├── api.js                 # Appels Lambda (generate, publish, db)
-│   │   │   ├── files-template.js      # Template React de base
-│   │   │   └── export.js              # Export .zip
-│   │   └── index.css                  # Tailwind
-│   ├── .env                           # VITE_API_URL, VITE_GENERATE_URL, VITE_DB_PROXY_URL
-│   ├── vite.config.js
-│   ├── tailwind.config.js
-│   └── package.json
-│
-├── 📁 lambda-v2/
-│   ├── template.yaml                  # SAM CloudFormation template
-│   ├── deploy.ps1                     # PowerShell deployment script
-│   ├── generate/
-│   │   ├── index.mjs                  # Claude API + rules + data/DB context
-│   │   └── package.json               # @anthropic-ai/sdk, @aws-sdk/client-s3
-│   ├── rules/
-│   │   ├── index.mjs                  # S3 rules reader
-│   │   └── package.json
-│   ├── publish/
-│   │   ├── index.mjs                  # S3 file uploader
-│   │   └── package.json
-│   └── db/
-│       ├── index.mjs                  # PostgreSQL proxy (schema + query)
-│       └── package.json               # pg driver
-│
-├── 📁 backend/                        # (legacy - remplacé par lambda-v2)
-│   ├── server.mjs
-│   └── rules/
-│
-├── .gitignore
-├── CLAUDE.md                          # Ce fichier
-└── README.md
+|
+|-- frontend/
+|   |-- src/
+|   |   |-- App.jsx                    # Agent IA + 3 etats + feedback loop
+|   |   |-- components/
+|   |   |   |-- FileUpload.jsx         # Upload Excel/CSV (sample + fullData)
+|   |   |   |-- DbConnect.jsx          # Connexion PostgreSQL
+|   |   |-- services/
+|   |   |   |-- api.js                 # Appels Lambda (generate, publish, db)
+|   |   |   |-- files-template.js      # Template React de base
+|   |   |   |-- export.js              # Export .zip
+|   |   |-- index.css                  # Tailwind
+|   |-- .env                           # VITE_API_URL, VITE_GENERATE_URL, VITE_DB_PROXY_URL
+|   |-- vite.config.js
+|   |-- tailwind.config.js
+|   |-- package.json
+|
+|-- lambda-v2/
+|   |-- template.yaml                  # SAM CloudFormation template
+|   |-- deploy.ps1                     # PowerShell deployment script
+|   |-- generate/
+|   |   |-- index.mjs                  # Claude API + rules + data/DB + auto-fix + review + vision
+|   |   |-- package.json
+|   |-- rules/
+|   |   |-- index.mjs
+|   |   |-- package.json
+|   |-- publish/
+|   |   |-- index.mjs
+|   |   |-- package.json
+|   |-- db/
+|       |-- index.mjs                  # PostgreSQL proxy (schema + query)
+|       |-- package.json
+|
+|-- .gitignore
+|-- CLAUDE.md                          # Ce fichier
+|-- README.md
 ```
 
 ---
 
-## ☁️ AWS Configuration
+## AWS Configuration
 
 ### Stack: `app-factory`
 
@@ -146,35 +200,31 @@ ai_agent_dashboard_builder/
 
 ### Lambda Functions
 
-| Function             | Trigger                    | Timeout | Memory | Rôle                         |
-| -------------------- | -------------------------- | ------- | ------ | ---------------------------- |
-| app-factory-generate | Function URL               | 120s    | 512MB  | Claude API + génération code |
-| app-factory-db       | Function URL + API Gateway | 30s     | 256MB  | PostgreSQL proxy             |
-| app-factory-rules    | API Gateway                | 30s     | 256MB  | Lecture rules S3             |
-| app-factory-publish  | API Gateway                | 60s     | 512MB  | Publication S3               |
+| Function             | Trigger                    | Timeout | Memory | Role                                             |
+| -------------------- | -------------------------- | ------- | ------ | ------------------------------------------------ |
+| app-factory-generate | Function URL               | 120s    | 512MB  | Claude API, generation, auto-fix, review, vision |
+| app-factory-db       | Function URL + API Gateway | 30s     | 256MB  | PostgreSQL proxy (SELECT only)                   |
+| app-factory-rules    | API Gateway                | 30s     | 256MB  | Lecture rules S3                                 |
+| app-factory-publish  | API Gateway                | 60s     | 512MB  | Publication S3                                   |
 
 ### URLs
 
 ```
 API Gateway:    https://nj5zk7fxm7.execute-api.eu-north-1.amazonaws.com/prod
 Generate URL:   https://th76hhkjxx4ikum5bq2kz6k3qu0eptvx.lambda-url.eu-north-1.on.aws/
-DB Proxy URL:   (à récupérer après deploy de DbFunction)
+DB Proxy URL:   (a recuperer apres deploy de DbFunction)
 ```
 
 ### S3 Buckets
 
 ```
-ai-app-builder-sk-2026       → rules/ + published apps
-app-factory-deploy-artifacts  → SAM deployment artifacts
+ai-app-builder-sk-2026       -> rules/ + published apps
+app-factory-deploy-artifacts  -> SAM deployment artifacts
 ```
-
-### IAM User: `jeremynwa`
-
-Policies: AWSCloudFormationFullAccess, AWSLambda_FullAccess, AmazonAPIGatewayAdministrator, IAMFullAccess, AmazonS3FullAccess
 
 ---
 
-## 🔧 Frontend .env
+## Frontend .env
 
 ```
 VITE_API_URL=https://nj5zk7fxm7.execute-api.eu-north-1.amazonaws.com/prod
@@ -182,106 +232,77 @@ VITE_GENERATE_URL=https://th76hhkjxx4ikum5bq2kz6k3qu0eptvx.lambda-url.eu-north-1
 VITE_DB_PROXY_URL=https://xxxxx.lambda-url.eu-north-1.on.aws/
 ```
 
-⚠️ Le fichier .env DOIT être encodé en UTF-8 (pas UTF-16). Créer via VS Code, pas PowerShell.
+Le fichier .env DOIT etre encode en UTF-8 (pas UTF-16). Creer via VS Code, pas PowerShell.
 
 ---
 
-## 🔄 Flow Génération
+## Flux de Donnees
 
-### Mode Excel/CSV (données injectées)
+### Mode Excel/CSV (donnees injectees)
 
 ```
-1. User uploade un fichier Excel/CSV
-   → FileUpload parse avec xlsx
-   → Garde fullData (toutes les lignes) + sample (30 lignes)
-
-2. User écrit son prompt + clique "Générer"
-   → api.js envoie sample (30 lignes) à la Lambda (pas fullData)
-   → Lambda envoie sample + schema à Claude
-   → Claude génère du code avec placeholder: DATA = "__INJECT_DATA__"
-
-3. Frontend reçoit le code
-   → Remplace "__INJECT_DATA__" par JSON.stringify(fullData)
-   → Monte dans WebContainer
-   → Dashboard affiche TOUTES les données
+1. User uploade fichier -> FileUpload parse avec xlsx
+   -> fullData (toutes les lignes) + sample (30 lignes)
+2. api.js envoie sample a la Lambda (pas fullData)
+3. Claude genere code avec placeholder: DATA = "__INJECT_DATA__"
+4. Frontend remplace placeholder par JSON.stringify(fullData)
+5. Agent IA verifie compilation + qualite + visuel
+6. Dashboard affiche TOUTES les donnees
 ```
 
 ### Mode PostgreSQL (proxy queries)
 
 ```
-1. User entre ses credentials PostgreSQL
-   → DbConnect appelle /db/schema
-   → Lambda se connecte, lit le schema + samples
-   → Retourne la structure à l'interface
-
-2. User écrit son prompt + clique "Générer"
-   → Lambda envoie schema + samples à Claude
-   → Claude génère du code avec queryDb() pour chaque donnée
-   → Chaque KPI/graphique fait une requête SQL via le proxy
-
-3. Frontend reçoit le code
-   → Remplace "__DB_PROXY_URL__" et "__DB_CREDENTIALS__" par les vrais
-   → Monte dans WebContainer
-   → Dashboard query la vraie DB en temps réel
+1. User entre credentials -> /db/schema lit la structure
+2. Claude genere code avec queryDb() pour chaque donnee
+3. Frontend remplace "__DB_PROXY_URL__" et "__DB_CREDENTIALS__"
+4. Agent IA verifie compilation + qualite + visuel
+5. Dashboard query la vraie DB en temps reel
 ```
 
 ### Mode Refine (feedback loop)
 
 ```
-1. App générée affichée en plein écran
-   → Barre en bas: Factory | Exporter | Publier | [input feedback] | Envoyer
-
-2. User tape une modification
-   → Envoie le code actuel (sans data.js/db.js) + instruction à Claude
-   → Claude retourne le code modifié (tous les fichiers)
-   → Frontend re-injecte les données et remonte dans WebContainer
+1. Barre en bas: [input feedback] | Envoyer
+2. Envoie code actuel (sans data.js/db.js) + instruction a Claude
+3. Claude retourne code modifie
+4. Agent IA re-verifie compilation + qualite
 ```
 
 ---
 
-## 🎨 SK Design System
+## Agent IA — Details Techniques
 
-### Couleurs
+### Phase 1: Auto-fix erreurs
 
-```javascript
-colors: {
-  // Surfaces
-  'surface-base': '#0F0F12',
-  'surface-raised': '#16161A',
-  'surface-overlay': '#1C1C21',
-  'surface-subtle': '#232329',
-  'surface-border': '#2E2E36',
+Source: stderr du WebContainer (npm run dev)
+Detection: ecoute installProcess.exit code + stderr stream
+Action: envoie code + erreur a Claude via generateApp() avec existingFiles
+Limite: max 3 tentatives
+Fallback: affiche erreur a l'utilisateur
 
-  // Texte
-  'text-primary': '#FFFFFF',
-  'text-secondary': '#A1A1AA',
-  'text-tertiary': '#71717A',
-  'text-muted': '#52525B',
+### Phase 2: Review qualite
 
-  // Accent principal (vert SK)
-  'sk-green': '#00765F',
-  'sk-green-hover': '#00A382',
+Trigger: compilation reussie
+Prompt: system prompt specifique "review et ameliore ce code"
+Focus: labels, legendes, unites, espacement, couleurs, responsive
+Action: 1 appel Claude supplementaire
+Resultat: code ameliore, recompile
 
-  // Status
-  'status-success': '#34D399',
-  'status-warning': '#F59E0B',
-  'status-error': '#EF4444',
-}
-```
+### Phase 3: Vision
 
-### Règles Design
-
-- JAMAIS d'emojis dans les apps générées
-- JAMAIS d'icônes unicode
-- Hover states sur tous les éléments cliquables
-- Transitions: `all 0.2s ease`
-- Border radius: 8px (boutons), 16px (cards)
+Trigger: rendu visible dans l'iframe
+Outil: html2canvas injecte dans l'app generee
+Transport: window.parent.postMessage({ type: 'screenshot', data: base64 })
+Envoi: image base64 + code a Claude (API Messages avec content type image)
+Focus: layout, chevauchements, taille texte, zones vides, coherence visuelle
+Limite: max 2 iterations visuelles
 
 ---
 
-## 🚀 Commandes
+## Commandes
 
-### Déployer le backend
+### Deployer le backend
 
 ```powershell
 cd lambda-v2
@@ -294,7 +315,6 @@ sam build
 ```powershell
 cd frontend
 npm run dev
-# → http://localhost:5173
 ```
 
 ### Voir les logs Lambda
@@ -304,55 +324,49 @@ sam logs --stack-name app-factory --region eu-north-1 --name GenerateFunction
 sam logs --stack-name app-factory --region eu-north-1 --name DbFunction
 ```
 
-### Tester les endpoints
+---
 
-```powershell
-# Generate
-Invoke-RestMethod -Uri "https://th76hhkjxx4ikum5bq2kz6k3qu0eptvx.lambda-url.eu-north-1.on.aws/" -Method POST -ContentType "application/json" -Body '{"prompt":"test","useRules":false}'
+## Problemes Connus / Notes
 
-# Rules
-Invoke-RestMethod -Uri "https://nj5zk7fxm7.execute-api.eu-north-1.amazonaws.com/prod/rules"
-```
+- Function URLs gerent le CORS via template.yaml. NE PAS ajouter de headers CORS dans le code Lambda.
+- esbuild doit etre installe globalement (npm install -g esbuild) pour sam build.
+- Generate utilise 16384 max_tokens (le refine mode a besoin de plus de place).
+- PowerShell .env: toujours creer via VS Code (UTF-8), jamais via PowerShell (UTF-16 BOM).
+- Refine mode: ne renvoie pas data.js ni db.js dans existingFiles.
+- Agent IA: 3-4 appels Claude par generation = cout plus eleve mais qualite nettement superieure.
 
 ---
 
-## ⚠️ Problèmes Connus / Notes
+## Roadmap
 
-- **Function URL vs API Gateway**: Generate et DB utilisent des Function URLs (pas de limite 30s). Rules et Publish utilisent API Gateway.
-- **CORS**: Les Function URLs gèrent le CORS via template.yaml. NE PAS ajouter de headers CORS dans le code Lambda pour les Function URLs (double header = erreur).
-- **esbuild**: Doit être installé globalement (`npm install -g esbuild`) pour `sam build`.
-- **max_tokens**: Generate utilise 16384 tokens (le refine mode a besoin de plus de place).
-- **PowerShell .env**: Toujours créer les .env via VS Code (UTF-8), jamais via PowerShell (UTF-16 avec BOM).
-- **Refine mode**: Ne renvoie pas data.js ni db.js dans existingFiles pour éviter d'exploser le contexte.
-
----
-
-## 📅 Roadmap
-
-| Priorité | Tâche                        | Status |
-| -------- | ---------------------------- | ------ |
-| 1        | Tester PostgreSQL end-to-end | ⏳     |
-| 2        | Auto-fix erreurs de build    | ⏳     |
-| 3        | Multi-pages (routing)        | ⏳     |
-| 4        | Améliorer prompt engineering | ⏳     |
-| 5        | Auth + Users                 | ⏳     |
-| 6        | Sauvegarde apps (DynamoDB)   | ⏳     |
-| 7        | Support MySQL                | ⏳     |
-| 8        | Templates marketplace        | ⏳     |
+| Priorite | Tache                              | Status          |
+| -------- | ---------------------------------- | --------------- |
+| P0       | Generation d'apps via prompt       | Fait            |
+| P0       | Upload Excel/CSV + injection       | Fait            |
+| P0       | Backend serverless (Lambda)        | Fait            |
+| P0       | Feedback loop (iterations)         | Fait            |
+| P1       | Connexion PostgreSQL               | Fait (a tester) |
+| P1       | Agent IA Phase 1: Auto-fix erreurs | En cours        |
+| P1       | Agent IA Phase 2: Review qualite   | En cours        |
+| P1       | Agent IA Phase 3: Vision           | En cours        |
+| P2       | Support MySQL                      | Planifie        |
+| P2       | Authentification utilisateurs      | Planifie        |
+| P3       | Sauvegarde apps (DynamoDB)         | Planifie        |
+| P3       | Templates marketplace              | Planifie        |
 
 ---
 
-## 🛠️ Technologies
+## Technologies
 
-| Composant    | Techno                         |
-| ------------ | ------------------------------ |
-| Frontend     | React + Vite + Tailwind        |
-| WebContainer | @webcontainer/api (StackBlitz) |
-| Backend      | AWS Lambda (SAM)               |
-| Storage      | S3                             |
-| IA           | Claude API (claude-sonnet-4)   |
-| DB Proxy     | PostgreSQL via pg driver       |
-| Export       | JSZip                          |
-| Excel/CSV    | xlsx                           |
-| IaC          | SAM (CloudFormation)           |
-| Deploy       | esbuild + SAM CLI              |
+| Composant    | Techno                          |
+| ------------ | ------------------------------- |
+| Frontend     | React + Vite + Tailwind         |
+| WebContainer | @webcontainer/api (StackBlitz)  |
+| Backend      | AWS Lambda (SAM)                |
+| IA           | Claude Sonnet 4 (Anthropic)     |
+| Vision       | html2canvas + Claude Vision API |
+| Storage      | Amazon S3                       |
+| DB Proxy     | PostgreSQL via pg driver        |
+| IaC          | SAM / CloudFormation            |
+| Export       | JSZip                           |
+| Excel/CSV    | xlsx (SheetJS)                  |
