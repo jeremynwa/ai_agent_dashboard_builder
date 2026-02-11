@@ -141,10 +141,56 @@ Resources:
         Banner:
           - js=import { createRequire } from 'module'; const require = createRequire(import.meta.url);
 
+  DbFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: app-factory-db
+      Handler: index.handler
+      CodeUri: db/
+      Timeout: 30
+      MemorySize: 256
+      FunctionUrlConfig:
+        AuthType: NONE
+        Cors:
+          AllowOrigins:
+            - '*'
+          AllowHeaders:
+            - Content-Type
+          AllowMethods:
+            - POST
+      Events:
+        Schema:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref AppFactoryApi
+            Path: /db/schema
+            Method: POST
+        Query:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref AppFactoryApi
+            Path: /db/query
+            Method: POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: false
+        Target: es2022
+        Format: esm
+        OutExtension:
+          - .js=.mjs
+        EntryPoints:
+          - index.mjs
+        Banner:
+          - js=import { createRequire } from 'module'; const require = createRequire(import.meta.url);
+
 Outputs:
   ApiUrl:
-    Description: API Gateway URL (for rules + publish)
+    Description: API Gateway URL (for rules + publish + db)
     Value: !Sub 'https://${AppFactoryApi}.execute-api.${AWS::Region}.amazonaws.com/prod'
   GenerateUrl:
-    Description: Generate Function URL (no 30s timeout limit)
+    Description: Generate Function URL (no 30s timeout)
     Value: !GetAtt GenerateFunctionUrl.FunctionUrl
+  DbProxyUrl:
+    Description: DB Proxy Function URL
+    Value: !GetAtt DbFunctionUrl.FunctionUrl

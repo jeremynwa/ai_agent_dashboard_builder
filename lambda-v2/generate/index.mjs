@@ -60,18 +60,51 @@ REGLES DE CODE:
 
 const DATA_INJECTION_PROMPT = `
 
-REGLES DONNEES EXTERNES:
-Quand des donnees sont fournies, tu DOIS:
+REGLES DONNEES EXTERNES (fichier CSV/Excel):
+Quand des donnees de fichier sont fournies, tu DOIS:
 1. Creer un fichier SEPARE "src/data.js" contenant EXACTEMENT: export const DATA = "__INJECT_DATA__";
 2. Dans App.jsx, importer: import { DATA } from './data';
 3. Utiliser DATA partout dans l'app (graphiques, tableaux, KPIs)
-4. Les KPIs doivent etre CALCULES dynamiquement a partir de DATA (sommes, moyennes, min, max, etc.)
-5. Les graphiques doivent utiliser DATA directement, pas de donnees hardcodees
-6. Le placeholder "__INJECT_DATA__" sera remplace par les vraies donnees automatiquement
+4. Les KPIs doivent etre CALCULES dynamiquement a partir de DATA
+5. Le placeholder "__INJECT_DATA__" sera remplace par les vraies donnees automatiquement
 
 IMPORTANT: Le fichier data.js doit contenir EXACTEMENT cette ligne:
-export const DATA = "__INJECT_DATA__";
-Ne mets PAS les donnees d'exemple dans data.js. Mets UNIQUEMENT le placeholder.`;
+export const DATA = "__INJECT_DATA__";`;
+
+const DB_PROXY_PROMPT = `
+
+REGLES BASE DE DONNEES (mode proxy):
+Quand une base de donnees est connectee, tu DOIS:
+1. Creer un fichier "src/db.js" contenant EXACTEMENT ce code:
+const PROXY_URL = "__DB_PROXY_URL__";
+const DB_CREDENTIALS = "__DB_CREDENTIALS__";
+
+export async function queryDb(sql) {
+  const res = await fetch(PROXY_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ credentials: DB_CREDENTIALS, sql }),
+  });
+  if (!res.ok) throw new Error('Query failed');
+  const data = await res.json();
+  return data.rows;
+}
+
+2. Dans App.jsx, importer: import { queryDb } from './db';
+3. Utiliser queryDb() avec des requetes SQL SELECT pour CHAQUE donnee affichee
+4. Chaque KPI, graphique, tableau doit faire sa propre requete SQL
+5. Utiliser useEffect + useState pour charger les donnees au mount
+6. Afficher "Chargement..." pendant que les donnees se chargent
+7. Les requetes SQL doivent etre optimisees (utiliser SUM, AVG, GROUP BY, COUNT cote serveur)
+8. NE JAMAIS hardcoder de donnees, TOUT doit venir de queryDb()
+
+PATTERN A SUIVRE:
+const [revenue, setRevenue] = useState(null);
+useEffect(() => {
+  queryDb('SELECT SUM(amount) as total FROM orders').then(rows => setRevenue(rows[0].total));
+}, []);
+
+IMPORTANT: Les placeholders "__DB_PROXY_URL__" et "__DB_CREDENTIALS__" seront remplaces automatiquement.`;
 
 async function loadRules() {
   const rules = {};
@@ -92,7 +125,7 @@ export const handler = async (event) => {
   if (event.requestContext?.http?.method === 'OPTIONS') return reply(200, {});
 
   try {
-    const { prompt, useRules, excelData, existingFiles } = JSON.parse(event.body || '{}');
+    const { prompt, useRules, excelData, existingFiles, dbContext, dbProxyUrl } = JSON.parse(event.body || '{}');
     if (!prompt) return reply(400, { error: 'Prompt is required' });
 
     let rulesContext = '';
@@ -101,19 +134,35 @@ export const handler = async (event) => {
       if (Object.keys(rules).length > 0) rulesContext = `\n\nREGLES METIER:\n${JSON.stringify(rules, null, 2)}`;
     }
 
-    let dataContext = '';
+    // Build system prompt based on data source
     let systemWithData = SYSTEM_PROMPT;
-    if (excelData) {
+    let dataContext = '';
+
+    if (dbContext) {
+      // DB mode: proxy queries
+      systemWithData = SYSTEM_PROMPT + DB_PROXY_PROMPT;
+      const schemaDesc = Object.entries(dbContext.schema).map(([table, info]) => {
+        const cols = info.columns.map(c => `  - ${c.name} (${c.type})`).join('\n');
+        const sampleStr = info.sample.length > 0 ? `\nExemple:\n${JSON.stringify(info.sample.slice(0, 3), null, 2)}` : '';
+        return `Table "${table}" (${info.rowCount} lignes):\n${cols}${sampleStr}`;
+      }).join('\n\n');
+
+      dataContext = `\n\nBASE DE DONNEES CONNECTEE (${dbContext.type}):
+${schemaDesc}
+
+Utilise queryDb() pour toutes les donnees. Ecris des requetes SQL SELECT optimisees.`;
+    } else if (excelData) {
+      // File mode: data injection
       systemWithData = SYSTEM_PROMPT + DATA_INJECTION_PROMPT;
       const sample = excelData.data.slice(0, 30);
       dataContext = `\n\nDONNEES FOURNIES:
 Fichier: ${excelData.fileName}
 Colonnes: ${excelData.headers.join(', ')}
 Total: ${excelData.totalRows || excelData.data.length} lignes
-Echantillon (${sample.length} lignes pour comprendre la structure):
+Echantillon (${sample.length} lignes):
 ${JSON.stringify(sample, null, 2)}
 
-Rappel: utilise le placeholder "__INJECT_DATA__" dans src/data.js. Les vraies donnees (${excelData.totalRows || excelData.data.length} lignes) seront injectees automatiquement.`;
+Rappel: utilise le placeholder "__INJECT_DATA__" dans src/data.js.`;
     }
 
     let userMessage = '';

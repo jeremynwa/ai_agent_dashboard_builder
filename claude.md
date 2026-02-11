@@ -6,7 +6,7 @@
 
 **Objectif**: SaaS permettant aux clients de générer des applications React via prompt. L'app générée tourne directement dans le browser du client (WebContainers).
 
-**Architecture**: WebContainers (browser) + AWS minimal (backend)
+**Architecture**: WebContainers (browser) + AWS Lambda (backend) + S3 (storage)
 
 **Design System**: SK Design System (vert #00765F, fond sombre #0F0F12)
 
@@ -18,240 +18,30 @@
 
 - [x] Frontend React + Vite + Tailwind
 - [x] WebContainer intégration
-- [x] Backend Express + Claude API
-- [x] Génération d'apps React via prompt
+- [x] Génération d'apps React via prompt (Claude API)
 - [x] Interface App Factory (3 états)
-- [x] Upload fichiers Excel/CSV
+- [x] Upload fichiers Excel/CSV avec injection de données
 - [x] Export .zip avec Dockerfile
 - [x] Publication S3
 - [x] SK Design System intégré
 - [x] Écran de génération avec progress
+- [x] Backend déployé sur AWS Lambda (SAM)
+- [x] API Gateway + Function URLs
+- [x] Rules stockées sur S3
+- [x] Feedback loop (refine apps via prompt)
+- [x] Data injection (Excel/CSV → placeholder → vraies données)
+- [x] Connexion PostgreSQL (DB proxy via Lambda)
 
 ### En cours / À faire
 
-- [ ] Déployer backend sur AWS Lambda
-- [ ] MCP Servers (Filesystem, SQLite, Terminal)
+- [ ] Tester connexion PostgreSQL end-to-end
+- [ ] Auto-fix erreurs de build (Terminal MCP)
+- [ ] Multi-pages (routing React)
+- [ ] Améliorer qualité du code généré (prompt engineering)
 - [ ] Authentification users
-- [ ] Sauvegarde des apps
+- [ ] Sauvegarde des apps (DynamoDB)
 - [ ] Templates marketplace
-
----
-
-## 🎯 Le Concept Core — App Factory
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        APP FACTORY                              │
-│                                                                 │
-│   "Une meta-application qui génère des applications"            │
-│                                                                 │
-│   L'interface se TRANSFORME:                                    │
-│   - État 1: Factory Home (créer/sélectionner)                  │
-│   - État 2: Génération en cours (progress)                     │
-│   - État 3: App générée (plein écran)                          │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 🎨 Interface — 3 États
-
-### État 1: Factory Home
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                     │
-│  ┌────────────┬────────────────────────────────────────────────┐   │
-│  │            │                                                │   │
-│  │  FACTORY   │      Quelle analyse voulez-vous               │   │
-│  │  ────────  │           créer aujourd'hui ?                 │   │
-│  │            │                                                │   │
-│  │  + New App │      ┌─────────────────────────────┐          │   │
-│  │            │      │ Ex: "Dashboard des ventes   │          │   │
-│  │  ────────  │      │ Q4 avec KPIs et tendances"  │          │   │
-│  │  Mes Apps  │      └─────────────────────────────┘          │   │
-│  │            │                                                │   │
-│  │  Sales...  │      [ Importer Excel/CSV ]                   │   │
-│  │  Churn...  │                                                │   │
-│  │  Invent... │      [ Générer l'App → ]                      │   │
-│  │            │                                                │   │
-│  │  ────────  │      ┌────────┐ ┌────────┐ ┌────────┐        │   │
-│  │  Settings  │      │Finance │ │Marketing│ │Research│        │   │
-│  │  ● Prêt    │      │Template│ │Template │ │Template│        │   │
-│  │            │      └────────┘ └────────┘ └────────┘        │   │
-│  └────────────┴────────────────────────────────────────────────┘   │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-### État 2: Génération en cours
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                     │
-│  ┌────────────┬────────────────────────────────────────────────┐   │
-│  │            │                                                │   │
-│  │  FACTORY   │         ┌────────────────────┐                │   │
-│  │  ────────  │         │ ░░░░░░░░░░░░░░░░░░ │                │   │
-│  │            │         │                    │                │   │
-│  │  + New App │         │  Construction de   │                │   │
-│  │            │         │  votre app...      │                │   │
-│  │  ────────  │         │                    │                │   │
-│  │  Mes Apps  │         │  ✓ Structure       │                │   │
-│  │            │         │  ✓ Composants      │                │   │
-│  │  Sales...  │         │  ◐ Visualisations  │                │   │
-│  │  Churn...  │         │  ○ Données         │                │   │
-│  │            │         │                    │                │   │
-│  │  ────────  │         └────────────────────┘                │   │
-│  │  Settings  │                                                │   │
-│  │  ● Prêt    │                                                │   │
-│  └────────────┴────────────────────────────────────────────────┘   │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-### État 3: App Générée (Plein Écran)
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│  [← Factory] [Exporter] [Publier]                                   │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│  ┌────────────┬─────────────────────────────────────────────────┐  │
-│  │            │                                                 │  │
-│  │  DASHBOARD │   Revenue      Users       Conversion           │  │
-│  │  ────────  │   ┌───────┐   ┌───────┐   ┌───────┐            │  │
-│  │            │   │ $2.4M │   │ 48,291│   │ 3.24% │            │  │
-│  │  Overview  │   │ ↑12.3%│   │ ↑ 8.7%│   │ ↓ 0.5%│            │  │
-│  │  Analytics │   └───────┘   └───────┘   └───────┘            │  │
-│  │  Reports   │                                                 │  │
-│  │  Settings  │   Revenue Trend                                 │  │
-│  │            │   ┌─────────────────────────────────────┐      │  │
-│  │            │   │    ╭─╮                              │      │  │
-│  │            │   │   ╭╯ ╰╮   ╭──╮                     │      │  │
-│  │            │   │  ╭╯   ╰──╮╯  ╰╮  ╭──               │      │  │
-│  │            │   │ ─╯        ╰    ╰──╯                │      │  │
-│  │            │   └─────────────────────────────────────┘      │  │
-│  │            │                                                 │  │
-│  └────────────┴─────────────────────────────────────────────────┘  │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
-
-Note: L'app générée a SA PROPRE sidebar. Les boutons Factory/Exporter/Publier
-sont flottants en haut à gauche pour éviter une double sidebar.
-```
-
----
-
-## 🎨 SK Design System
-
-### Couleurs
-
-```javascript
-colors: {
-  // Surfaces
-  'surface-base': '#0F0F12',      // Background principal
-  'surface-raised': '#16161A',    // Cards, sidebar
-  'surface-overlay': '#1C1C21',   // Inputs, modals
-  'surface-subtle': '#232329',    // Hover states
-  'surface-border': '#2E2E36',    // Borders
-  'surface-muted': '#3D3D47',     // Disabled
-
-  // Texte
-  'text-primary': '#FFFFFF',
-  'text-secondary': '#A1A1AA',
-  'text-tertiary': '#71717A',
-  'text-muted': '#52525B',
-
-  // Accent principal (vert SK)
-  'sk-green': '#00765F',
-  'sk-green-hover': '#00A382',
-  'sk-green-muted': 'rgba(0, 118, 95, 0.15)',
-
-  // Accents secondaires
-  'accent-amber': '#F59E0B',
-  'accent-emerald': '#34D399',
-  'accent-sky': '#38BDF8',
-  'accent-coral': '#EF6461',
-  'accent-violet': '#A78BFA',
-
-  // Status
-  'status-success': '#34D399',
-  'status-warning': '#F59E0B',
-  'status-error': '#EF4444',
-}
-```
-
-### Composants Styles
-
-```javascript
-// Card
-card: {
-  background: '#16161A',
-  borderRadius: '16px',
-  padding: '24px',
-  border: '1px solid #2E2E36',
-  boxShadow: '0 4px 24px -4px rgba(0, 0, 0, 0.4)'
-}
-
-// KPI Card
-kpiCard: {
-  label: { fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#71717A' },
-  value: { fontSize: '28px', fontWeight: '600', color: '#FFFFFF' },
-  change: { fontSize: '12px', color: '#34D399' } // ou #EF4444 si négatif
-}
-
-// Button Primary
-button: {
-  background: '#00765F',
-  color: 'white',
-  padding: '10px 20px',
-  borderRadius: '8px',
-  fontWeight: '500',
-  transition: 'all 0.2s ease'
-}
-
-// Input
-input: {
-  background: '#1C1C21',
-  border: '1px solid #2E2E36',
-  borderRadius: '8px',
-  padding: '12px 16px',
-  color: '#FFFFFF'
-}
-
-// Sidebar Nav Item
-navItem: {
-  padding: '10px 12px',
-  borderRadius: '8px',
-  color: '#A1A1AA',
-  cursor: 'pointer'
-}
-navItemActive: {
-  background: 'rgba(0, 118, 95, 0.15)',
-  color: '#00765F'
-}
-```
-
-### Typography
-
-```javascript
-typography: {
-  fontFamily: 'Inter, system-ui, sans-serif',
-  fontDisplay: 'Sora, system-ui, sans-serif',  // Titres
-  fontMono: 'JetBrains Mono, monospace',       // Code/logs
-}
-```
-
-### Règles Design
-
-- JAMAIS d'emojis
-- JAMAIS d'icônes unicode
-- Hover states sur tous les éléments cliquables
-- Transitions: `all 0.2s ease`
-- Border radius: 8px (boutons), 16px (cards)
-- Espacement généreux
+- [ ] Support MySQL
 
 ---
 
@@ -275,226 +65,280 @@ typography: {
 └─────────┼───────────────────────────────────────────────────────────────────┘
           │
 ┌─────────┴───────────────────────────────────────────────────────────────────┐
-│  BACKEND (Express local → migrer vers AWS Lambda)                           │
+│  AWS LAMBDA BACKEND (SAM deployed)                                          │
 │                                                                             │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  Endpoints:                                                          │   │
-│  │  • POST /generate → Claude API → retourne code React                │   │
-│  │  • POST /publish → build + upload S3 → retourne URL                 │   │
-│  │  • GET /rules → lit règles JSON locales                             │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                          │                                                  │
-│         ┌────────────────┼────────────────┐                                │
-│         ▼                ▼                ▼                                │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                        │
-│  │     S3      │  │ Claude API  │  │   Rules/    │                        │
-│  │  (publish)  │  │  (génère)   │  │  Templates  │                        │
-│  └─────────────┘  └─────────────┘  └─────────────┘                        │
+│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐         │
+│  │  GenerateFunction │  │  DbFunction      │  │  RulesFunction   │         │
+│  │  (Function URL)   │  │  (Function URL)  │  │  (API Gateway)   │         │
+│  │  120s timeout     │  │  30s timeout     │  │  30s timeout     │         │
+│  │  512MB            │  │  256MB           │  │  256MB           │         │
+│  │                   │  │                  │  │                   │         │
+│  │  Claude API call  │  │  /db/schema      │  │  GET /rules      │         │
+│  │  + rules from S3  │  │  /db/query       │  │  (reads S3)      │         │
+│  └──────────────────┘  └──────────────────┘  └──────────────────┘         │
+│                                                                             │
+│  ┌──────────────────┐  ┌──────────────────┐                                │
+│  │  PublishFunction  │  │  S3 Bucket       │                                │
+│  │  (API Gateway)    │  │  ai-app-builder- │                                │
+│  │  60s timeout      │  │  sk-2026         │                                │
+│  │  POST /publish    │  │  - rules/        │                                │
+│  │                   │  │  - published apps │                                │
+│  └──────────────────┘  └──────────────────┘                                │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 📁 Structure du Projet (Actuelle)
+## 📁 Structure du Projet
 
 ```
 ai_agent_dashboard_builder/
 │
 ├── 📁 frontend/
 │   ├── src/
-│   │   ├── App.jsx                    # App principale (3 états)
+│   │   ├── App.jsx                    # App principale (3 états + feedback loop)
 │   │   ├── components/
-│   │   │   ├── FileUpload.jsx         # Upload Excel/CSV
-│   │   │   ├── PromptInput.jsx        # (legacy, intégré dans App.jsx)
-│   │   │   ├── AppPreview.jsx         # (legacy)
-│   │   │   ├── Terminal.jsx           # (legacy)
-│   │   │   └── FileExplorer.jsx       # (legacy)
+│   │   │   ├── FileUpload.jsx         # Upload Excel/CSV (sample + fullData)
+│   │   │   └── DbConnect.jsx          # Connexion PostgreSQL
 │   │   ├── services/
-│   │   │   ├── api.js                 # Appels backend
-│   │   │   ├── webcontainer.js        # Init WebContainer
+│   │   │   ├── api.js                 # Appels Lambda (generate, publish, db)
 │   │   │   ├── files-template.js      # Template React de base
 │   │   │   └── export.js              # Export .zip
 │   │   └── index.css                  # Tailwind
-│   ├── vite.config.js                 # Config Vite + COOP/COEP headers
+│   ├── .env                           # VITE_API_URL, VITE_GENERATE_URL, VITE_DB_PROXY_URL
+│   ├── vite.config.js
 │   ├── tailwind.config.js
 │   └── package.json
 │
-├── 📁 backend/
-│   ├── server.mjs                     # Express server
-│   ├── .env                           # ANTHROPIC_API_KEY (gitignored!)
+├── 📁 lambda-v2/
+│   ├── template.yaml                  # SAM CloudFormation template
+│   ├── deploy.ps1                     # PowerShell deployment script
+│   ├── generate/
+│   │   ├── index.mjs                  # Claude API + rules + data/DB context
+│   │   └── package.json               # @anthropic-ai/sdk, @aws-sdk/client-s3
 │   ├── rules/
-│   │   ├── sk-design.json             # SK Design System
-│   │   └── app-factory.json           # App Factory specs
-│   ├── bucket-policy.json             # Policy S3
-│   └── package.json
+│   │   ├── index.mjs                  # S3 rules reader
+│   │   └── package.json
+│   ├── publish/
+│   │   ├── index.mjs                  # S3 file uploader
+│   │   └── package.json
+│   └── db/
+│       ├── index.mjs                  # PostgreSQL proxy (schema + query)
+│       └── package.json               # pg driver
 │
-├── .gitignore                         # Inclut .env, node_modules
+├── 📁 backend/                        # (legacy - remplacé par lambda-v2)
+│   ├── server.mjs
+│   └── rules/
+│
+├── .gitignore
 ├── CLAUDE.md                          # Ce fichier
 └── README.md
 ```
 
 ---
 
-## 🔧 Configuration
+## ☁️ AWS Configuration
 
-### Frontend (vite.config.js)
+### Stack: `app-factory`
 
-```javascript
-// Headers requis pour WebContainer (SharedArrayBuffer)
-server: {
-  headers: {
-    'Cross-Origin-Opener-Policy': 'same-origin',
-    'Cross-Origin-Embedder-Policy': 'require-corp',
-  }
-}
+### Region: `eu-north-1`
 
-// Base path pour S3 publish
-base: './',
-```
+### Lambda Functions
 
-### Backend (.env)
+| Function             | Trigger                    | Timeout | Memory | Rôle                         |
+| -------------------- | -------------------------- | ------- | ------ | ---------------------------- |
+| app-factory-generate | Function URL               | 120s    | 512MB  | Claude API + génération code |
+| app-factory-db       | Function URL + API Gateway | 30s     | 256MB  | PostgreSQL proxy             |
+| app-factory-rules    | API Gateway                | 30s     | 256MB  | Lecture rules S3             |
+| app-factory-publish  | API Gateway                | 60s     | 512MB  | Publication S3               |
+
+### URLs
 
 ```
-ANTHROPIC_API_KEY=sk-ant-...
+API Gateway:    https://nj5zk7fxm7.execute-api.eu-north-1.amazonaws.com/prod
+Generate URL:   https://th76hhkjxx4ikum5bq2kz6k3qu0eptvx.lambda-url.eu-north-1.on.aws/
+DB Proxy URL:   (à récupérer après deploy de DbFunction)
 ```
 
-⚠️ **IMPORTANT**: Ne JAMAIS commit le .env !
-
-### S3 Bucket
+### S3 Buckets
 
 ```
-Bucket: ai-app-builder-sk-2026
-Region: eu-north-1
-Website hosting: enabled
-Public access: enabled (via bucket policy)
+ai-app-builder-sk-2026       → rules/ + published apps
+app-factory-deploy-artifacts  → SAM deployment artifacts
 ```
+
+### IAM User: `jeremynwa`
+
+Policies: AWSCloudFormationFullAccess, AWSLambda_FullAccess, AmazonAPIGatewayAdministrator, IAMFullAccess, AmazonS3FullAccess
 
 ---
 
-## 🚀 Lancer le Projet
-
-### Terminal 1 — Backend
-
-```bash
-cd backend
-npm start
-# → http://localhost:3001
-```
-
-### Terminal 2 — Frontend
-
-```bash
-cd frontend
-npm run dev
-# → http://localhost:5173
-```
-
----
-
-## 📤 Options Output
-
-| Action       | Résultat              | Client peut modifier ? |
-| ------------ | --------------------- | ---------------------- |
-| **Exporter** | .zip avec Dockerfile  | ✅ Oui                 |
-| **Publier**  | URL S3 (app compilée) | ❌ Non                 |
-
-### Contenu Export .zip
+## 🔧 Frontend .env
 
 ```
-export.zip
-├── src/
-│   └── App.jsx
-├── package.json
-├── vite.config.js
-├── Dockerfile
-├── docker-compose.yml
-└── README.md
+VITE_API_URL=https://nj5zk7fxm7.execute-api.eu-north-1.amazonaws.com/prod
+VITE_GENERATE_URL=https://th76hhkjxx4ikum5bq2kz6k3qu0eptvx.lambda-url.eu-north-1.on.aws/
+VITE_DB_PROXY_URL=https://xxxxx.lambda-url.eu-north-1.on.aws/
 ```
 
-### URL Publiée
-
-```
-http://ai-app-builder-sk-2026.s3-website.eu-north-1.amazonaws.com/{app-name}/
-```
+⚠️ Le fichier .env DOIT être encodé en UTF-8 (pas UTF-16). Créer via VS Code, pas PowerShell.
 
 ---
 
 ## 🔄 Flow Génération
 
-```
-1. User ouvre App Factory (localhost:5173)
-   → WebContainer s'initialise
-   → État: "Prêt"
-
-2. User écrit son prompt + (optionnel) upload Excel
-
-3. User clique "Générer l'App →"
-   → État 2: Génération en cours
-   → Progress: Structure → Composants → Visualisations → Données
-
-4. Backend:
-   → Lit les rules JSON
-   → Appelle Claude API avec le prompt + rules + data
-   → Claude génère du code React (JSON)
-   → Backend corrige les erreurs JSX courantes
-
-5. Frontend:
-   → Reçoit le code
-   → Monte les fichiers dans WebContainer
-   → npm install
-   → npm run dev
-   → Hot reload
-
-6. App générée s'affiche (État 3)
-   → Plein écran
-   → Boutons flottants: Factory, Exporter, Publier
-```
-
----
-
-## 🔧 MCP Servers (À implémenter)
-
-| MCP            | Rôle            | Status     |
-| -------------- | --------------- | ---------- |
-| Filesystem MCP | Écrire fichiers | ⏳ À faire |
-| SQLite MCP     | DB locale       | ⏳ À faire |
-| Terminal MCP   | Error catching  | ⏳ À faire |
-
----
-
-## ☁️ AWS (À implémenter)
-
-### Services prévus
-
-| Service    | Usage                 | Status     |
-| ---------- | --------------------- | ---------- |
-| S3         | Rules + apps publiées | ✅ Fait    |
-| Lambda     | Backend serverless    | ⏳ À faire |
-| CloudFront | CDN                   | ⏳ À faire |
-| DynamoDB   | Users + metadata      | ⏳ À faire |
-
-### Coûts estimés
+### Mode Excel/CSV (données injectées)
 
 ```
-S3:         ~$1-5/mois
-CloudFront: ~$1-2/mois
-Lambda:     ~$0-5/mois
-DynamoDB:   ~$0-1/mois
-─────────────────────────
-Total:      ~$5-15/mois
+1. User uploade un fichier Excel/CSV
+   → FileUpload parse avec xlsx
+   → Garde fullData (toutes les lignes) + sample (30 lignes)
+
+2. User écrit son prompt + clique "Générer"
+   → api.js envoie sample (30 lignes) à la Lambda (pas fullData)
+   → Lambda envoie sample + schema à Claude
+   → Claude génère du code avec placeholder: DATA = "__INJECT_DATA__"
+
+3. Frontend reçoit le code
+   → Remplace "__INJECT_DATA__" par JSON.stringify(fullData)
+   → Monte dans WebContainer
+   → Dashboard affiche TOUTES les données
+```
+
+### Mode PostgreSQL (proxy queries)
+
+```
+1. User entre ses credentials PostgreSQL
+   → DbConnect appelle /db/schema
+   → Lambda se connecte, lit le schema + samples
+   → Retourne la structure à l'interface
+
+2. User écrit son prompt + clique "Générer"
+   → Lambda envoie schema + samples à Claude
+   → Claude génère du code avec queryDb() pour chaque donnée
+   → Chaque KPI/graphique fait une requête SQL via le proxy
+
+3. Frontend reçoit le code
+   → Remplace "__DB_PROXY_URL__" et "__DB_CREDENTIALS__" par les vrais
+   → Monte dans WebContainer
+   → Dashboard query la vraie DB en temps réel
+```
+
+### Mode Refine (feedback loop)
+
+```
+1. App générée affichée en plein écran
+   → Barre en bas: Factory | Exporter | Publier | [input feedback] | Envoyer
+
+2. User tape une modification
+   → Envoie le code actuel (sans data.js/db.js) + instruction à Claude
+   → Claude retourne le code modifié (tous les fichiers)
+   → Frontend re-injecte les données et remonte dans WebContainer
 ```
 
 ---
 
-## 📅 Planning Restant
+## 🎨 SK Design System
 
-| Phase | Tâche               | Durée estimée |
-| ----- | ------------------- | ------------- |
-| 5     | Déployer Lambda     | 2-3 jours     |
-| 6     | MCP Servers         | 2-3 jours     |
-| 7     | Auth + Users        | 2-3 jours     |
-| 8     | Polish + Production | 1-2 jours     |
+### Couleurs
+
+```javascript
+colors: {
+  // Surfaces
+  'surface-base': '#0F0F12',
+  'surface-raised': '#16161A',
+  'surface-overlay': '#1C1C21',
+  'surface-subtle': '#232329',
+  'surface-border': '#2E2E36',
+
+  // Texte
+  'text-primary': '#FFFFFF',
+  'text-secondary': '#A1A1AA',
+  'text-tertiary': '#71717A',
+  'text-muted': '#52525B',
+
+  // Accent principal (vert SK)
+  'sk-green': '#00765F',
+  'sk-green-hover': '#00A382',
+
+  // Status
+  'status-success': '#34D399',
+  'status-warning': '#F59E0B',
+  'status-error': '#EF4444',
+}
+```
+
+### Règles Design
+
+- JAMAIS d'emojis dans les apps générées
+- JAMAIS d'icônes unicode
+- Hover states sur tous les éléments cliquables
+- Transitions: `all 0.2s ease`
+- Border radius: 8px (boutons), 16px (cards)
+
+---
+
+## 🚀 Commandes
+
+### Déployer le backend
+
+```powershell
+cd lambda-v2
+sam build
+.\deploy.ps1
+```
+
+### Lancer le frontend
+
+```powershell
+cd frontend
+npm run dev
+# → http://localhost:5173
+```
+
+### Voir les logs Lambda
+
+```powershell
+sam logs --stack-name app-factory --region eu-north-1 --name GenerateFunction
+sam logs --stack-name app-factory --region eu-north-1 --name DbFunction
+```
+
+### Tester les endpoints
+
+```powershell
+# Generate
+Invoke-RestMethod -Uri "https://th76hhkjxx4ikum5bq2kz6k3qu0eptvx.lambda-url.eu-north-1.on.aws/" -Method POST -ContentType "application/json" -Body '{"prompt":"test","useRules":false}'
+
+# Rules
+Invoke-RestMethod -Uri "https://nj5zk7fxm7.execute-api.eu-north-1.amazonaws.com/prod/rules"
+```
+
+---
+
+## ⚠️ Problèmes Connus / Notes
+
+- **Function URL vs API Gateway**: Generate et DB utilisent des Function URLs (pas de limite 30s). Rules et Publish utilisent API Gateway.
+- **CORS**: Les Function URLs gèrent le CORS via template.yaml. NE PAS ajouter de headers CORS dans le code Lambda pour les Function URLs (double header = erreur).
+- **esbuild**: Doit être installé globalement (`npm install -g esbuild`) pour `sam build`.
+- **max_tokens**: Generate utilise 16384 tokens (le refine mode a besoin de plus de place).
+- **PowerShell .env**: Toujours créer les .env via VS Code (UTF-8), jamais via PowerShell (UTF-16 avec BOM).
+- **Refine mode**: Ne renvoie pas data.js ni db.js dans existingFiles pour éviter d'exploser le contexte.
+
+---
+
+## 📅 Roadmap
+
+| Priorité | Tâche                        | Status |
+| -------- | ---------------------------- | ------ |
+| 1        | Tester PostgreSQL end-to-end | ⏳     |
+| 2        | Auto-fix erreurs de build    | ⏳     |
+| 3        | Multi-pages (routing)        | ⏳     |
+| 4        | Améliorer prompt engineering | ⏳     |
+| 5        | Auth + Users                 | ⏳     |
+| 6        | Sauvegarde apps (DynamoDB)   | ⏳     |
+| 7        | Support MySQL                | ⏳     |
+| 8        | Templates marketplace        | ⏳     |
 
 ---
 
@@ -504,43 +348,11 @@ Total:      ~$5-15/mois
 | ------------ | ------------------------------ |
 | Frontend     | React + Vite + Tailwind        |
 | WebContainer | @webcontainer/api (StackBlitz) |
-| Backend      | Express (→ Lambda)             |
+| Backend      | AWS Lambda (SAM)               |
 | Storage      | S3                             |
 | IA           | Claude API (claude-sonnet-4)   |
+| DB Proxy     | PostgreSQL via pg driver       |
 | Export       | JSZip                          |
 | Excel/CSV    | xlsx                           |
-
----
-
-## ⚠️ Limitations WebContainers
-
-| Device/Browser     | Support   |
-| ------------------ | --------- |
-| Chrome/Edge récent | ✅        |
-| Firefox récent     | ✅        |
-| Safari             | ⚠️ Limité |
-| Mobile             | ⚠️ Lourd  |
-
----
-
-## 📝 Notes de Dev
-
-```
-[Date] - Note
-──────────────
-- Design: App Factory avec 3 états
-- SK Design System (vert #00765F, fond #0F0F12)
-- WebContainer pour preview live
-- Backend Express (à migrer vers Lambda)
-- S3 bucket: ai-app-builder-sk-2026 (eu-north-1)
-- JAMAIS commit les clés API !
-```
-
----
-
-## 🔗 Ressources
-
-- [WebContainer API](https://webcontainers.io/)
-- [Claude API](https://docs.anthropic.com/)
-- [Tailwind CSS](https://tailwindcss.com/)
-- [AWS S3](https://aws.amazon.com/s3/)
+| IaC          | SAM (CloudFormation)           |
+| Deploy       | esbuild + SAM CLI              |

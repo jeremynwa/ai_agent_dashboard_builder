@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { WebContainer } from '@webcontainer/api';
 import { baseFiles } from './services/files-template';
-import { generateApp, publishApp } from './services/api';
+import { generateApp, publishApp, API_BASE, DB_PROXY_URL } from './services/api';
 import { exportToZip } from './services/export';
 import FileUpload from './components/FileUpload';
+import DbConnect from './components/DbConnect';
 
 function App() {
   const [files, setFiles] = useState({});
@@ -12,6 +13,7 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const [excelData, setExcelData] = useState(null);
+  const [dbData, setDbData] = useState(null);
   const [prompt, setPrompt] = useState('');
   const [generatedApp, setGeneratedApp] = useState(null);
   const [savedApps, setSavedApps] = useState([]);
@@ -51,7 +53,14 @@ function App() {
 
   const handleDataLoaded = (data) => {
     setExcelData(data);
+    setDbData(null);
     addLog(`Fichier charge: ${data.fileName}`);
+  };
+
+  const handleSchemaLoaded = (data) => {
+    setDbData(data);
+    setExcelData(null);
+    addLog(`DB connectee: ${data.totalTables} tables`);
   };
 
   const mountAndRun = async (resultFiles) => {
@@ -59,10 +68,19 @@ function App() {
 
     for (const [path, content] of Object.entries(resultFiles)) {
       let fileContent = content;
+
+      // Inject Excel data
       if (path === 'src/data.js' && excelData?.fullData) {
         const jsonData = JSON.stringify(excelData.fullData);
         fileContent = fileContent.replace('"__INJECT_DATA__"', jsonData);
       }
+
+      // Inject DB proxy config
+      if (path === 'src/db.js' && dbData) {
+        fileContent = fileContent.replace('"__DB_PROXY_URL__"', JSON.stringify(DB_PROXY_URL));
+        fileContent = fileContent.replace('"__DB_CREDENTIALS__"', JSON.stringify(dbData.credentials));
+      }
+
       const parts = path.split('/');
       if (parts[0] === 'src' && parts.length === 2) {
         appFiles.src.directory[parts[1]] = { file: { contents: fileContent } };
@@ -102,7 +120,13 @@ function App() {
 
     try {
       setGenerationStep(1);
-      const result = await generateApp(prompt, excelData);
+
+      const dbContext = dbData ? {
+        type: dbData.type,
+        schema: dbData.schema,
+      } : null;
+
+      const result = await generateApp(prompt, excelData, null, dbContext);
       addLog('Code genere');
 
       setGenerationStep(2);
@@ -130,9 +154,15 @@ function App() {
     try {
       const filesToSend = {};
       for (const [path, code] of Object.entries(currentFiles)) {
-        if (path !== 'src/data.js') filesToSend[path] = code;
+        if (path !== 'src/data.js' && path !== 'src/db.js') filesToSend[path] = code;
       }
-      const result = await generateApp(feedback, excelData, filesToSend);
+
+      const dbContext = dbData ? {
+        type: dbData.type,
+        schema: dbData.schema,
+      } : null;
+
+      const result = await generateApp(feedback, excelData, filesToSend, dbContext);
       addLog('Code modifie');
 
       const url = await mountAndRun(result.files);
@@ -300,7 +330,7 @@ function App() {
           </div>
         ) : (
           <div style={styles.centerContent}>
-            <h1 style={styles.title}>Quelle analyse voulez-vous créer ?</h1>
+            <h1 style={styles.title}>Quelle analyse voulez-vous creer ?</h1>
 
             <div style={styles.promptContainer}>
               <textarea
@@ -311,10 +341,26 @@ function App() {
                 rows={3}
               />
 
+              <div style={styles.dataSourceLabel}>Source de donnees</div>
+
               <FileUpload onDataLoaded={handleDataLoaded} />
+
+              <div style={styles.dataSeparator}>
+                <span style={styles.separatorLine}></span>
+                <span style={styles.separatorText}>ou</span>
+                <span style={styles.separatorLine}></span>
+              </div>
+
+              <DbConnect onSchemaLoaded={handleSchemaLoaded} apiBase={API_BASE} />
+
               {excelData && (
                 <div style={styles.fileInfo}>
                   Fichier: {excelData.fileName} ({excelData.totalRows} lignes)
+                </div>
+              )}
+              {dbData && (
+                <div style={styles.fileInfo}>
+                  DB: {dbData.totalTables} tables ({dbData.tableNames.join(', ')})
                 </div>
               )}
 
@@ -492,9 +538,33 @@ const styles = {
     outline: 'none',
     boxSizing: 'border-box',
   },
+  dataSourceLabel: {
+    fontSize: '11px',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    color: '#52525B',
+    marginBottom: '12px',
+  },
+  dataSeparator: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    margin: '12px 0',
+  },
+  separatorLine: {
+    flex: 1,
+    height: '1px',
+    background: '#2E2E36',
+  },
+  separatorText: {
+    fontSize: '12px',
+    color: '#52525B',
+  },
   fileInfo: {
     fontSize: '12px',
     color: '#71717A',
+    marginTop: '12px',
     marginBottom: '16px',
     padding: '8px 12px',
     background: '#232329',
@@ -511,6 +581,7 @@ const styles = {
     fontSize: '14px',
     cursor: 'pointer',
     transition: 'all 0.2s ease',
+    marginTop: '16px',
   },
   templates: {
     display: 'grid',
