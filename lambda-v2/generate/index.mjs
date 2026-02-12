@@ -34,8 +34,28 @@ REGLES ABSOLUES:
 
 STRUCTURE OBLIGATOIRE DE L'APP:
 1. Une SIDEBAR a gauche (240px) avec navigation
-2. Un HEADER en haut avec le titre
+2. Un HEADER en haut avec le titre (PAS de boutons "Refresh" ou "Export" — l'app est statique)
 3. Une zone de CONTENU avec KPIs + graphiques
+
+REGLES SIDEBAR (IMPORTANT):
+- Maximum 3 pages dans la sidebar (ex: Overview, Analyse, Details)
+- Chaque page doit avoir un contenu UNIQUE et DIFFERENT
+- JAMAIS de pages vides ou qui dupliquent le contenu d'une autre page
+- JAMAIS de pages "Settings", "Reports", "Export" qui n'ont pas de vrai contenu
+- Si tu n'as pas assez de donnees pour 3 pages, fais-en 2 seulement
+
+REGLES GRAPHIQUES (IMPORTANT):
+- TOUS les graphiques doivent avoir des labels sur l'axe X et l'axe Y
+- TOUS les graphiques doivent avoir une legende si plusieurs series
+- TOUS les graphiques doivent avoir un titre descriptif
+- Utilise Recharts: BarChart, LineChart, PieChart, AreaChart
+- TOUJOURS inclure <XAxis dataKey="name" />, <YAxis />, <Tooltip />, <Legend /> quand applicable
+- JAMAIS de graphique sans labels — c'est illisible et non professionnel
+
+REGLES BOUTONS:
+- PAS de bouton "Refresh" (les donnees sont statiques, refresh ne fait rien)
+- PAS de bouton "Export" dans le header (l'export est gere par la Factory)
+- Les seuls boutons autorises sont pour la navigation entre pages de la sidebar
 
 DESIGN SYSTEM (OBLIGATOIRE):
 Background: #0F0F12 (base), #16161A (cards/sidebar), #1C1C21 (overlay)
@@ -57,7 +77,9 @@ REGLES DE CODE:
 - Font: Inter, system-ui, sans-serif
 - Transitions: all 0.2s ease
 - Hover states sur tous les elements cliquables
-- Etat actif dans la sidebar avec useState`;
+- Etat actif dans la sidebar avec useState
+- ATTENTION: Pour les styles inline React, utilise TOUJOURS les doubles accolades: style={{ padding: '20px' }} et JAMAIS style={ padding: '20px' }
+- ATTENTION: Les template literals dans style doivent etre dans des doubles accolades: style={{ border: \`1px solid \${color}\` }}`;
 
 const DATA_INJECTION_PROMPT = `
 
@@ -106,7 +128,8 @@ REGLES:
 - Retourne UNIQUEMENT du JSON valide
 - Structure: { "files": { "src/App.jsx": "code" } }
 - Le code doit compiler sans erreur
-- Respecte le design system (fond #0F0F12, cards #16161A, accent #00765F)`;
+- Respecte le design system (fond #0F0F12, cards #16161A, accent #00765F)
+- ATTENTION: Pour les styles inline React, utilise TOUJOURS les doubles accolades: style={{ padding: '20px' }} et JAMAIS style={ padding: '20px' }`;
 
 const VISION_USER_PROMPT = `Voici le screenshot du dashboard genere et son code source.
 
