@@ -1,3 +1,4 @@
+// frontend/src/App.jsx
 import { useState, useEffect, useRef } from 'react';
 import { WebContainer } from '@webcontainer/api';
 import { baseFiles } from './services/files-template';
@@ -5,10 +6,12 @@ import { generateApp, visionAnalyze, publishApp, API_BASE, DB_PROXY_URL } from '
 import { exportToZip } from './services/export';
 import FileUpload from './components/FileUpload';
 import DbConnect from './components/DbConnect';
+import AuthProvider, { useAuth } from './components/AuthProvider';
+import Login from './components/Login';
+import MatrixRain from './components/MatrixRain';
 
 const MAX_FIX_ATTEMPTS = 3;
-const MAX_VISION_ATTEMPTS = 2;
-const SCREENSHOT_DELAY = 4000; // wait for app to fully render
+const SCREENSHOT_DELAY = 4000;
 const SCREENSHOT_TIMEOUT = 10000;
 
 const REVIEW_PROMPT = `Review et ameliore ce code React. Verifie et corrige SYSTEMATIQUEMENT:
@@ -26,7 +29,6 @@ const REVIEW_PROMPT = `Review et ameliore ce code React. Verifie et corrige SYST
 
 Retourne le JSON complet avec TOUS les fichiers ameliores.`;
 
-// Script injected into the generated app's index.html for screenshot capture
 const CAPTURE_SCRIPT = `
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/script>
 <script>
@@ -49,7 +51,38 @@ window.addEventListener('message', function(e) {
 });
 <\/script>`;
 
+// ============ AUTH GATE ============
+// Wraps entire app — shows Login if not authenticated
 function App() {
+  return (
+    <AuthProvider>
+      <AuthGate />
+    </AuthProvider>
+  );
+}
+
+function AuthGate() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div style={styles.loadingScreen}>
+        <div style={styles.loadingText}>Chargement...</div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Login />;
+  }
+
+  return <Factory />;
+}
+
+// ============ MAIN FACTORY (previously the entire App) ============
+function Factory() {
+  const { user, logout } = useAuth();
+
   const [files, setFiles] = useState({});
   const [previewUrl, setPreviewUrl] = useState(null);
   const [logs, setLogs] = useState([]);
@@ -67,6 +100,8 @@ function App() {
   const webcontainerRef = useRef(null);
   const bootedRef = useRef(false);
   const iframeRef = useRef(null);
+  const devProcessRef = useRef(null);
+  const serverReadyCleanupRef = useRef(null);
 
   const generationSteps = [
     { label: 'Génération du code', done: generationStep > 0 },
@@ -123,7 +158,6 @@ function App() {
     return injected;
   };
 
-  // Inject capture script into index.html
   const injectCaptureScript = (appFiles) => {
     if (appFiles['index.html'] && appFiles['index.html'].file) {
       const html = appFiles['index.html'].file.contents;
@@ -143,19 +177,20 @@ function App() {
       }
     }
 
-    // Inject html2canvas + capture listener
     appFiles = injectCaptureScript(appFiles);
-
     setFiles(appFiles);
     await webcontainerRef.current.mount(appFiles);
+
+    // Kill previous dev server
+    if (devProcessRef.current) {
+      try { devProcessRef.current.kill(); } catch (_) {}
+      devProcessRef.current = null;
+    }
 
     const installProcess = await webcontainerRef.current.spawn('npm', ['install']);
     let installOutput = '';
     installProcess.output.pipeTo(new WritableStream({
-      write(data) {
-        installOutput += data;
-        addLog(data);
-      }
+      write(data) { installOutput += data; addLog(data); }
     }));
     const installExit = await installProcess.exit;
     if (installExit !== 0) {
@@ -163,26 +198,36 @@ function App() {
     }
 
     const devProcess = await webcontainerRef.current.spawn('npm', ['run', 'dev']);
+    devProcessRef.current = devProcess;
     let devOutput = '';
     devProcess.output.pipeTo(new WritableStream({
-      write(data) {
-        devOutput += data;
-        addLog(data);
-      }
+      write(data) { devOutput += data; addLog(data); }
     }));
 
     return new Promise((resolve) => {
       let resolved = false;
 
-      webcontainerRef.current.on('server-ready', (port, url) => {
+      if (serverReadyCleanupRef.current) {
+        serverReadyCleanupRef.current();
+        serverReadyCleanupRef.current = null;
+      }
+
+      const onServerReady = (port, url) => {
         if (resolved) return;
         resolved = true;
         resolve({ success: true, url });
-      });
+      };
+
+      webcontainerRef.current.on('server-ready', onServerReady);
+      serverReadyCleanupRef.current = () => {
+        webcontainerRef.current.off('server-ready', onServerReady);
+      };
 
       setTimeout(() => {
         if (resolved) return;
         resolved = true;
+        webcontainerRef.current.off('server-ready', onServerReady);
+        serverReadyCleanupRef.current = null;
         const errorLines = devOutput.split('\n')
           .filter(line => /error|failed|cannot|unexpected|not defined|not found/i.test(line))
           .slice(-10)
@@ -192,30 +237,24 @@ function App() {
     });
   };
 
-  // Capture screenshot from iframe via postMessage
   const captureScreenshot = () => {
     return new Promise((resolve) => {
       const handler = (e) => {
         if (e.data && e.data.type === 'screenshot') {
           window.removeEventListener('message', handler);
-          resolve(e.data.data); // base64 PNG
+          resolve(e.data.data);
         }
         if (e.data && e.data.type === 'screenshot_error') {
           window.removeEventListener('message', handler);
           resolve(null);
         }
       };
-
       window.addEventListener('message', handler);
-
-      // Wait for render, then ask iframe to capture
       setTimeout(() => {
         if (iframeRef.current && iframeRef.current.contentWindow) {
           iframeRef.current.contentWindow.postMessage({ type: 'capture' }, '*');
         }
       }, SCREENSHOT_DELAY);
-
-      // Timeout fallback
       setTimeout(() => {
         window.removeEventListener('message', handler);
         resolve(null);
@@ -234,11 +273,10 @@ function App() {
   // ============ FULL AGENT LOOP ============
   const agentGenerate = async (userPrompt, existingCode = null, skipReview = false, skipVision = false) => {
     const dbContext = dbData ? { type: dbData.type, schema: dbData.schema } : null;
-
     let currentCode = existingCode;
     let lastError = null;
+    let latestUrl = null;
 
-    // ============ PHASE 1: Generate + Auto-fix ============
     for (let attempt = 0; attempt <= MAX_FIX_ATTEMPTS; attempt++) {
       if (attempt === 0) {
         setAgentStatus('Génération du code...');
@@ -264,23 +302,22 @@ function App() {
 
       if (compileResult.success) {
         addLog(`Agent: compilation reussie${attempt > 0 ? ` (apres ${attempt} fix)` : ''}`);
+        latestUrl = compileResult.url;
         setPreviewUrl(compileResult.url);
 
-        // ============ PHASE 2: Quality Review ============
+        // PHASE 2: Quality Review
         if (!skipReview) {
           setAgentStatus('Review qualité en cours...');
           setGenerationStep(3);
           addLog('Agent: review qualité...');
-
           try {
             const reviewResult = await generateApp(REVIEW_PROMPT, excelData, stripDataFiles(currentCode), dbContext);
             addLog('Agent: code amelioré');
-
             setAgentStatus('Recompilation apres review...');
             const reviewCompile = await tryCompile(reviewResult.files);
-
             if (reviewCompile.success) {
               currentCode = reviewResult.files;
+              latestUrl = reviewCompile.url;
               setPreviewUrl(reviewCompile.url);
               addLog('Agent: review compilée avec succès');
             } else {
@@ -291,33 +328,23 @@ function App() {
           }
         }
 
-        // ============ PHASE 3: Vision Analysis ============
+        // PHASE 3: Vision Analysis
         if (!skipVision) {
           setAgentStatus('Capture du screenshot...');
           setGenerationStep(4);
           addLog('Agent: capture screenshot...');
-
-          // Need to display the iframe temporarily for capture
           const screenshot = await captureScreenshot();
-
           if (screenshot) {
             addLog('Agent: screenshot capture, analyse visuelle...');
             setAgentStatus('Analyse visuelle par l\'IA...');
-
             try {
-              const visionResult = await visionAnalyze(
-                screenshot,
-                stripDataFiles(currentCode),
-                excelData,
-                dbContext
-              );
+              const visionResult = await visionAnalyze(screenshot, stripDataFiles(currentCode), excelData, dbContext);
               addLog('Agent: améliorations visuelles reçues');
-
               setAgentStatus('Recompilation après analyse visuelle...');
               const visionCompile = await tryCompile(visionResult.files);
-
               if (visionCompile.success) {
                 currentCode = visionResult.files;
+                latestUrl = visionCompile.url;
                 setPreviewUrl(visionCompile.url);
                 addLog('Agent: version visuelle compilée avec succès');
               } else {
@@ -332,13 +359,11 @@ function App() {
         }
 
         setCurrentFiles(currentCode);
-        return { success: true, url: previewUrl };
+        return { success: true, url: latestUrl };
       }
 
-      // Compile failed
       lastError = compileResult.error;
       addLog(`Agent: erreur detectée — ${lastError.slice(0, 100)}...`);
-
       if (attempt === MAX_FIX_ATTEMPTS) {
         addLog(`Agent: échec après ${MAX_FIX_ATTEMPTS} tentatives`);
         return { success: false, error: lastError };
@@ -348,16 +373,13 @@ function App() {
 
   const handleGenerate = async () => {
     if (!prompt.trim() || !webcontainerRef.current) return;
-
     setIsLoading(true);
     setPreviewUrl(null);
     setGenerationStep(0);
     setAgentStatus('Demarrage de l\'agent...');
     addLog(`Agent: "${prompt}"`);
-
     try {
       const result = await agentGenerate(prompt);
-
       if (result.success) {
         setGenerationStep(5);
         setAgentStatus('');
@@ -367,7 +389,6 @@ function App() {
         setAgentStatus(`Erreur: ${result.error.slice(0, 200)}`);
         addLog(`Erreur finale: ${result.error}`);
       }
-
       setIsLoading(false);
     } catch (error) {
       addLog(`Erreur: ${error.message}`);
@@ -379,17 +400,13 @@ function App() {
 
   const handleRefine = async () => {
     if (!feedback.trim() || !webcontainerRef.current) return;
-
     setIsLoading(true);
     setAgentStatus('Modification en cours...');
     addLog(`Agent refine: "${feedback}"`);
-
     try {
       const dbContext = dbData ? { type: dbData.type, schema: dbData.schema } : null;
       const result = await generateApp(feedback, excelData, stripDataFiles(currentFiles), dbContext);
-
       const compileResult = await tryCompile(result.files);
-
       if (compileResult.success) {
         setCurrentFiles(result.files);
         setPreviewUrl(compileResult.url);
@@ -401,7 +418,6 @@ function App() {
           addLog(`Agent: echec du fix — ${fixResult.error.slice(0, 100)}`);
         }
       }
-
       setIsLoading(false);
       setFeedback('');
       setAgentStatus('');
@@ -438,8 +454,14 @@ function App() {
     setPrompt('');
     setFeedback('');
     setCurrentFiles({});
+    setFiles({});
+    setLogs([]);
     setGenerationStep(0);
     setAgentStatus('');
+    if (devProcessRef.current) {
+      try { devProcessRef.current.kill(); } catch (_) {}
+      devProcessRef.current = null;
+    }
   };
 
   const handleTemplate = (template) => {
@@ -451,7 +473,7 @@ function App() {
     setPrompt(templates[template]);
   };
 
-  // ETAT 3: App Generee (plein ecran)
+  // ============ ETAT 3: App Generee (plein ecran) ============
   if (generatedApp && previewUrl) {
     return (
       <div style={styles.appFullScreen}>
@@ -495,18 +517,11 @@ function App() {
     );
   }
 
-  // ETAT 2: Generation en cours — with hidden iframe for screenshot
-  // ETAT 1: Factory Home
+  // ============ ETAT 1 & 2: Factory Home / Generation ============
   return (
     <div style={styles.container}>
-      {/* Hidden iframe for screenshot capture during generation */}
       {previewUrl && isLoading && (
-        <iframe
-          ref={iframeRef}
-          src={previewUrl}
-          style={styles.hiddenIframe}
-          title="Capture"
-        />
+        <iframe ref={iframeRef} src={previewUrl} style={styles.hiddenIframe} title="Capture" />
       )}
 
       <aside style={styles.sidebar}>
@@ -525,15 +540,19 @@ function App() {
             <div style={styles.emptyState}>Aucune app</div>
           ) : (
             savedApps.map(app => (
-              <div key={app.id} style={styles.appItem}>
-                {app.name}
-              </div>
+              <div key={app.id} style={styles.appItem}>{app.name}</div>
             ))
           )}
         </nav>
 
         <div style={styles.sidebarFooter}>
-          <div style={styles.settingsItem}>Settings</div>
+          {/* USER INFO + LOGOUT */}
+          <div style={styles.userRow}>
+            <span style={styles.userEmail}>{user?.email}</span>
+            <button onClick={logout} style={styles.logoutButton}>
+              Déconnexion
+            </button>
+          </div>
           <div style={styles.statusDot}>
             <span style={{
               ...styles.dot,
@@ -554,13 +573,9 @@ function App() {
                   width: `${(generationStep / 5) * 100}%`
                 }}></div>
               </div>
-
+              <MatrixRain step={generationStep} />
               <div style={styles.generationTitle}>Agent IA en action</div>
-
-              {agentStatus && (
-                <div style={styles.agentStatus}>{agentStatus}</div>
-              )}
-
+              {agentStatus && <div style={styles.agentStatus}>{agentStatus}</div>}
               <div style={styles.stepsList}>
                 {generationSteps.map((step, index) => (
                   <div key={index} style={styles.stepItem}>
@@ -579,20 +594,11 @@ function App() {
                   </div>
                 ))}
               </div>
-
-              {logs.length > 0 && (
-                <div style={styles.agentLogs}>
-                  {logs.slice(-4).map((log, i) => (
-                    <div key={i} style={styles.agentLogLine}>{log}</div>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
         ) : (
           <div style={styles.centerContent}>
             <h1 style={styles.title}>Quelle analyse voulez-vous creer ?</h1>
-
             <div style={styles.promptContainer}>
               <textarea
                 style={styles.promptInput}
@@ -601,19 +607,14 @@ function App() {
                 onChange={(e) => setPrompt(e.target.value)}
                 rows={3}
               />
-
               <div style={styles.dataSourceLabel}>Source de donnees</div>
-
               <FileUpload onDataLoaded={handleDataLoaded} />
-
               <div style={styles.dataSeparator}>
                 <span style={styles.separatorLine}></span>
                 <span style={styles.separatorText}>ou</span>
                 <span style={styles.separatorLine}></span>
               </div>
-
               <DbConnect onSchemaLoaded={handleSchemaLoaded} apiBase={API_BASE} />
-
               {excelData && (
                 <div style={styles.fileInfo}>
                   Fichier: {excelData.fileName} ({excelData.totalRows} lignes)
@@ -624,19 +625,14 @@ function App() {
                   DB: {dbData.totalTables} tables ({dbData.tableNames.join(', ')})
                 </div>
               )}
-
               <button
-                style={{
-                  ...styles.generateButton,
-                  opacity: (!prompt.trim() || !isReady) ? 0.5 : 1
-                }}
+                style={{ ...styles.generateButton, opacity: (!prompt.trim() || !isReady) ? 0.5 : 1 }}
                 onClick={handleGenerate}
                 disabled={!prompt.trim() || !isReady}
               >
                 Generer l'App
               </button>
             </div>
-
             <div style={styles.templates}>
               <div style={styles.templateCard} onClick={() => handleTemplate('finance')}>
                 <div style={styles.templateIcon}>$</div>
@@ -654,7 +650,6 @@ function App() {
                 <div style={styles.templateDesc}>Template</div>
               </div>
             </div>
-
             {logs.length > 0 && (
               <div style={styles.logsContainer}>
                 <div style={styles.logsTitle}>Logs</div>
@@ -673,6 +668,20 @@ function App() {
 }
 
 const styles = {
+  // Auth loading screen
+  loadingScreen: {
+    minHeight: '100vh',
+    background: '#0F0F12',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    color: '#71717A',
+    fontSize: '14px',
+    fontFamily: 'Inter, system-ui, sans-serif',
+  },
+  // Main layout
   container: {
     display: 'grid',
     gridTemplateColumns: '260px 1fr',
@@ -738,13 +747,31 @@ const styles = {
     paddingTop: '16px',
     borderTop: '1px solid #2E2E36',
   },
-  settingsItem: {
-    padding: '10px 12px',
-    borderRadius: '8px',
-    fontSize: '14px',
+  userRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '8px 12px',
+    marginBottom: '8px',
+  },
+  userEmail: {
+    fontSize: '12px',
+    color: '#A1A1AA',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    maxWidth: '140px',
+  },
+  logoutButton: {
+    background: 'none',
+    border: '1px solid #2E2E36',
     color: '#71717A',
+    fontSize: '11px',
+    padding: '4px 10px',
+    borderRadius: '6px',
     cursor: 'pointer',
-    marginBottom: '12px',
+    transition: 'all 0.2s ease',
+    flexShrink: 0,
   },
   statusDot: {
     display: 'flex',
@@ -928,18 +955,6 @@ const styles = {
   },
   stepIcon: { fontSize: '16px', width: '20px', textAlign: 'center' },
   stepLabel: { fontSize: '14px' },
-  agentLogs: {
-    background: '#0F0F12',
-    borderRadius: '8px',
-    padding: '12px',
-    fontFamily: 'JetBrains Mono, monospace',
-    fontSize: '11px',
-    color: '#71717A',
-    textAlign: 'left',
-    maxHeight: '80px',
-    overflow: 'auto',
-  },
-  agentLogLine: { padding: '2px 0' },
   appFullScreen: {
     position: 'relative',
     width: '100vw',

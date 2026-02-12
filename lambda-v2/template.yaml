@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: App Factory - Lambda Backend
+Description: App Factory - Lambda Backend + Cognito Auth
 
 Parameters:
   AnthropicApiKey:
@@ -23,8 +23,53 @@ Globals:
         RULES_BUCKET: !Ref PublishBucket
         PUBLISH_BUCKET: !Ref PublishBucket
         MY_REGION: !Ref MyRegion
+        COGNITO_USER_POOL_ID: !Ref CognitoUserPool
+        COGNITO_REGION: !Ref MyRegion
 
 Resources:
+
+  # ============ COGNITO ============
+  CognitoUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: app-factory-users
+      AutoVerifiedAttributes:
+        - email
+      UsernameAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireUppercase: true
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+      Schema:
+        - Name: email
+          Required: true
+          Mutable: true
+          AttributeDataType: String
+
+  CognitoUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: app-factory-web
+      UserPoolId: !Ref CognitoUserPool
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+        - ALLOW_USER_SRP_AUTH
+      PreventUserExistenceErrors: ENABLED
+      AccessTokenValidity: 60
+      IdTokenValidity: 60
+      RefreshTokenValidity: 30
+      TokenValidityUnits:
+        AccessToken: minutes
+        IdToken: minutes
+        RefreshToken: days
+
+  # ============ API GATEWAY ============
   AppFactoryApi:
     Type: AWS::Serverless::HttpApi
     Properties:
@@ -34,11 +79,13 @@ Resources:
           - '*'
         AllowHeaders:
           - Content-Type
+          - Authorization
         AllowMethods:
           - GET
           - POST
           - OPTIONS
 
+  # ============ GENERATE (Function URL — no 30s timeout) ============
   GenerateFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -57,6 +104,7 @@ Resources:
             - '*'
           AllowHeaders:
             - Content-Type
+            - Authorization
           AllowMethods:
             - POST
       Policies:
@@ -77,6 +125,7 @@ Resources:
         Banner:
           - js=import { createRequire } from 'module'; const require = createRequire(import.meta.url);
 
+  # ============ RULES ============
   RulesFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -108,6 +157,7 @@ Resources:
         Banner:
           - js=import { createRequire } from 'module'; const require = createRequire(import.meta.url);
 
+  # ============ PUBLISH ============
   PublishFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -141,6 +191,7 @@ Resources:
         Banner:
           - js=import { createRequire } from 'module'; const require = createRequire(import.meta.url);
 
+  # ============ DB PROXY ============
   DbFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -156,6 +207,7 @@ Resources:
             - '*'
           AllowHeaders:
             - Content-Type
+            - Authorization
           AllowMethods:
             - POST
       Events:
@@ -186,7 +238,7 @@ Resources:
 
 Outputs:
   ApiUrl:
-    Description: API Gateway URL (for rules + publish + db)
+    Description: API Gateway URL (rules + publish + db)
     Value: !Sub 'https://${AppFactoryApi}.execute-api.${AWS::Region}.amazonaws.com/prod'
   GenerateUrl:
     Description: Generate Function URL (no 30s timeout)
@@ -194,3 +246,9 @@ Outputs:
   DbProxyUrl:
     Description: DB Proxy Function URL
     Value: !GetAtt DbFunctionUrl.FunctionUrl
+  CognitoUserPoolId:
+    Description: Cognito User Pool ID (for frontend .env)
+    Value: !Ref CognitoUserPool
+  CognitoClientId:
+    Description: Cognito App Client ID (for frontend .env)
+    Value: !Ref CognitoUserPoolClient

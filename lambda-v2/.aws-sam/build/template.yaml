@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: App Factory - Lambda Backend
+Description: App Factory - Lambda Backend + Cognito Auth
 Parameters:
   AnthropicApiKey:
     Type: String
@@ -24,7 +24,50 @@ Globals:
           Ref: PublishBucket
         MY_REGION:
           Ref: MyRegion
+        COGNITO_USER_POOL_ID:
+          Ref: CognitoUserPool
+        COGNITO_REGION:
+          Ref: MyRegion
 Resources:
+  CognitoUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: app-factory-users
+      AutoVerifiedAttributes:
+      - email
+      UsernameAttributes:
+      - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireUppercase: true
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+      Schema:
+      - Name: email
+        Required: true
+        Mutable: true
+        AttributeDataType: String
+  CognitoUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: app-factory-web
+      UserPoolId:
+        Ref: CognitoUserPool
+      GenerateSecret: false
+      ExplicitAuthFlows:
+      - ALLOW_USER_PASSWORD_AUTH
+      - ALLOW_REFRESH_TOKEN_AUTH
+      - ALLOW_USER_SRP_AUTH
+      PreventUserExistenceErrors: ENABLED
+      AccessTokenValidity: 60
+      IdTokenValidity: 60
+      RefreshTokenValidity: 30
+      TokenValidityUnits:
+        AccessToken: minutes
+        IdToken: minutes
+        RefreshToken: days
   AppFactoryApi:
     Type: AWS::Serverless::HttpApi
     Properties:
@@ -34,6 +77,7 @@ Resources:
         - '*'
         AllowHeaders:
         - Content-Type
+        - Authorization
         AllowMethods:
         - GET
         - POST
@@ -57,6 +101,7 @@ Resources:
           - '*'
           AllowHeaders:
           - Content-Type
+          - Authorization
           AllowMethods:
           - POST
       Policies:
@@ -161,6 +206,7 @@ Resources:
           - '*'
           AllowHeaders:
           - Content-Type
+          - Authorization
           AllowMethods:
           - POST
       Events:
@@ -193,7 +239,7 @@ Resources:
       SamResourceId: DbFunction
 Outputs:
   ApiUrl:
-    Description: API Gateway URL (for rules + publish + db)
+    Description: API Gateway URL (rules + publish + db)
     Value:
       Fn::Sub: https://${AppFactoryApi}.execute-api.${AWS::Region}.amazonaws.com/prod
   GenerateUrl:
@@ -208,3 +254,11 @@ Outputs:
       Fn::GetAtt:
       - DbFunctionUrl
       - FunctionUrl
+  CognitoUserPoolId:
+    Description: Cognito User Pool ID (for frontend .env)
+    Value:
+      Ref: CognitoUserPool
+  CognitoClientId:
+    Description: Cognito App Client ID (for frontend .env)
+    Value:
+      Ref: CognitoUserPoolClient

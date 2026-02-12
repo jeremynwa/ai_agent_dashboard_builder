@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { S3Client, GetObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
+import { authenticateRequest } from './auth.mjs';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const s3 = new S3Client({ region: process.env.MY_REGION || 'eu-north-1' });
@@ -140,18 +141,35 @@ async function loadRules() {
 export const handler = async (event) => {
   if (event.requestContext?.http?.method === 'OPTIONS') return reply(200, {});
 
+  // Auth check
+  const { user, error: authError, statusCode } = await authenticateRequest(event);
+  if (authError) return reply(statusCode, { error: authError });
+  console.log(`Authenticated: ${user.email || user.sub}`);
+
   try {
     const body = JSON.parse(event.body || '{}');
-    const { prompt, useRules, excelData, existingFiles, dbContext, vision } = body;
+    console.log('Body keys:', Object.keys(body));
+
+    const {
+      prompt,
+      useRules,
+      excelData,
+      existingCode,
+      existingFiles,
+      dbContext,
+      screenshot,
+    } = body;
+
+    // Accept both field names (new frontend sends existingCode, old sends existingFiles)
+    const existingApp = existingCode || existingFiles || null;
 
     // ============ VISION MODE ============
-    if (vision) {
-      const { screenshot } = vision;
-      const visionExistingFiles = body.existingFiles || {};
-
+    if (screenshot && prompt === '__VISION_ANALYZE__') {
       let codeContext = '';
-      for (const [path, code] of Object.entries(visionExistingFiles)) {
-        codeContext += `--- ${path} ---\n${code}\n\n`;
+      if (existingApp) {
+        for (const [path, code] of Object.entries(existingApp)) {
+          codeContext += `--- ${path} ---\n${code}\n\n`;
+        }
       }
 
       const message = await anthropic.messages.create({
@@ -163,11 +181,7 @@ export const handler = async (event) => {
           content: [
             {
               type: 'image',
-              source: {
-                type: 'base64',
-                media_type: 'image/png',
-                data: screenshot,
-              },
+              source: { type: 'base64', media_type: 'image/png', data: screenshot },
             },
             {
               type: 'text',
@@ -185,7 +199,6 @@ export const handler = async (event) => {
       for (const [fp, code] of Object.entries(parsed.files)) {
         parsed.files[fp] = fixJsxCode(code);
       }
-
       return reply(200, parsed);
     }
 
@@ -205,18 +218,20 @@ export const handler = async (event) => {
       systemWithData = SYSTEM_PROMPT + DB_PROXY_PROMPT;
       const schemaDesc = Object.entries(dbContext.schema).map(([table, info]) => {
         const cols = info.columns.map(c => `  - ${c.name} (${c.type})`).join('\n');
-        const sampleStr = info.sample.length > 0 ? `\nExemple:\n${JSON.stringify(info.sample.slice(0, 3), null, 2)}` : '';
+        const sampleStr = info.sample && info.sample.length > 0 ? `\nExemple:\n${JSON.stringify(info.sample.slice(0, 3), null, 2)}` : '';
         return `Table "${table}" (${info.rowCount} lignes):\n${cols}${sampleStr}`;
       }).join('\n\n');
 
       dataContext = `\n\nBASE DE DONNEES CONNECTEE (${dbContext.type}):\n${schemaDesc}\n\nUtilise queryDb() pour toutes les donnees.`;
     } else if (excelData) {
       systemWithData = SYSTEM_PROMPT + DATA_INJECTION_PROMPT;
-      const sample = excelData.data.slice(0, 30);
+      const rawData = excelData.data || excelData.fullData || [];
+      const sample = rawData.slice(0, 30);
+      const headers = excelData.headers || (sample.length > 0 ? Object.keys(sample[0]) : []);
       dataContext = `\n\nDONNEES FOURNIES:
-Fichier: ${excelData.fileName}
-Colonnes: ${excelData.headers.join(', ')}
-Total: ${excelData.totalRows || excelData.data.length} lignes
+Fichier: ${excelData.fileName || 'data'}
+Colonnes: ${headers.join(', ')}
+Total: ${excelData.totalRows || rawData.length} lignes
 Echantillon (${sample.length} lignes):
 ${JSON.stringify(sample, null, 2)}
 
@@ -224,9 +239,9 @@ Rappel: utilise le placeholder "__INJECT_DATA__" dans src/data.js.`;
     }
 
     let userMessage = '';
-    if (existingFiles) {
+    if (existingApp) {
       userMessage = `Voici le code actuel de l'application:\n\n`;
-      for (const [path, code] of Object.entries(existingFiles)) {
+      for (const [path, code] of Object.entries(existingApp)) {
         userMessage += `--- ${path} ---\n${code}\n\n`;
       }
       userMessage += `\nMODIFICATION DEMANDEE: ${prompt}${rulesContext}${dataContext}\n\nRetourne le JSON complet avec TOUS les fichiers (modifies ou non).`;

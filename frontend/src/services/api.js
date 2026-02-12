@@ -1,68 +1,92 @@
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-const GENERATE_URL = import.meta.env.VITE_GENERATE_URL || (API_BASE + '/generate');
-const DB_PROXY_URL = import.meta.env.VITE_DB_PROXY_URL || (API_BASE + '/db/query');
+// frontend/src/services/api.js
+import { getIdToken } from './auth';
 
-export async function generateApp(prompt, excelData = null, existingFiles = null, dbContext = null) {
-  const dataForApi = excelData ? {
-    fileName: excelData.fileName,
-    headers: excelData.headers,
-    data: excelData.sample,
-    totalRows: excelData.totalRows,
-  } : null;
+export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const GENERATE_URL = import.meta.env.VITE_GENERATE_URL || `${API_BASE}/generate`;
+export const DB_PROXY_URL = import.meta.env.VITE_DB_PROXY_URL || `${API_BASE}/db`;
 
+// ============ AUTH HEADERS ============
+async function authHeaders() {
+  const token = await getIdToken();
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  return headers;
+}
+
+// ============ GENERATE ============
+export async function generateApp(prompt, excelData = null, existingCode = null, dbContext = null) {
+  const headers = await authHeaders();
   const res = await fetch(GENERATE_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      prompt,
-      useRules: true,
-      excelData: dataForApi,
-      existingFiles,
-      dbContext,
-      dbProxyUrl: DB_PROXY_URL,
-    }),
+    headers,
+    body: JSON.stringify({ prompt, useRules: true, excelData, existingCode, dbContext }),
   });
-  if (!res.ok) throw new Error((await res.json()).error || 'Generation failed');
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    if (res.status === 401) throw new Error('Session expirée. Reconnectez-vous.');
+    throw new Error(errBody.error || 'Generation failed');
+  }
   return res.json();
 }
 
-export async function visionAnalyze(screenshot, existingFiles, excelData = null, dbContext = null) {
-  const dataForApi = excelData ? {
-    fileName: excelData.fileName,
-    headers: excelData.headers,
-    data: excelData.sample,
-    totalRows: excelData.totalRows,
-  } : null;
-
+// ============ VISION ANALYZE ============
+export async function visionAnalyze(screenshot, currentCode, excelData = null, dbContext = null) {
+  const headers = await authHeaders();
   const res = await fetch(GENERATE_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({
-      vision: { screenshot },
-      existingFiles,
-      excelData: dataForApi,
+      prompt: '__VISION_ANALYZE__',
+      screenshot,
+      existingCode: currentCode,
+      excelData,
       dbContext,
       useRules: true,
     }),
   });
-  if (!res.ok) throw new Error((await res.json()).error || 'Vision analysis failed');
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    if (res.status === 401) throw new Error('Session expirée. Reconnectez-vous.');
+    throw new Error(errBody.error || 'Vision analysis failed');
+  }
   return res.json();
 }
 
+// ============ PUBLISH ============
 export async function publishApp(builtFiles, appName) {
-  const res = await fetch(API_BASE + '/publish', {
+  const headers = await authHeaders();
+  const res = await fetch(`${API_BASE}/publish`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({ builtFiles, appName }),
   });
-  if (!res.ok) throw new Error((await res.json()).error || 'Publish failed');
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    if (res.status === 401) throw new Error('Session expirée. Reconnectez-vous.');
+    throw new Error(errBody.error || 'Publish failed');
+  }
   return res.json();
 }
 
+// ============ DB SCHEMA ============
+export async function getDbSchema(credentials) {
+  const headers = await authHeaders();
+  const res = await fetch(`${API_BASE}/db/schema`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(credentials),
+  });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    throw new Error(errBody.error || 'DB schema failed');
+  }
+  return res.json();
+}
+
+// ============ RULES ============
 export async function getRules() {
-  const res = await fetch(API_BASE + '/rules');
+  const headers = await authHeaders();
+  const res = await fetch(`${API_BASE}/rules`, { headers });
   if (!res.ok) throw new Error('Failed to load rules');
   return res.json();
 }
-
-export { API_BASE, DB_PROXY_URL };

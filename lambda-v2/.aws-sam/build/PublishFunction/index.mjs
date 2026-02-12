@@ -2,12 +2,110 @@ import { createRequire } from 'module'; const require = createRequire(import.met
 
 // index.mjs
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+
+// auth.mjs
+var jwksCache = null;
+var jwksCacheTime = 0;
+var JWKS_CACHE_TTL = 36e5;
+var COGNITO_REGION = process.env.COGNITO_REGION || process.env.MY_REGION || "eu-north-1";
+var COGNITO_USER_POOL_ID = process.env.COGNITO_USER_POOL_ID;
+var JWKS_URL = `https://cognito-idp.${COGNITO_REGION}.amazonaws.com/${COGNITO_USER_POOL_ID}/.well-known/jwks.json`;
+var ISSUER = `https://cognito-idp.${COGNITO_REGION}.amazonaws.com/${COGNITO_USER_POOL_ID}`;
+async function getJwks() {
+  const now = Date.now();
+  if (jwksCache && now - jwksCacheTime < JWKS_CACHE_TTL) {
+    return jwksCache;
+  }
+  const res = await fetch(JWKS_URL);
+  if (!res.ok) throw new Error(`Failed to fetch JWKS: ${res.status}`);
+  jwksCache = await res.json();
+  jwksCacheTime = now;
+  return jwksCache;
+}
+function decodeJwtHeader(token) {
+  const header = token.split(".")[0];
+  return JSON.parse(Buffer.from(header, "base64url").toString());
+}
+function decodeJwtPayload(token) {
+  const payload = token.split(".")[1];
+  return JSON.parse(Buffer.from(payload, "base64url").toString());
+}
+async function importJwk(jwk) {
+  return crypto.subtle.importKey(
+    "jwk",
+    jwk,
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["verify"]
+  );
+}
+async function verifySignature(token, key) {
+  const parts = token.split(".");
+  const data = new TextEncoder().encode(`${parts[0]}.${parts[1]}`);
+  const signature = Buffer.from(parts[2], "base64url");
+  return crypto.subtle.verify(
+    "RSASSA-PKCS1-v1_5",
+    key,
+    signature,
+    data
+  );
+}
+async function verifyToken(token) {
+  if (!COGNITO_USER_POOL_ID) {
+    console.warn("COGNITO_USER_POOL_ID not set, skipping auth");
+    return { sub: "dev", email: "dev@local" };
+  }
+  const header = decodeJwtHeader(token);
+  const payload = decodeJwtPayload(token);
+  if (payload.iss !== ISSUER) {
+    throw new Error("Invalid token issuer");
+  }
+  if (payload.exp && payload.exp < Math.floor(Date.now() / 1e3)) {
+    throw new Error("Token expired");
+  }
+  const jwks = await getJwks();
+  const jwk = jwks.keys.find((k) => k.kid === header.kid);
+  if (!jwk) {
+    jwksCache = null;
+    const freshJwks = await getJwks();
+    const freshJwk = freshJwks.keys.find((k) => k.kid === header.kid);
+    if (!freshJwk) throw new Error("No matching JWK found");
+    const key2 = await importJwk(freshJwk);
+    const valid2 = await verifySignature(token, key2);
+    if (!valid2) throw new Error("Invalid token signature");
+    return payload;
+  }
+  const key = await importJwk(jwk);
+  const valid = await verifySignature(token, key);
+  if (!valid) throw new Error("Invalid token signature");
+  return payload;
+}
+async function authenticateRequest(event) {
+  const authHeader = event.headers?.authorization || event.headers?.Authorization || "";
+  if (!authHeader.startsWith("Bearer ")) {
+    return {
+      user: null,
+      error: "Missing or invalid Authorization header",
+      statusCode: 401
+    };
+  }
+  const token = authHeader.slice(7);
+  try {
+    const user = await verifyToken(token);
+    return { user, error: null, statusCode: 200 };
+  } catch (err) {
+    return {
+      user: null,
+      error: `Auth failed: ${err.message}`,
+      statusCode: 401
+    };
+  }
+}
+
+// index.mjs
 var s3 = new S3Client({ region: process.env.MY_REGION || "eu-north-1" });
 var PUBLISH_BUCKET = process.env.PUBLISH_BUCKET || "ai-app-builder-sk-2026";
 var HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "Content-Type",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Content-Type": "application/json"
 };
 var reply = (code, body) => ({ statusCode: code, headers: HEADERS, body: JSON.stringify(body) });
@@ -26,6 +124,9 @@ function getContentType(filename) {
 }
 var handler = async (event) => {
   if (event.requestContext?.http?.method === "OPTIONS") return reply(200, {});
+  const { user, error: authError, statusCode } = await authenticateRequest(event);
+  if (authError) return reply(statusCode, { error: authError });
+  console.log(`Publish by: ${user.email || user.sub}`);
   try {
     const { builtFiles, appName } = JSON.parse(event.body || "{}");
     if (!builtFiles || Object.keys(builtFiles).length === 0) {

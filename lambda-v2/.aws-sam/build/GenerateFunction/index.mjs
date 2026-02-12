@@ -2801,12 +2801,12 @@ var require_lib2 = __commonJS({
       const dest = new URL$1(destination).protocol;
       return orig === dest;
     };
-    function fetch2(url, opts) {
-      if (!fetch2.Promise) {
+    function fetch3(url, opts) {
+      if (!fetch3.Promise) {
         throw new Error("native promise missing, set fetch.Promise to your favorite alternative");
       }
-      Body.Promise = fetch2.Promise;
-      return new fetch2.Promise(function(resolve, reject) {
+      Body.Promise = fetch3.Promise;
+      return new fetch3.Promise(function(resolve, reject) {
         const request = new Request3(url, opts);
         const options = getNodeRequestOptions(request);
         const send = (options.protocol === "https:" ? https : http).request;
@@ -2877,7 +2877,7 @@ var require_lib2 = __commonJS({
         req.on("response", function(res) {
           clearTimeout(reqTimeout);
           const headers = createHeadersLenient(res.headers);
-          if (fetch2.isRedirect(res.statusCode)) {
+          if (fetch3.isRedirect(res.statusCode)) {
             const location = headers.get("Location");
             let locationURL = null;
             try {
@@ -2939,7 +2939,7 @@ var require_lib2 = __commonJS({
                   requestOpts.body = void 0;
                   requestOpts.headers.delete("content-length");
                 }
-                resolve(fetch2(new Request3(locationURL, requestOpts)));
+                resolve(fetch3(new Request3(locationURL, requestOpts)));
                 finalize();
                 return;
             }
@@ -3031,11 +3031,11 @@ var require_lib2 = __commonJS({
         stream.end();
       }
     }
-    fetch2.isRedirect = function(code) {
+    fetch3.isRedirect = function(code) {
       return code === 301 || code === 302 || code === 303 || code === 307 || code === 308;
     };
-    fetch2.Promise = global.Promise;
-    module.exports = exports = fetch2;
+    fetch3.Promise = global.Promise;
+    module.exports = exports = fetch3;
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = exports;
     exports.Headers = Headers3;
@@ -6444,7 +6444,7 @@ var VERSION = "0.39.0";
 // node_modules/@anthropic-ai/sdk/_shims/registry.mjs
 var auto = false;
 var kind = void 0;
-var fetch = void 0;
+var fetch2 = void 0;
 var Request = void 0;
 var Response = void 0;
 var Headers = void 0;
@@ -6465,7 +6465,7 @@ function setShims(shims, options = { auto: false }) {
   }
   auto = options.auto;
   kind = shims.kind;
-  fetch = shims.fetch;
+  fetch2 = shims.fetch;
   Request = shims.Request;
   Response = shims.Response;
   Headers = shims.Headers;
@@ -7517,7 +7517,7 @@ var APIClient = class {
     this.maxRetries = validatePositiveInteger("maxRetries", maxRetries);
     this.timeout = validatePositiveInteger("timeout", timeout);
     this.httpAgent = httpAgent;
-    this.fetch = overriddenFetch ?? fetch;
+    this.fetch = overriddenFetch ?? fetch2;
   }
   authHeaders(opts) {
     return {};
@@ -10040,6 +10040,107 @@ var sdk_default = Anthropic;
 
 // index.mjs
 import { S3Client, GetObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
+
+// auth.mjs
+var jwksCache = null;
+var jwksCacheTime = 0;
+var JWKS_CACHE_TTL = 36e5;
+var COGNITO_REGION = process.env.COGNITO_REGION || process.env.MY_REGION || "eu-north-1";
+var COGNITO_USER_POOL_ID = process.env.COGNITO_USER_POOL_ID;
+var JWKS_URL = `https://cognito-idp.${COGNITO_REGION}.amazonaws.com/${COGNITO_USER_POOL_ID}/.well-known/jwks.json`;
+var ISSUER = `https://cognito-idp.${COGNITO_REGION}.amazonaws.com/${COGNITO_USER_POOL_ID}`;
+async function getJwks() {
+  const now = Date.now();
+  if (jwksCache && now - jwksCacheTime < JWKS_CACHE_TTL) {
+    return jwksCache;
+  }
+  const res = await fetch(JWKS_URL);
+  if (!res.ok) throw new Error(`Failed to fetch JWKS: ${res.status}`);
+  jwksCache = await res.json();
+  jwksCacheTime = now;
+  return jwksCache;
+}
+function decodeJwtHeader(token) {
+  const header = token.split(".")[0];
+  return JSON.parse(Buffer.from(header, "base64url").toString());
+}
+function decodeJwtPayload(token) {
+  const payload = token.split(".")[1];
+  return JSON.parse(Buffer.from(payload, "base64url").toString());
+}
+async function importJwk(jwk) {
+  return crypto.subtle.importKey(
+    "jwk",
+    jwk,
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["verify"]
+  );
+}
+async function verifySignature(token, key) {
+  const parts = token.split(".");
+  const data = new TextEncoder().encode(`${parts[0]}.${parts[1]}`);
+  const signature = Buffer.from(parts[2], "base64url");
+  return crypto.subtle.verify(
+    "RSASSA-PKCS1-v1_5",
+    key,
+    signature,
+    data
+  );
+}
+async function verifyToken(token) {
+  if (!COGNITO_USER_POOL_ID) {
+    console.warn("COGNITO_USER_POOL_ID not set, skipping auth");
+    return { sub: "dev", email: "dev@local" };
+  }
+  const header = decodeJwtHeader(token);
+  const payload = decodeJwtPayload(token);
+  if (payload.iss !== ISSUER) {
+    throw new Error("Invalid token issuer");
+  }
+  if (payload.exp && payload.exp < Math.floor(Date.now() / 1e3)) {
+    throw new Error("Token expired");
+  }
+  const jwks = await getJwks();
+  const jwk = jwks.keys.find((k2) => k2.kid === header.kid);
+  if (!jwk) {
+    jwksCache = null;
+    const freshJwks = await getJwks();
+    const freshJwk = freshJwks.keys.find((k2) => k2.kid === header.kid);
+    if (!freshJwk) throw new Error("No matching JWK found");
+    const key2 = await importJwk(freshJwk);
+    const valid2 = await verifySignature(token, key2);
+    if (!valid2) throw new Error("Invalid token signature");
+    return payload;
+  }
+  const key = await importJwk(jwk);
+  const valid = await verifySignature(token, key);
+  if (!valid) throw new Error("Invalid token signature");
+  return payload;
+}
+async function authenticateRequest(event) {
+  const authHeader = event.headers?.authorization || event.headers?.Authorization || "";
+  if (!authHeader.startsWith("Bearer ")) {
+    return {
+      user: null,
+      error: "Missing or invalid Authorization header",
+      statusCode: 401
+    };
+  }
+  const token = authHeader.slice(7);
+  try {
+    const user = await verifyToken(token);
+    return { user, error: null, statusCode: 200 };
+  } catch (err) {
+    return {
+      user: null,
+      error: `Auth failed: ${err.message}`,
+      statusCode: 401
+    };
+  }
+}
+
+// index.mjs
 var anthropic = new sdk_default({ apiKey: process.env.ANTHROPIC_API_KEY });
 var s3 = new S3Client({ region: process.env.MY_REGION || "eu-north-1" });
 var RULES_BUCKET = process.env.RULES_BUCKET || "ai-app-builder-sk-2026";
@@ -10170,18 +10271,31 @@ async function loadRules() {
 }
 var handler = async (event) => {
   if (event.requestContext?.http?.method === "OPTIONS") return reply(200, {});
+  const { user, error: authError, statusCode } = await authenticateRequest(event);
+  if (authError) return reply(statusCode, { error: authError });
+  console.log(`Authenticated: ${user.email || user.sub}`);
   try {
     const body = JSON.parse(event.body || "{}");
-    const { prompt, useRules, excelData, existingFiles, dbContext, vision } = body;
-    if (vision) {
-      const { screenshot } = vision;
-      const visionExistingFiles = body.existingFiles || {};
+    console.log("Body keys:", Object.keys(body));
+    const {
+      prompt,
+      useRules,
+      excelData,
+      existingCode,
+      existingFiles,
+      dbContext,
+      screenshot
+    } = body;
+    const existingApp = existingCode || existingFiles || null;
+    if (screenshot && prompt === "__VISION_ANALYZE__") {
       let codeContext = "";
-      for (const [path, code] of Object.entries(visionExistingFiles)) {
-        codeContext += `--- ${path} ---
+      if (existingApp) {
+        for (const [path, code] of Object.entries(existingApp)) {
+          codeContext += `--- ${path} ---
 ${code}
 
 `;
+        }
       }
       const message2 = await anthropic.messages.create({
         model: "claude-sonnet-4-20250514",
@@ -10192,11 +10306,7 @@ ${code}
           content: [
             {
               type: "image",
-              source: {
-                type: "base64",
-                media_type: "image/png",
-                data: screenshot
-              }
+              source: { type: "base64", media_type: "image/png", data: screenshot }
             },
             {
               type: "text",
@@ -10229,7 +10339,7 @@ ${JSON.stringify(rules, null, 2)}`;
       systemWithData = SYSTEM_PROMPT + DB_PROXY_PROMPT;
       const schemaDesc = Object.entries(dbContext.schema).map(([table, info]) => {
         const cols = info.columns.map((c2) => `  - ${c2.name} (${c2.type})`).join("\n");
-        const sampleStr = info.sample.length > 0 ? `
+        const sampleStr = info.sample && info.sample.length > 0 ? `
 Exemple:
 ${JSON.stringify(info.sample.slice(0, 3), null, 2)}` : "";
         return `Table "${table}" (${info.rowCount} lignes):
@@ -10243,24 +10353,26 @@ ${schemaDesc}
 Utilise queryDb() pour toutes les donnees.`;
     } else if (excelData) {
       systemWithData = SYSTEM_PROMPT + DATA_INJECTION_PROMPT;
-      const sample = excelData.data.slice(0, 30);
+      const rawData = excelData.data || excelData.fullData || [];
+      const sample = rawData.slice(0, 30);
+      const headers = excelData.headers || (sample.length > 0 ? Object.keys(sample[0]) : []);
       dataContext = `
 
 DONNEES FOURNIES:
-Fichier: ${excelData.fileName}
-Colonnes: ${excelData.headers.join(", ")}
-Total: ${excelData.totalRows || excelData.data.length} lignes
+Fichier: ${excelData.fileName || "data"}
+Colonnes: ${headers.join(", ")}
+Total: ${excelData.totalRows || rawData.length} lignes
 Echantillon (${sample.length} lignes):
 ${JSON.stringify(sample, null, 2)}
 
 Rappel: utilise le placeholder "__INJECT_DATA__" dans src/data.js.`;
     }
     let userMessage = "";
-    if (existingFiles) {
+    if (existingApp) {
       userMessage = `Voici le code actuel de l'application:
 
 `;
-      for (const [path, code] of Object.entries(existingFiles)) {
+      for (const [path, code] of Object.entries(existingApp)) {
         userMessage += `--- ${path} ---
 ${code}
 

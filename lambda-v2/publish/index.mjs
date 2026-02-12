@@ -1,12 +1,10 @@
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { authenticateRequest } from './auth.mjs';
 
 const s3 = new S3Client({ region: process.env.MY_REGION || 'eu-north-1' });
 const PUBLISH_BUCKET = process.env.PUBLISH_BUCKET || 'ai-app-builder-sk-2026';
 
 const HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'Content-Type',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Content-Type': 'application/json',
 };
 
@@ -29,6 +27,11 @@ function getContentType(filename) {
 
 export const handler = async (event) => {
   if (event.requestContext?.http?.method === 'OPTIONS') return reply(200, {});
+
+  // ============ AUTH CHECK ============
+  const { user, error: authError, statusCode } = await authenticateRequest(event);
+  if (authError) return reply(statusCode, { error: authError });
+  console.log(`Publish by: ${user.email || user.sub}`);
 
   try {
     const { builtFiles, appName } = JSON.parse(event.body || '{}');

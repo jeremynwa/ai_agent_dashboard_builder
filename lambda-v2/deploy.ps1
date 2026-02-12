@@ -52,18 +52,64 @@ sam deploy `
     --no-confirm-changeset `
     --no-fail-on-empty-changeset
 
-# ─── Show result ─────────────────────────────────────
-$API_URL = aws cloudformation describe-stacks `
+# ─── Fetch all outputs ───────────────────────────────
+Write-Host ""
+Write-Host "Fetching stack outputs..." -ForegroundColor Yellow
+
+$outputs = aws cloudformation describe-stacks `
     --stack-name $STACK_NAME `
     --region $REGION `
-    --query 'Stacks[0].Outputs[?OutputKey==`ApiUrl`].OutputValue' `
-    --output text
+    --query 'Stacks[0].Outputs' `
+    --output json | ConvertFrom-Json
 
+$API_URL = ($outputs | Where-Object { $_.OutputKey -eq "ApiUrl" }).OutputValue
+$GENERATE_URL = ($outputs | Where-Object { $_.OutputKey -eq "GenerateUrl" }).OutputValue
+$DB_PROXY_URL = ($outputs | Where-Object { $_.OutputKey -eq "DbProxyUrl" }).OutputValue
+$COGNITO_POOL_ID = ($outputs | Where-Object { $_.OutputKey -eq "CognitoUserPoolId" }).OutputValue
+$COGNITO_CLIENT_ID = ($outputs | Where-Object { $_.OutputKey -eq "CognitoClientId" }).OutputValue
+
+# ─── Write frontend/.env automatically ───────────────
+$frontendEnv = Join-Path (Join-Path $PSScriptRoot "..") "frontend/.env"
+$envContent = @"
+VITE_API_URL=$API_URL
+VITE_GENERATE_URL=$GENERATE_URL
+VITE_DB_PROXY_URL=$DB_PROXY_URL
+VITE_COGNITO_USER_POOL_ID=$COGNITO_POOL_ID
+VITE_COGNITO_CLIENT_ID=$COGNITO_CLIENT_ID
+"@
+Set-Content -Path $frontendEnv -Value $envContent
+Write-Host "frontend/.env written automatically" -ForegroundColor Green
+
+# ─── Create first user (optional) ────────────────────
+$createUser = Read-Host "Create a Cognito user now? (y/N)"
+if ($createUser -eq "y") {
+    $userEmail = Read-Host "Email"
+    $tempPassword = Read-Host "Temporary password (min 8 chars, uppercase, number)"
+
+    aws cognito-idp admin-create-user `
+        --user-pool-id $COGNITO_POOL_ID `
+        --username $userEmail `
+        --temporary-password $tempPassword `
+        --user-attributes Name=email,Value=$userEmail Name=email_verified,Value=true `
+        --region $REGION
+
+    Write-Host "User $userEmail created. Login with temp password, then set new one." -ForegroundColor Green
+}
+
+# ─── Show result ─────────────────────────────────────
 Write-Host ""
 Write-Host "=== DONE ===" -ForegroundColor Green
-Write-Host "API URL: $API_URL" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "Endpoints:" -ForegroundColor Cyan
+Write-Host "  API:      $API_URL"
+Write-Host "  Generate: $GENERATE_URL"
+Write-Host "  DB Proxy: $DB_PROXY_URL"
+Write-Host ""
+Write-Host "Cognito:" -ForegroundColor Cyan
+Write-Host "  Pool ID:  $COGNITO_POOL_ID"
+Write-Host "  Client:   $COGNITO_CLIENT_ID"
+Write-Host ""
+Write-Host "frontend/.env has been updated." -ForegroundColor Green
 Write-Host ""
 Write-Host "Next:" -ForegroundColor Yellow
-Write-Host '1. Create frontend/.env with: VITE_API_URL=<url above>'
-Write-Host '2. Copy lambda-v2/api.js to frontend/src/services/api.js'
-Write-Host '3. cd frontend && npm run dev'
+Write-Host "  cd frontend && npm install amazon-cognito-identity-js && npm run dev"
