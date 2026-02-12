@@ -14,20 +14,20 @@ const MAX_FIX_ATTEMPTS = 3;
 const SCREENSHOT_DELAY = 4000;
 const SCREENSHOT_TIMEOUT = 10000;
 
-const REVIEW_PROMPT = `Review et ameliore ce code React. Verifie et corrige SYSTEMATIQUEMENT:
+const REVIEW_PROMPT = `Review et améliore ce code React. Vérifie et corrige SYSTÉMATIQUEMENT :
 
-1. LABELS: Chaque graphique a un titre clair et une legende explicite
-2. UNITES: Les KPIs affichent les unites correctes (EUR, %, unites, etc.)
-3. FORMATAGE: Les nombres sont formates (separateurs de milliers, decimales appropriees)
-4. ESPACEMENT: Le layout est aere, pas de contenus colles ou trop serres
-5. COULEURS: Le design system est respecte (fond #0F0F12, cards #16161A, accent #00765F)
-6. RESPONSIVE: Les graphiques et tableaux s'adaptent a la largeur disponible
-7. HOVER STATES: Tous les elements cliquables ont un etat hover
-8. CHARGEMENT: Si donnees async, afficher "Chargement..." pendant le fetch
-9. VIDE: Gerer les cas ou les donnees sont vides ou undefined (pas de crash)
-10. LISIBILITE: Les textes secondaires utilisent #A1A1AA, pas du blanc pur
+1. LABELS: Chaque graphique a un titre clair et une légende explicite
+2. UNITÉS: Les KPIs affichent les unités correctes (EUR, %, unités, etc.)
+3. FORMATAGE: Les nombres sont formatés (séparateurs de milliers, décimales appropriées)
+4. ESPACEMENT: Le layout est aéré, pas de contenus collés ou trop serrés
+5. COULEURS: Le design system est respecté (fond #0F0F12, cards #16161A, accent #00765F)
+6. RESPONSIVE: Les graphiques et tableaux s'adaptent à la largeur disponible
+7. HOVER STATES: Tous les éléments cliquables ont un état hover
+8. CHARGEMENT: Si données async, afficher "Chargement..." pendant le fetch
+9. VIDE: Gérer les cas où les données sont vides ou undefined (pas de crash)
+10. LISIBILITÉ: Les textes secondaires utilisent #A1A1AA, pas du blanc pur
 
-Retourne le JSON complet avec TOUS les fichiers ameliores.`;
+Retourne le JSON complet avec TOUS les fichiers améliorés.`;
 
 const CAPTURE_SCRIPT = `
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/script>
@@ -122,24 +122,24 @@ function Factory() {
     WebContainer.boot()
       .then((wc) => {
         webcontainerRef.current = wc;
-        addLog('Environnement pret');
+        addLog('Environnement prêt');
         setIsReady(true);
       })
       .catch((error) => {
-        addLog(`Erreur: ${error.message}`);
+        addLog(`Erreur : ${error.message}`);
       });
   }, []);
 
   const handleDataLoaded = (data) => {
     setExcelData(data);
     setDbData(null);
-    addLog(`Fichier charge: ${data.fileName}`);
+    addLog(`Fichier chargé : ${data.fileName}`);
   };
 
   const handleSchemaLoaded = (data) => {
     setDbData(data);
     setExcelData(null);
-    addLog(`DB connectee: ${data.totalTables} tables`);
+    addLog(`DB connectée : ${data.totalTables} tables`);
   };
 
   const injectData = (resultFiles) => {
@@ -232,7 +232,7 @@ function Factory() {
           .filter(line => /error|failed|cannot|unexpected|not defined|not found/i.test(line))
           .slice(-10)
           .join('\n');
-        resolve({ success: false, error: errorLines || devOutput.slice(-500) || 'Timeout: serveur non demarre apres 30s' });
+        resolve({ success: false, error: errorLines || devOutput.slice(-500) || 'Timeout : serveur non démarré après 30s' });
       }, 30000);
     });
   };
@@ -281,27 +281,27 @@ function Factory() {
       if (attempt === 0) {
         setAgentStatus('Génération du code...');
         setGenerationStep(1);
-        addLog('Agent: génération initiale');
+        addLog('Agent : génération initiale');
         const result = await generateApp(userPrompt, excelData, currentCode, dbContext);
         currentCode = result.files;
-        addLog('Agent: code generé');
+        addLog('Agent : code généré');
       } else {
         setAgentStatus(`Correction automatique (tentative ${attempt}/${MAX_FIX_ATTEMPTS})...`);
-        addLog(`Agent: fix tentative ${attempt}/${MAX_FIX_ATTEMPTS}`);
+        addLog(`Agent : correction tentative ${attempt}/${MAX_FIX_ATTEMPTS}`);
         const fixPrompt = `L'application a une erreur de compilation. Corrige le code.\n\nERREUR:\n${lastError}\n\nCorrige cette erreur et retourne le JSON complet avec TOUS les fichiers.`;
         const result = await generateApp(fixPrompt, excelData, stripDataFiles(currentCode), dbContext);
         currentCode = result.files;
-        addLog('Agent: code corrigé');
+        addLog('Agent : code corrigé');
       }
 
       setAgentStatus(attempt === 0 ? 'Compilation...' : `Recompilation (tentative ${attempt})...`);
       setGenerationStep(2);
-      addLog('Agent: compilation...');
+      addLog('Agent : compilation...');
 
       const compileResult = await tryCompile(currentCode);
 
       if (compileResult.success) {
-        addLog(`Agent: compilation reussie${attempt > 0 ? ` (apres ${attempt} fix)` : ''}`);
+        addLog(`Agent : compilation réussie${attempt > 0 ? ` (après ${attempt} corrections)` : ''}`);
         latestUrl = compileResult.url;
         setPreviewUrl(compileResult.url);
 
@@ -309,22 +309,22 @@ function Factory() {
         if (!skipReview) {
           setAgentStatus('Review qualité en cours...');
           setGenerationStep(3);
-          addLog('Agent: review qualité...');
+          addLog('Agent : review qualité...');
           try {
             const reviewResult = await generateApp(REVIEW_PROMPT, excelData, stripDataFiles(currentCode), dbContext);
-            addLog('Agent: code amelioré');
-            setAgentStatus('Recompilation apres review...');
+            addLog('Agent : code amélioré');
+            setAgentStatus('Recompilation après review...');
             const reviewCompile = await tryCompile(reviewResult.files);
             if (reviewCompile.success) {
               currentCode = reviewResult.files;
               latestUrl = reviewCompile.url;
               setPreviewUrl(reviewCompile.url);
-              addLog('Agent: review compilée avec succès');
+              addLog('Agent : review compilée avec succès');
             } else {
-              addLog('Agent: review a cassé le code, version pre-review gardée');
+              addLog('Agent : review a cassé le code, version pré-review gardée');
             }
           } catch (reviewError) {
-            addLog(`Agent: review échouée (${reviewError.message}), version pre-review gardée`);
+            addLog(`Agent : review échouée (${reviewError.message}), version pré-review gardée`);
           }
         }
 
@@ -332,29 +332,29 @@ function Factory() {
         if (!skipVision) {
           setAgentStatus('Capture du screenshot...');
           setGenerationStep(4);
-          addLog('Agent: capture screenshot...');
+          addLog('Agent : capture screenshot...');
           const screenshot = await captureScreenshot();
           if (screenshot) {
-            addLog('Agent: screenshot capture, analyse visuelle...');
+            addLog('Agent : screenshot capturé, analyse visuelle...');
             setAgentStatus('Analyse visuelle par l\'IA...');
             try {
               const visionResult = await visionAnalyze(screenshot, stripDataFiles(currentCode), excelData, dbContext);
-              addLog('Agent: améliorations visuelles reçues');
+              addLog('Agent : améliorations visuelles reçues');
               setAgentStatus('Recompilation après analyse visuelle...');
               const visionCompile = await tryCompile(visionResult.files);
               if (visionCompile.success) {
                 currentCode = visionResult.files;
                 latestUrl = visionCompile.url;
                 setPreviewUrl(visionCompile.url);
-                addLog('Agent: version visuelle compilée avec succès');
+                addLog('Agent : version visuelle compilée avec succès');
               } else {
-                addLog('Agent: corrections visuelles ont cassé le code, version précédente gardée');
+                addLog('Agent : corrections visuelles ont cassé le code, version précédente gardée');
               }
             } catch (visionError) {
-              addLog(`Agent: analyse visuelle échouée (${visionError.message}), version précédente gardée`);
+              addLog(`Agent : analyse visuelle échouée (${visionError.message}), version précédente gardée`);
             }
           } else {
-            addLog('Agent: screenshot echoué, phase vision ignorée');
+            addLog('Agent : screenshot échoué, phase vision ignorée');
           }
         }
 
@@ -363,9 +363,9 @@ function Factory() {
       }
 
       lastError = compileResult.error;
-      addLog(`Agent: erreur detectée — ${lastError.slice(0, 100)}...`);
+      addLog(`Agent : erreur détectée — ${lastError.slice(0, 100)}...`);
       if (attempt === MAX_FIX_ATTEMPTS) {
-        addLog(`Agent: échec après ${MAX_FIX_ATTEMPTS} tentatives`);
+        addLog(`Agent : échec après ${MAX_FIX_ATTEMPTS} tentatives`);
         return { success: false, error: lastError };
       }
     }
@@ -376,7 +376,7 @@ function Factory() {
     setIsLoading(true);
     setPreviewUrl(null);
     setGenerationStep(0);
-    setAgentStatus('Demarrage de l\'agent...');
+    setAgentStatus('Démarrage de l\'agent...');
     addLog(`Agent: "${prompt}"`);
     try {
       const result = await agentGenerate(prompt);
@@ -386,12 +386,12 @@ function Factory() {
         setGeneratedApp({ name: prompt.slice(0, 30), prompt, url: result.url });
         setSavedApps(prev => [...prev, { id: Date.now(), name: prompt.slice(0, 30), prompt }]);
       } else {
-        setAgentStatus(`Erreur: ${result.error.slice(0, 200)}`);
-        addLog(`Erreur finale: ${result.error}`);
+        setAgentStatus(`Erreur : ${result.error.slice(0, 200)}`);
+        addLog(`Erreur finale : ${result.error}`);
       }
       setIsLoading(false);
     } catch (error) {
-      addLog(`Erreur: ${error.message}`);
+      addLog(`Erreur : ${error.message}`);
       setAgentStatus('');
       setIsLoading(false);
       setGenerationStep(0);
@@ -410,19 +410,19 @@ function Factory() {
       if (compileResult.success) {
         setCurrentFiles(result.files);
         setPreviewUrl(compileResult.url);
-        addLog('Agent: modification reussie');
+        addLog('Agent : modification réussie');
       } else {
-        addLog('Agent: erreur sur le refine, tentative de fix...');
+        addLog('Agent : erreur sur le refine, tentative de correction...');
         const fixResult = await agentGenerate(feedback, result.files, true, true);
         if (!fixResult.success) {
-          addLog(`Agent: echec du fix — ${fixResult.error.slice(0, 100)}`);
+          addLog(`Agent : échec de la correction — ${fixResult.error.slice(0, 100)}`);
         }
       }
       setIsLoading(false);
       setFeedback('');
       setAgentStatus('');
     } catch (error) {
-      addLog(`Erreur: ${error.message}`);
+      addLog(`Erreur : ${error.message}`);
       setIsLoading(false);
       setAgentStatus('');
     }
@@ -431,7 +431,7 @@ function Factory() {
   const handleExport = async () => {
     if (Object.keys(files).length === 0) return;
     await exportToZip(files);
-    addLog('Export telecharge');
+    addLog('Export téléchargé');
   };
 
   const handlePublish = async () => {
@@ -440,10 +440,10 @@ function Factory() {
     try {
       const appName = window.prompt('Nom de l\'app:') || `app-${Date.now()}`;
       const result = await publishApp(files, appName);
-      addLog(`Publie: ${result.url}`);
+      addLog(`Publié : ${result.url}`);
       window.open(result.url, '_blank');
     } catch (error) {
-      addLog(`Erreur: ${error.message}`);
+      addLog(`Erreur : ${error.message}`);
     }
     setIsLoading(false);
   };
@@ -466,9 +466,9 @@ function Factory() {
 
   const handleTemplate = (template) => {
     const templates = {
-      finance: 'Dashboard financier avec revenus, depenses, profit et tendances mensuelles',
+      finance: 'Dashboard financier avec revenus, dépenses, profit et tendances mensuelles',
       marketing: 'Dashboard marketing avec performances des campagnes, conversions et audience',
-      research: 'Dashboard recherche avec metriques, publications et projets en cours'
+      research: 'Dashboard recherche avec métriques, publications et projets en cours'
     };
     setPrompt(templates[template]);
   };
@@ -558,7 +558,7 @@ function Factory() {
               ...styles.dot,
               background: isReady ? '#34D399' : '#F59E0B'
             }}></span>
-            {isReady ? 'Pret' : 'Chargement...'}
+            {isReady ? 'Prêt' : 'Chargement...'}
           </div>
         </div>
       </aside>
@@ -598,7 +598,7 @@ function Factory() {
           </div>
         ) : (
           <div style={styles.centerContent}>
-            <h1 style={styles.title}>Quelle analyse voulez-vous creer ?</h1>
+            <h1 style={styles.title}>Quelle analyse voulez-vous créer ?</h1>
             <div style={styles.promptContainer}>
               <textarea
                 style={styles.promptInput}
@@ -607,7 +607,7 @@ function Factory() {
                 onChange={(e) => setPrompt(e.target.value)}
                 rows={3}
               />
-              <div style={styles.dataSourceLabel}>Source de donnees</div>
+              <div style={styles.dataSourceLabel}>Source de données</div>
               <FileUpload onDataLoaded={handleDataLoaded} />
               <div style={styles.dataSeparator}>
                 <span style={styles.separatorLine}></span>
@@ -630,7 +630,7 @@ function Factory() {
                 onClick={handleGenerate}
                 disabled={!prompt.trim() || !isReady}
               >
-                Generer l'App
+                Générer l'App
               </button>
             </div>
             <div style={styles.templates}>
