@@ -92,7 +92,7 @@ Resources:
       FunctionName: app-factory-generate
       Handler: index.handler
       CodeUri: generate/
-      Timeout: 120
+      Timeout: 600
       MemorySize: 512
       Environment:
         Variables:

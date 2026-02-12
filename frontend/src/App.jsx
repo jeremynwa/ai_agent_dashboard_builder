@@ -20,7 +20,7 @@ const REVIEW_PROMPT = `Review et améliore ce code React. Vérifie et corrige SY
 2. UNITÉS: Les KPIs affichent les unités correctes (EUR, %, unités, etc.)
 3. FORMATAGE: Les nombres sont formatés (séparateurs de milliers, décimales appropriées)
 4. ESPACEMENT: Le layout est aéré, pas de contenus collés ou trop serrés
-5. COULEURS: Le design system est respecté (fond #0F0F12, cards #16161A, accent #00765F)
+5. COULEURS: Le design system est respecté (fond #0B1120, cards #111827, accent cyan #06B6D4)
 6. RESPONSIVE: Les graphiques et tableaux s'adaptent à la largeur disponible
 7. HOVER STATES: Tous les éléments cliquables ont un état hover
 8. CHARGEMENT: Si données async, afficher "Chargement..." pendant le fetch
@@ -36,7 +36,7 @@ window.addEventListener('message', function(e) {
   if (e.data && e.data.type === 'capture') {
     setTimeout(function() {
       html2canvas(document.body, {
-        backgroundColor: '#0F0F12',
+        backgroundColor: '#0B1120',
         scale: 0.5,
         logging: false,
         useCORS: true,
