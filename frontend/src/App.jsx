@@ -1,5 +1,6 @@
 // frontend/src/App.jsx
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, createContext, useContext } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { WebContainer } from '@webcontainer/api';
 import { baseFiles } from './services/files-template';
 import { generateApp, visionAnalyze, publishApp, API_BASE, DB_PROXY_URL } from './services/api';
@@ -14,6 +15,7 @@ const MAX_FIX_ATTEMPTS = 3;
 const SCREENSHOT_DELAY = 4000;
 const SCREENSHOT_TIMEOUT = 10000;
 
+// ============ AGENT PROMPTS (stay in French — Claude understands both) ============
 const REVIEW_PROMPT = `Review et améliore ce code React. Vérifie et corrige SYSTÉMATIQUEMENT :
 
 1. LABELS: Chaque graphique a un titre clair et une légende explicite
@@ -51,13 +53,151 @@ window.addEventListener('message', function(e) {
 });
 <\/script>`;
 
+// ============ I18N ============
+const translations = {
+  en: {
+    title: 'What do you want to build?',
+    subtitle: 'Describe your dashboard or app — AI generates it in seconds.',
+    promptPlaceholder: 'Describe your dashboard... e.g. sales KPIs with monthly trends, churn analysis by cohort...',
+    generateApp: 'Generate App',
+    tryPrompt: 'Try a prompt',
+    addDataSource: '+ Add data source',
+    hideDataSource: '− Hide data source',
+    newApp: 'New App',
+    recents: 'Recents',
+    engineReady: 'Engine ready',
+    booting: 'Booting...',
+    logout: 'Log out',
+    poweredBy: 'Powered by AI',
+    buildingApp: 'Building your app',
+    generatingCode: 'Generating code...',
+    compiling: 'Compiling...',
+    recompiling: 'Recompiling...',
+    qualityReview: 'Quality review...',
+    visualAnalysis: 'Visual analysis...',
+    finalRecompile: 'Final recompilation...',
+    modifying: 'Modifying...',
+    starting: 'Starting...',
+    autoFix: 'Auto-fix ({n}/{max})...',
+    stepGeneration: 'Code generation',
+    stepCompilation: 'Compilation',
+    stepReview: 'Quality review',
+    stepVision: 'Visual analysis',
+    stepFinalize: 'Finalization',
+    factory: '← Factory',
+    export: 'Export',
+    publish: 'Publish',
+    appNamePrompt: 'App name:',
+    refinePlaceholder: "Modify the app... e.g. add a chart, change colors...",
+    send: 'Send',
+    errorPrefix: 'Error: ',
+    rows: 'rows',
+    tables: 'tables',
+    suggestions: {
+      salesKpis: 'Sales KPIs',
+      churnAnalysis: 'Churn Analysis',
+      revenueTrends: 'Revenue Trends',
+      marketingRoi: 'Marketing ROI',
+      hrAnalytics: 'HR Analytics',
+      supplyChain: 'Supply Chain',
+    },
+  },
+  fr: {
+    title: 'Que voulez-vous construire ?',
+    subtitle: "Décrivez votre dashboard ou app — l'IA le génère en quelques secondes.",
+    promptPlaceholder: 'Décrivez votre dashboard... ex: KPIs ventes avec tendances mensuelles, analyse du churn par cohorte...',
+    generateApp: "Générer l'App",
+    tryPrompt: 'Essayez un prompt',
+    addDataSource: '+ Ajouter une source de données',
+    hideDataSource: '− Masquer la source de données',
+    newApp: 'Nouvelle App',
+    recents: 'Récents',
+    engineReady: 'Moteur prêt',
+    booting: 'Démarrage...',
+    logout: 'Déconnexion',
+    poweredBy: 'Propulsé par IA',
+    buildingApp: 'Construction de votre app',
+    generatingCode: 'Génération du code...',
+    compiling: 'Compilation...',
+    recompiling: 'Recompilation...',
+    qualityReview: 'Review qualité...',
+    visualAnalysis: 'Analyse visuelle...',
+    finalRecompile: 'Recompilation finale...',
+    modifying: 'Modification...',
+    starting: 'Démarrage...',
+    autoFix: 'Correction auto ({n}/{max})...',
+    stepGeneration: 'Génération du code',
+    stepCompilation: 'Compilation',
+    stepReview: 'Review qualité',
+    stepVision: 'Analyse visuelle',
+    stepFinalize: 'Finalisation',
+    factory: '← Factory',
+    export: 'Exporter',
+    publish: 'Publier',
+    appNamePrompt: "Nom de l'app :",
+    refinePlaceholder: "Modifie l'app... ex: ajoute un graphique, change les couleurs...",
+    send: 'Envoyer',
+    errorPrefix: 'Erreur : ',
+    rows: 'lignes',
+    tables: 'tables',
+    suggestions: {
+      salesKpis: 'KPIs Ventes',
+      churnAnalysis: 'Analyse Churn',
+      revenueTrends: 'Tendances Revenus',
+      marketingRoi: 'ROI Marketing',
+      hrAnalytics: 'Analytics RH',
+      supplyChain: 'Supply Chain',
+    },
+  },
+};
+
+const PROMPT_SUGGESTIONS = [
+  { key: 'salesKpis', prompt: 'Dashboard des ventes avec KPIs revenus, marge, panier moyen et tendances mensuelles' },
+  { key: 'churnAnalysis', prompt: "Dashboard d'analyse du churn avec cohortes, taux de rétention et prédictions" },
+  { key: 'revenueTrends', prompt: 'Dashboard revenus avec évolution MRR/ARR, segments clients et forecasting' },
+  { key: 'marketingRoi', prompt: "Dashboard marketing avec ROI par canal, funnel de conversion et coût d'acquisition" },
+  { key: 'hrAnalytics', prompt: 'Dashboard RH avec effectifs, turnover, recrutement et satisfaction employés' },
+  { key: 'supplyChain', prompt: 'Dashboard supply chain avec stocks, délais livraison et performance fournisseurs' },
+];
+
+// ============ LANG CONTEXT ============
+const LangContext = createContext({ lang: 'en', setLang: () => {}, t: (k) => k });
+
+function LangProvider({ children }) {
+  const [lang, setLang] = useState(() => {
+    try { return localStorage.getItem('factory-lang') || 'en'; } catch { return 'en'; }
+  });
+
+  const t = (key) => {
+    const keys = key.split('.');
+    let val = translations[lang];
+    for (const k of keys) val = val?.[k];
+    return val || key;
+  };
+
+  useEffect(() => {
+    try { localStorage.setItem('factory-lang', lang); } catch {}
+  }, [lang]);
+
+  return (
+    <LangContext.Provider value={{ lang, setLang, t }}>
+      {children}
+    </LangContext.Provider>
+  );
+}
+
+function useLang() {
+  return useContext(LangContext);
+}
+
 // ============ AUTH GATE ============
-// Wraps entire app — shows Login if not authenticated
 function App() {
   return (
-    <AuthProvider>
-      <AuthGate />
-    </AuthProvider>
+    <LangProvider>
+      <AuthProvider>
+        <AuthGate />
+      </AuthProvider>
+    </LangProvider>
   );
 }
 
@@ -67,25 +207,115 @@ function AuthGate() {
   if (loading) {
     return (
       <div style={styles.loadingScreen}>
-        <div style={styles.loadingText}>Chargement...</div>
+        <motion.div
+          style={styles.loadingSpinner}
+          animate={{ rotate: 360 }}
+          transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}
+        />
       </div>
     );
   }
 
-  if (!user) {
-    return <Login />;
-  }
-
+  if (!user) return <Login />;
   return <Factory />;
 }
 
-// ============ MAIN FACTORY (previously the entire App) ============
+// ============ HELPER: Flatten WebContainer file tree to flat map ============
+function flattenFiles(obj, path = '') {
+  const result = {};
+  for (const [name, value] of Object.entries(obj)) {
+    const fullPath = path ? `${path}/${name}` : name;
+    if (value.directory) {
+      Object.assign(result, flattenFiles(value.directory, fullPath));
+    } else if (value.file) {
+      result[fullPath] = value.file.contents;
+    }
+  }
+  return result;
+}
+
+// ============ SVG ICONS ============
+const Icons = {
+  logo: () => (
+    <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+      <rect width="28" height="28" rx="6" fill="#06B6D4" fillOpacity="0.15"/>
+      <path d="M8 10h12M8 14h8M8 18h10" stroke="#06B6D4" strokeWidth="1.5" strokeLinecap="round"/>
+      <circle cx="21" cy="18" r="2.5" stroke="#06B6D4" strokeWidth="1.5"/>
+    </svg>
+  ),
+  sparkle: () => (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ marginRight: '8px' }}>
+      <path d="M8 1l1.5 4.5L14 7l-4.5 1.5L8 13l-1.5-4.5L2 7l4.5-1.5L8 1z" fill="currentColor" fillOpacity="0.9"/>
+    </svg>
+  ),
+  upload: () => (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ marginRight: '6px', flexShrink: 0 }}>
+      <path d="M8 2v8M4.5 5.5L8 2l3.5 3.5M3 11v2h10v-2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  ),
+  database: () => (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ marginRight: '6px', flexShrink: 0 }}>
+      <ellipse cx="8" cy="4" rx="5" ry="2" stroke="currentColor" strokeWidth="1.2"/>
+      <path d="M3 4v8c0 1.1 2.24 2 5 2s5-.9 5-2V4" stroke="currentColor" strokeWidth="1.2"/>
+      <path d="M3 8c0 1.1 2.24 2 5 2s5-.9 5-2" stroke="currentColor" strokeWidth="1.2"/>
+    </svg>
+  ),
+  app: () => (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+      <rect x="1" y="1" width="12" height="12" rx="3" stroke="currentColor" strokeWidth="1.2"/>
+      <path d="M1 5h12" stroke="currentColor" strokeWidth="1.2"/>
+      <circle cx="3.5" cy="3" r="0.7" fill="currentColor"/>
+      <circle cx="5.5" cy="3" r="0.7" fill="currentColor"/>
+    </svg>
+  ),
+};
+
+// ============ LANG TOGGLE ============
+function LangToggle() {
+  const { lang, setLang } = useLang();
+  return (
+    <div style={styles.langToggle}>
+      <button
+        style={{ ...styles.langButton, ...(lang === 'en' ? styles.langButtonActive : {}) }}
+        onClick={() => setLang('en')}
+      >EN</button>
+      <button
+        style={{ ...styles.langButton, ...(lang === 'fr' ? styles.langButtonActive : {}) }}
+        onClick={() => setLang('fr')}
+      >FR</button>
+    </div>
+  );
+}
+
+// ============ MOTION HELPERS ============
+const fadeUp = {
+  initial: { opacity: 0, y: 12 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -8 },
+};
+
+const fadeIn = {
+  initial: { opacity: 0 },
+  animate: { opacity: 1 },
+  exit: { opacity: 0 },
+};
+
+const staggerContainer = {
+  animate: { transition: { staggerChildren: 0.05 } },
+};
+
+const staggerItem = {
+  initial: { opacity: 0, y: 8 },
+  animate: { opacity: 1, y: 0 },
+};
+
+// ============ MAIN FACTORY ============
 function Factory() {
   const { user, logout } = useAuth();
+  const { t } = useLang();
 
   const [files, setFiles] = useState({});
   const [previewUrl, setPreviewUrl] = useState(null);
-  const [logs, setLogs] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const [excelData, setExcelData] = useState(null);
@@ -97,49 +327,47 @@ function Factory() {
   const [agentStatus, setAgentStatus] = useState('');
   const [feedback, setFeedback] = useState('');
   const [currentFiles, setCurrentFiles] = useState({});
+  const [showDataSource, setShowDataSource] = useState(false);
   const webcontainerRef = useRef(null);
   const bootedRef = useRef(false);
   const iframeRef = useRef(null);
   const devProcessRef = useRef(null);
   const serverReadyCleanupRef = useRef(null);
+  const logsRef = useRef([]);
 
   const generationSteps = [
-    { label: 'Génération du code', done: generationStep > 0 },
-    { label: 'Compilation', done: generationStep > 1 },
-    { label: 'Review qualité', done: generationStep > 2 },
-    { label: 'Analyse visuelle', done: generationStep > 3 },
-    { label: 'Finalisation', done: generationStep > 4 },
+    { label: t('stepGeneration'), done: generationStep > 0 },
+    { label: t('stepCompilation'), done: generationStep > 1 },
+    { label: t('stepReview'), done: generationStep > 2 },
+    { label: t('stepVision'), done: generationStep > 3 },
+    { label: t('stepFinalize'), done: generationStep > 4 },
   ];
 
   const addLog = (message) => {
-    setLogs(prev => [...prev, message]);
+    logsRef.current = [...logsRef.current, message];
   };
 
   useEffect(() => {
     if (bootedRef.current) return;
     bootedRef.current = true;
-    addLog('Initialisation...');
     WebContainer.boot()
       .then((wc) => {
         webcontainerRef.current = wc;
-        addLog('Environnement prêt');
         setIsReady(true);
       })
-      .catch((error) => {
-        addLog(`Erreur : ${error.message}`);
-      });
+      .catch((error) => addLog(`Error: ${error.message}`));
   }, []);
 
   const handleDataLoaded = (data) => {
     setExcelData(data);
     setDbData(null);
-    addLog(`Fichier chargé : ${data.fileName}`);
+    addLog(`File loaded: ${data.fileName}`);
   };
 
   const handleSchemaLoaded = (data) => {
     setDbData(data);
     setExcelData(null);
-    addLog(`DB connectée : ${data.totalTables} tables`);
+    addLog(`DB connected: ${data.totalTables} tables`);
   };
 
   const injectData = (resultFiles) => {
@@ -181,7 +409,6 @@ function Factory() {
     setFiles(appFiles);
     await webcontainerRef.current.mount(appFiles);
 
-    // Kill previous dev server
     if (devProcessRef.current) {
       try { devProcessRef.current.kill(); } catch (_) {}
       devProcessRef.current = null;
@@ -232,7 +459,7 @@ function Factory() {
           .filter(line => /error|failed|cannot|unexpected|not defined|not found/i.test(line))
           .slice(-10)
           .join('\n');
-        resolve({ success: false, error: errorLines || devOutput.slice(-500) || 'Timeout : serveur non démarré après 30s' });
+        resolve({ success: false, error: errorLines || devOutput.slice(-500) || 'Timeout: server not started after 30s' });
       }, 30000);
     });
   };
@@ -279,82 +506,60 @@ function Factory() {
 
     for (let attempt = 0; attempt <= MAX_FIX_ATTEMPTS; attempt++) {
       if (attempt === 0) {
-        setAgentStatus('Génération du code...');
+        setAgentStatus(t('generatingCode'));
         setGenerationStep(1);
-        addLog('Agent : génération initiale');
         const result = await generateApp(userPrompt, excelData, currentCode, dbContext);
         currentCode = result.files;
-        addLog('Agent : code généré');
       } else {
-        setAgentStatus(`Correction automatique (tentative ${attempt}/${MAX_FIX_ATTEMPTS})...`);
-        addLog(`Agent : correction tentative ${attempt}/${MAX_FIX_ATTEMPTS}`);
+        setAgentStatus(t('autoFix').replace('{n}', attempt).replace('{max}', MAX_FIX_ATTEMPTS));
         const fixPrompt = `L'application a une erreur de compilation. Corrige le code.\n\nERREUR:\n${lastError}\n\nCorrige cette erreur et retourne le JSON complet avec TOUS les fichiers.`;
         const result = await generateApp(fixPrompt, excelData, stripDataFiles(currentCode), dbContext);
         currentCode = result.files;
-        addLog('Agent : code corrigé');
       }
 
-      setAgentStatus(attempt === 0 ? 'Compilation...' : `Recompilation (tentative ${attempt})...`);
+      setAgentStatus(attempt === 0 ? t('compiling') : t('recompiling'));
       setGenerationStep(2);
-      addLog('Agent : compilation...');
 
       const compileResult = await tryCompile(currentCode);
 
       if (compileResult.success) {
-        addLog(`Agent : compilation réussie${attempt > 0 ? ` (après ${attempt} corrections)` : ''}`);
         latestUrl = compileResult.url;
         setPreviewUrl(compileResult.url);
 
-        // PHASE 2: Quality Review
         if (!skipReview) {
-          setAgentStatus('Review qualité en cours...');
+          setAgentStatus(t('qualityReview'));
           setGenerationStep(3);
-          addLog('Agent : review qualité...');
           try {
             const reviewResult = await generateApp(REVIEW_PROMPT, excelData, stripDataFiles(currentCode), dbContext);
-            addLog('Agent : code amélioré');
-            setAgentStatus('Recompilation après review...');
+            setAgentStatus(t('recompiling'));
             const reviewCompile = await tryCompile(reviewResult.files);
             if (reviewCompile.success) {
               currentCode = reviewResult.files;
               latestUrl = reviewCompile.url;
               setPreviewUrl(reviewCompile.url);
-              addLog('Agent : review compilée avec succès');
-            } else {
-              addLog('Agent : review a cassé le code, version pré-review gardée');
             }
           } catch (reviewError) {
-            addLog(`Agent : review échouée (${reviewError.message}), version pré-review gardée`);
+            addLog(`Review failed: ${reviewError.message}`);
           }
         }
 
-        // PHASE 3: Vision Analysis
         if (!skipVision) {
-          setAgentStatus('Capture du screenshot...');
+          setAgentStatus(t('visualAnalysis'));
           setGenerationStep(4);
-          addLog('Agent : capture screenshot...');
           const screenshot = await captureScreenshot();
           if (screenshot) {
-            addLog('Agent : screenshot capturé, analyse visuelle...');
-            setAgentStatus('Analyse visuelle par l\'IA...');
             try {
               const visionResult = await visionAnalyze(screenshot, stripDataFiles(currentCode), excelData, dbContext);
-              addLog('Agent : améliorations visuelles reçues');
-              setAgentStatus('Recompilation après analyse visuelle...');
+              setAgentStatus(t('finalRecompile'));
               const visionCompile = await tryCompile(visionResult.files);
               if (visionCompile.success) {
                 currentCode = visionResult.files;
                 latestUrl = visionCompile.url;
                 setPreviewUrl(visionCompile.url);
-                addLog('Agent : version visuelle compilée avec succès');
-              } else {
-                addLog('Agent : corrections visuelles ont cassé le code, version précédente gardée');
               }
             } catch (visionError) {
-              addLog(`Agent : analyse visuelle échouée (${visionError.message}), version précédente gardée`);
+              addLog(`Vision failed: ${visionError.message}`);
             }
-          } else {
-            addLog('Agent : screenshot échoué, phase vision ignorée');
           }
         }
 
@@ -363,9 +568,7 @@ function Factory() {
       }
 
       lastError = compileResult.error;
-      addLog(`Agent : erreur détectée — ${lastError.slice(0, 100)}...`);
       if (attempt === MAX_FIX_ATTEMPTS) {
-        addLog(`Agent : échec après ${MAX_FIX_ATTEMPTS} tentatives`);
         return { success: false, error: lastError };
       }
     }
@@ -376,8 +579,7 @@ function Factory() {
     setIsLoading(true);
     setPreviewUrl(null);
     setGenerationStep(0);
-    setAgentStatus('Démarrage de l\'agent...');
-    addLog(`Agent: "${prompt}"`);
+    setAgentStatus(t('starting'));
     try {
       const result = await agentGenerate(prompt);
       if (result.success) {
@@ -386,12 +588,11 @@ function Factory() {
         setGeneratedApp({ name: prompt.slice(0, 30), prompt, url: result.url });
         setSavedApps(prev => [...prev, { id: Date.now(), name: prompt.slice(0, 30), prompt }]);
       } else {
-        setAgentStatus(`Erreur : ${result.error.slice(0, 200)}`);
-        addLog(`Erreur finale : ${result.error}`);
+        setAgentStatus(`${t('errorPrefix')}${result.error.slice(0, 200)}`);
       }
       setIsLoading(false);
     } catch (error) {
-      addLog(`Erreur : ${error.message}`);
+      addLog(`Error: ${error.message}`);
       setAgentStatus('');
       setIsLoading(false);
       setGenerationStep(0);
@@ -401,8 +602,7 @@ function Factory() {
   const handleRefine = async () => {
     if (!feedback.trim() || !webcontainerRef.current) return;
     setIsLoading(true);
-    setAgentStatus('Modification en cours...');
-    addLog(`Agent refine: "${feedback}"`);
+    setAgentStatus(t('modifying'));
     try {
       const dbContext = dbData ? { type: dbData.type, schema: dbData.schema } : null;
       const result = await generateApp(feedback, excelData, stripDataFiles(currentFiles), dbContext);
@@ -410,19 +610,15 @@ function Factory() {
       if (compileResult.success) {
         setCurrentFiles(result.files);
         setPreviewUrl(compileResult.url);
-        addLog('Agent : modification réussie');
       } else {
-        addLog('Agent : erreur sur le refine, tentative de correction...');
         const fixResult = await agentGenerate(feedback, result.files, true, true);
-        if (!fixResult.success) {
-          addLog(`Agent : échec de la correction — ${fixResult.error.slice(0, 100)}`);
-        }
+        if (!fixResult.success) addLog(`Fix failed: ${fixResult.error.slice(0, 100)}`);
       }
       setIsLoading(false);
       setFeedback('');
       setAgentStatus('');
     } catch (error) {
-      addLog(`Erreur : ${error.message}`);
+      addLog(`Error: ${error.message}`);
       setIsLoading(false);
       setAgentStatus('');
     }
@@ -431,19 +627,18 @@ function Factory() {
   const handleExport = async () => {
     if (Object.keys(files).length === 0) return;
     await exportToZip(files);
-    addLog('Export téléchargé');
   };
 
   const handlePublish = async () => {
     if (Object.keys(files).length === 0) return;
     setIsLoading(true);
     try {
-      const appName = window.prompt('Nom de l\'app:') || `app-${Date.now()}`;
-      const result = await publishApp(files, appName);
-      addLog(`Publié : ${result.url}`);
+      const appName = window.prompt(t('appNamePrompt')) || `app-${Date.now()}`;
+      const result = await publishApp(flattenFiles(files), appName);
+      addLog(`Published: ${result.url}`);
       window.open(result.url, '_blank');
     } catch (error) {
-      addLog(`Erreur : ${error.message}`);
+      addLog(`Error: ${error.message}`);
     }
     setIsLoading(false);
   };
@@ -455,7 +650,7 @@ function Factory() {
     setFeedback('');
     setCurrentFiles({});
     setFiles({});
-    setLogs([]);
+    logsRef.current = [];
     setGenerationStep(0);
     setAgentStatus('');
     if (devProcessRef.current) {
@@ -464,16 +659,7 @@ function Factory() {
     }
   };
 
-  const handleTemplate = (template) => {
-    const templates = {
-      finance: 'Dashboard financier avec revenus, dépenses, profit et tendances mensuelles',
-      marketing: 'Dashboard marketing avec performances des campagnes, conversions et audience',
-      research: 'Dashboard recherche avec métriques, publications et projets en cours'
-    };
-    setPrompt(templates[template]);
-  };
-
-  // ============ ETAT 3: App Generee (plein ecran) ============
+  // ============ GENERATED APP VIEW (fullscreen) ============
   if (generatedApp && previewUrl) {
     return (
       <div style={styles.appFullScreen}>
@@ -483,22 +669,27 @@ function Factory() {
           style={styles.fullScreenPreview}
           title="Generated App"
         />
-        <div style={styles.bottomBar}>
+        <motion.div
+          style={styles.bottomBar}
+          initial={{ y: 60 }}
+          animate={{ y: 0 }}
+          transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+        >
           <div style={styles.bottomActions}>
             <button onClick={handleBackToFactory} style={styles.floatingButton}>
-              ← Factory
+              {t('factory')}
             </button>
             <button onClick={handleExport} style={styles.floatingButton}>
-              Exporter
+              {t('export')}
             </button>
             <button onClick={handlePublish} style={styles.floatingButtonPrimary}>
-              Publier
+              {t('publish')}
             </button>
           </div>
           <div style={styles.feedbackContainer}>
             <input
               style={styles.feedbackInput}
-              placeholder="Modifie l'app... ex: ajoute un graphique, change les couleurs..."
+              placeholder={t('refinePlaceholder')}
               value={feedback}
               onChange={(e) => setFeedback(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleRefine()}
@@ -509,403 +700,673 @@ function Factory() {
               onClick={handleRefine}
               disabled={isLoading || !feedback.trim()}
             >
-              {isLoading ? 'Modification...' : 'Envoyer'}
+              {isLoading ? '...' : t('send')}
             </button>
           </div>
-        </div>
+        </motion.div>
       </div>
     );
   }
 
-  // ============ ETAT 1 & 2: Factory Home / Generation ============
+  // ============ DATA SOURCE INDICATOR ============
+  const dataSourceLabel = excelData
+    ? `${excelData.fileName} — ${excelData.totalRows} ${t('rows')}`
+    : dbData
+    ? `${dbData.totalTables} ${t('tables')} (${dbData.tableNames.slice(0, 3).join(', ')}${dbData.tableNames.length > 3 ? '...' : ''})`
+    : null;
+
+  // ============ FACTORY HOME / GENERATION ============
   return (
-    <div style={styles.container}>
+    <motion.div
+      style={styles.container}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.4 }}
+    >
+      <div style={styles.gridPattern} />
+
       {previewUrl && isLoading && (
         <iframe ref={iframeRef} src={previewUrl} style={styles.hiddenIframe} title="Capture" />
       )}
 
+      {/* ---- SIDEBAR ---- */}
       <aside style={styles.sidebar}>
-        <div style={styles.logo}>FACTORY</div>
+        <div style={styles.logoRow}>
+          <Icons.logo />
+          <span style={styles.logoText}>Factory</span>
+          <span style={styles.versionBadge}>beta</span>
+        </div>
 
         <button
           style={styles.newAppButton}
           onClick={() => { setPrompt(''); setGenerationStep(0); setIsLoading(false); setAgentStatus(''); }}
         >
-          + New App
+          <span style={{ marginRight: '6px', fontSize: '16px' }}>+</span>
+          {t('newApp')}
         </button>
 
-        <div style={styles.sectionLabel}>Mes Apps</div>
-        <nav style={styles.appList}>
-          {savedApps.length === 0 ? (
-            <div style={styles.emptyState}>Aucune app</div>
-          ) : (
-            savedApps.map(app => (
-              <div key={app.id} style={styles.appItem}>{app.name}</div>
-            ))
+        <AnimatePresence>
+          {savedApps.length > 0 && (
+            <motion.div {...fadeIn} transition={{ duration: 0.2 }}>
+              <div style={styles.sectionLabel}>{t('recents')}</div>
+              <nav style={styles.appList}>
+                {savedApps.slice(-8).reverse().map((app, i) => (
+                  <motion.div
+                    key={app.id}
+                    style={styles.appItem}
+                    initial={{ opacity: 0, x: -12 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.04, duration: 0.25 }}
+                  >
+                    <span style={{ marginRight: '8px', opacity: 0.5 }}><Icons.app /></span>
+                    <span style={styles.appItemText}>{app.name}</span>
+                  </motion.div>
+                ))}
+              </nav>
+            </motion.div>
           )}
-        </nav>
+        </AnimatePresence>
 
         <div style={styles.sidebarFooter}>
-          {/* USER INFO + LOGOUT */}
           <div style={styles.userRow}>
+            <div style={styles.userAvatar}>
+              {(user?.email || '?')[0].toUpperCase()}
+            </div>
             <span style={styles.userEmail}>{user?.email}</span>
-            <button onClick={logout} style={styles.logoutButton}>
-              Déconnexion
-            </button>
+            <button onClick={logout} style={styles.logoutButton} title={t('logout')}>↗</button>
           </div>
-          <div style={styles.statusDot}>
-            <span style={{
-              ...styles.dot,
-              background: isReady ? '#34D399' : '#F59E0B'
-            }}></span>
-            {isReady ? 'Prêt' : 'Chargement...'}
+          <div style={styles.footerMeta}>
+            <div style={styles.statusRow}>
+              <motion.span
+                style={{ ...styles.dot, background: isReady ? '#34D399' : '#F59E0B' }}
+                animate={isReady ? {} : { opacity: [1, 0.3, 1] }}
+                transition={{ duration: 1.2, repeat: Infinity }}
+              />
+              <span style={styles.statusText}>{isReady ? t('engineReady') : t('booting')}</span>
+            </div>
+            <LangToggle />
           </div>
         </div>
       </aside>
 
+      {/* ---- MAIN CONTENT ---- */}
       <main style={styles.main}>
-        {isLoading ? (
-          <div style={styles.generationScreen}>
-            <div style={styles.generationCard}>
-              <div style={styles.progressBar}>
-                <div style={{
-                  ...styles.progressFill,
-                  width: `${(generationStep / 5) * 100}%`
-                }}></div>
-              </div>
-              <MatrixRain step={generationStep} />
-              <div style={styles.generationTitle}>Agent IA en action</div>
-              {agentStatus && <div style={styles.agentStatus}>{agentStatus}</div>}
-              <div style={styles.stepsList}>
-                {generationSteps.map((step, index) => (
-                  <div key={index} style={styles.stepItem}>
-                    <span style={{
-                      ...styles.stepIcon,
-                      color: step.done ? '#34D399' : generationStep === index + 1 ? '#F59E0B' : '#52525B'
-                    }}>
-                      {step.done ? 'V' : generationStep === index + 1 ? 'O' : 'o'}
-                    </span>
-                    <span style={{
-                      ...styles.stepLabel,
-                      color: step.done ? '#FFFFFF' : generationStep === index + 1 ? '#FFFFFF' : '#52525B'
-                    }}>
-                      {step.label}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div style={styles.centerContent}>
-            <h1 style={styles.title}>Quelle analyse voulez-vous créer ?</h1>
-            <div style={styles.promptContainer}>
-              <textarea
-                style={styles.promptInput}
-                placeholder='Ex: "Dashboard des ventes Q4 avec KPIs, tendances et alertes"'
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                rows={3}
-              />
-              <div style={styles.dataSourceLabel}>Source de données</div>
-              <FileUpload onDataLoaded={handleDataLoaded} />
-              <div style={styles.dataSeparator}>
-                <span style={styles.separatorLine}></span>
-                <span style={styles.separatorText}>ou</span>
-                <span style={styles.separatorLine}></span>
-              </div>
-              <DbConnect onSchemaLoaded={handleSchemaLoaded} apiBase={API_BASE} />
-              {excelData && (
-                <div style={styles.fileInfo}>
-                  Fichier: {excelData.fileName} ({excelData.totalRows} lignes)
+        <AnimatePresence mode="wait">
+          {isLoading ? (
+            /* ---- GENERATION STATE ---- */
+            <motion.div
+              key="generation"
+              style={styles.generationScreen}
+              {...fadeUp}
+              transition={{ duration: 0.35 }}
+            >
+              <div style={styles.generationCard}>
+                <div style={styles.progressBar}>
+                  <motion.div
+                    style={styles.progressFill}
+                    animate={{ width: `${(generationStep / 5) * 100}%` }}
+                    transition={{ duration: 0.5, ease: 'easeOut' }}
+                  />
                 </div>
-              )}
-              {dbData && (
-                <div style={styles.fileInfo}>
-                  DB: {dbData.totalTables} tables ({dbData.tableNames.join(', ')})
-                </div>
-              )}
-              <button
-                style={{ ...styles.generateButton, opacity: (!prompt.trim() || !isReady) ? 0.5 : 1 }}
-                onClick={handleGenerate}
-                disabled={!prompt.trim() || !isReady}
-              >
-                Générer l'App
-              </button>
-            </div>
-            <div style={styles.templates}>
-              <div style={styles.templateCard} onClick={() => handleTemplate('finance')}>
-                <div style={styles.templateIcon}>$</div>
-                <div style={styles.templateName}>Finance</div>
-                <div style={styles.templateDesc}>Template</div>
-              </div>
-              <div style={styles.templateCard} onClick={() => handleTemplate('marketing')}>
-                <div style={styles.templateIcon}>M</div>
-                <div style={styles.templateName}>Marketing</div>
-                <div style={styles.templateDesc}>Template</div>
-              </div>
-              <div style={styles.templateCard} onClick={() => handleTemplate('research')}>
-                <div style={styles.templateIcon}>R</div>
-                <div style={styles.templateName}>Research</div>
-                <div style={styles.templateDesc}>Template</div>
-              </div>
-            </div>
-            {logs.length > 0 && (
-              <div style={styles.logsContainer}>
-                <div style={styles.logsTitle}>Logs</div>
-                <div style={styles.logs}>
-                  {logs.slice(-5).map((log, i) => (
-                    <div key={i} style={styles.logLine}>{log}</div>
+                <MatrixRain step={generationStep} />
+                <motion.div
+                  style={styles.generationTitle}
+                  {...fadeUp}
+                  transition={{ delay: 0.1, duration: 0.3 }}
+                >
+                  {t('buildingApp')}
+                </motion.div>
+                <AnimatePresence mode="wait">
+                  {agentStatus && (
+                    <motion.div
+                      key={agentStatus}
+                      style={styles.agentStatus}
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      {agentStatus}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+                <div style={styles.stepsList}>
+                  {generationSteps.map((step, index) => (
+                    <motion.div
+                      key={index}
+                      style={styles.stepItem}
+                      initial={{ opacity: 0, x: -16 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.08, duration: 0.3 }}
+                    >
+                      <motion.span
+                        style={{
+                          ...styles.stepIcon,
+                          color: step.done ? '#34D399' : generationStep === index + 1 ? '#06B6D4' : '#3F3F46',
+                        }}
+                        animate={generationStep === index + 1 ? { scale: [1, 1.3, 1] } : {}}
+                        transition={{ duration: 0.6, repeat: generationStep === index + 1 ? Infinity : 0 }}
+                      >
+                        {step.done ? '✓' : generationStep === index + 1 ? '●' : '○'}
+                      </motion.span>
+                      <span style={{
+                        ...styles.stepLabel,
+                        color: step.done ? '#E4E4E7' : generationStep === index + 1 ? '#FFFFFF' : '#52525B'
+                      }}>
+                        {step.label}
+                      </span>
+                    </motion.div>
                   ))}
                 </div>
               </div>
-            )}
-          </div>
-        )}
+            </motion.div>
+          ) : (
+            /* ---- HOME STATE ---- */
+            <motion.div
+              key="home"
+              style={styles.centerContent}
+              {...fadeUp}
+              transition={{ duration: 0.4 }}
+            >
+              <motion.div
+                style={styles.heroSection}
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.1 }}
+              >
+                <h1 style={styles.title}>{t('title')}</h1>
+                <p style={styles.subtitle}>{t('subtitle')}</p>
+              </motion.div>
+
+              <motion.div
+                style={styles.promptContainer}
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.2 }}
+              >
+                <textarea
+                  style={styles.promptInput}
+                  placeholder={t('promptPlaceholder')}
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleGenerate();
+                    }
+                  }}
+                  rows={3}
+                />
+
+                {/* Data source */}
+                <div style={styles.dataRow}>
+                  {dataSourceLabel ? (
+                    <motion.div
+                      style={styles.dataChip}
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ type: 'spring', damping: 20 }}
+                    >
+                      {excelData ? <Icons.upload /> : <Icons.database />}
+                      <span style={styles.dataChipText}>{dataSourceLabel}</span>
+                      <button
+                        style={styles.dataChipRemove}
+                        onClick={() => { setExcelData(null); setDbData(null); setShowDataSource(false); }}
+                      >×</button>
+                    </motion.div>
+                  ) : (
+                    <button
+                      style={styles.dataSourceToggle}
+                      onClick={() => setShowDataSource(!showDataSource)}
+                    >
+                      {showDataSource ? t('hideDataSource') : t('addDataSource')}
+                    </button>
+                  )}
+                </div>
+
+                <AnimatePresence>
+                  {showDataSource && !dataSourceLabel && (
+                    <motion.div
+                      style={styles.dataSourcePanel}
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.25, ease: 'easeInOut' }}
+                    >
+                      <div>
+                        <FileUpload onDataLoaded={(data) => { handleDataLoaded(data); setShowDataSource(false); }} />
+                      </div>
+                      <div style={styles.dataSeparator}>
+                        <span style={styles.separatorLine} />
+                        <span style={styles.separatorText}>or</span>
+                        <span style={styles.separatorLine} />
+                      </div>
+                      <div>
+                        <DbConnect onSchemaLoaded={(data) => { handleSchemaLoaded(data); setShowDataSource(false); }} apiBase={API_BASE} />
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                <motion.button
+                  style={{
+                    ...styles.generateButton,
+                    opacity: (!prompt.trim() || !isReady) ? 0.4 : 1,
+                    cursor: (!prompt.trim() || !isReady) ? 'default' : 'pointer',
+                  }}
+                  onClick={handleGenerate}
+                  disabled={!prompt.trim() || !isReady}
+                  whileHover={prompt.trim() && isReady ? { scale: 1.015 } : {}}
+                  whileTap={prompt.trim() && isReady ? { scale: 0.985 } : {}}
+                >
+                  <Icons.sparkle />
+                  {t('generateApp')}
+                </motion.button>
+              </motion.div>
+
+              {/* Suggestions */}
+              <motion.div
+                style={styles.suggestionsSection}
+                initial="initial"
+                animate="animate"
+                variants={staggerContainer}
+              >
+                <motion.div
+                  style={styles.suggestionsLabel}
+                  variants={staggerItem}
+                  transition={{ duration: 0.3, delay: 0.3 }}
+                >
+                  {t('tryPrompt')}
+                </motion.div>
+                <div style={styles.suggestionsGrid}>
+                  {PROMPT_SUGGESTIONS.map((s, i) => (
+                    <motion.button
+                      key={s.key}
+                      style={styles.suggestionChip}
+                      onClick={() => setPrompt(s.prompt)}
+                      variants={staggerItem}
+                      transition={{ duration: 0.3, delay: 0.35 + i * 0.05 }}
+                      whileHover={{ scale: 1.04, borderColor: 'rgba(6, 182, 212, 0.3)' }}
+                      whileTap={{ scale: 0.97 }}
+                    >
+                      {t(`suggestions.${s.key}`)}
+                    </motion.button>
+                  ))}
+                </div>
+              </motion.div>
+
+              <motion.div
+                style={styles.footerRow}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.6, duration: 0.5 }}
+              >
+                <span style={styles.footerText}>{t('poweredBy')}</span>
+                <span style={styles.footerDot}>·</span>
+                <span style={styles.footerText}>v0.1-beta</span>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </main>
-    </div>
+    </motion.div>
   );
 }
 
+// ============ STYLES ============
 const styles = {
-  // Auth loading screen
   loadingScreen: {
     minHeight: '100vh',
-    background: '#0F0F12',
+    background: '#09090B',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  loadingText: {
-    color: '#71717A',
-    fontSize: '14px',
-    fontFamily: 'Inter, system-ui, sans-serif',
+  loadingSpinner: {
+    width: '24px',
+    height: '24px',
+    border: '2px solid #27272A',
+    borderTop: '2px solid #06B6D4',
+    borderRadius: '50%',
   },
-  // Main layout
   container: {
     display: 'grid',
     gridTemplateColumns: '260px 1fr',
     minHeight: '100vh',
-    background: '#0F0F12',
-    fontFamily: 'Inter, system-ui, sans-serif',
-    color: '#FFFFFF',
+    background: '#09090B',
+    fontFamily: "'DM Sans', 'Inter', system-ui, -apple-system, sans-serif",
+    color: '#FAFAFA',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  gridPattern: {
+    position: 'fixed',
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundImage:
+      'linear-gradient(rgba(6, 182, 212, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(6, 182, 212, 0.03) 1px, transparent 1px)',
+    backgroundSize: '64px 64px',
+    pointerEvents: 'none',
+    zIndex: 0,
   },
   sidebar: {
-    background: '#16161A',
-    borderRight: '1px solid #2E2E36',
-    padding: '24px 16px',
+    background: '#0F0F12',
+    borderRight: '1px solid rgba(63, 63, 70, 0.4)',
+    padding: '20px 14px',
     display: 'flex',
     flexDirection: 'column',
+    zIndex: 1,
   },
-  logo: {
-    fontSize: '12px',
-    fontWeight: '700',
-    letterSpacing: '0.1em',
-    color: '#FFFFFF',
+  logoRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    padding: '0 8px',
     marginBottom: '24px',
-    paddingLeft: '12px',
+  },
+  logoText: {
+    fontSize: '15px',
+    fontWeight: '600',
+    color: '#FAFAFA',
+    letterSpacing: '-0.01em',
+  },
+  versionBadge: {
+    fontSize: '9px',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    color: '#06B6D4',
+    background: 'rgba(6, 182, 212, 0.1)',
+    padding: '2px 6px',
+    borderRadius: '4px',
+    marginLeft: 'auto',
   },
   newAppButton: {
-    background: '#00765F',
-    color: 'white',
-    border: 'none',
-    padding: '12px 16px',
+    background: 'rgba(6, 182, 212, 0.1)',
+    color: '#06B6D4',
+    border: '1px solid rgba(6, 182, 212, 0.2)',
+    padding: '10px 14px',
     borderRadius: '8px',
     fontWeight: '500',
-    fontSize: '14px',
+    fontSize: '13px',
     cursor: 'pointer',
-    marginBottom: '32px',
-    transition: 'all 0.2s ease',
+    marginBottom: '28px',
+    transition: 'all 0.15s ease',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontFamily: 'inherit',
   },
   sectionLabel: {
     fontSize: '10px',
     fontWeight: '600',
     textTransform: 'uppercase',
-    letterSpacing: '0.05em',
+    letterSpacing: '0.06em',
     color: '#52525B',
-    padding: '8px 12px',
+    padding: '0 8px',
     marginBottom: '8px',
   },
-  appList: { flex: 1 },
+  appList: { flex: 1, overflow: 'auto' },
   appItem: {
-    padding: '10px 12px',
-    borderRadius: '8px',
-    fontSize: '14px',
+    padding: '8px 10px',
+    borderRadius: '6px',
+    fontSize: '13px',
     color: '#A1A1AA',
     cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    marginBottom: '4px',
+    transition: 'all 0.15s ease',
+    marginBottom: '2px',
+    display: 'flex',
+    alignItems: 'center',
   },
-  emptyState: {
-    padding: '12px',
-    fontSize: '13px',
-    color: '#52525B',
-    fontStyle: 'italic',
+  appItemText: {
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
   },
   sidebarFooter: {
     marginTop: 'auto',
     paddingTop: '16px',
-    borderTop: '1px solid #2E2E36',
+    borderTop: '1px solid rgba(63, 63, 70, 0.4)',
   },
   userRow: {
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '8px 12px',
+    gap: '8px',
+    padding: '6px 8px',
     marginBottom: '8px',
+  },
+  userAvatar: {
+    width: '24px',
+    height: '24px',
+    borderRadius: '6px',
+    background: 'rgba(6, 182, 212, 0.15)',
+    color: '#06B6D4',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '11px',
+    fontWeight: '600',
+    flexShrink: 0,
   },
   userEmail: {
     fontSize: '12px',
-    color: '#A1A1AA',
+    color: '#71717A',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
-    maxWidth: '140px',
+    flex: 1,
   },
   logoutButton: {
     background: 'none',
-    border: '1px solid #2E2E36',
-    color: '#71717A',
-    fontSize: '11px',
-    padding: '4px 10px',
-    borderRadius: '6px',
+    border: 'none',
+    color: '#52525B',
+    fontSize: '14px',
     cursor: 'pointer',
-    transition: 'all 0.2s ease',
+    padding: '2px 6px',
+    borderRadius: '4px',
+    transition: 'color 0.15s',
     flexShrink: 0,
+    fontFamily: 'inherit',
   },
-  statusDot: {
+  footerMeta: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
-    padding: '8px 12px',
-    fontSize: '12px',
-    color: '#71717A',
+    justifyContent: 'space-between',
+    padding: '0 8px',
   },
-  dot: { width: '8px', height: '8px', borderRadius: '50%' },
+  statusRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+  },
+  dot: {
+    width: '6px',
+    height: '6px',
+    borderRadius: '50%',
+    flexShrink: 0,
+    display: 'inline-block',
+  },
+  statusText: {
+    fontSize: '11px',
+    color: '#52525B',
+  },
+  langToggle: {
+    display: 'flex',
+    border: '1px solid rgba(63, 63, 70, 0.3)',
+    borderRadius: '6px',
+    overflow: 'hidden',
+  },
+  langButton: {
+    background: 'none',
+    border: 'none',
+    color: '#52525B',
+    fontSize: '10px',
+    fontWeight: '600',
+    letterSpacing: '0.03em',
+    padding: '3px 8px',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    transition: 'all 0.15s ease',
+  },
+  langButtonActive: {
+    background: 'rgba(6, 182, 212, 0.12)',
+    color: '#06B6D4',
+  },
   main: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: '40px',
+    padding: '40px 24px',
+    zIndex: 1,
+    position: 'relative',
   },
-  centerContent: { maxWidth: '600px', width: '100%' },
+  centerContent: { maxWidth: '580px', width: '100%' },
+  heroSection: { textAlign: 'center', marginBottom: '36px' },
   title: {
-    fontSize: '24px',
+    fontSize: '28px',
     fontWeight: '600',
-    textAlign: 'center',
-    marginBottom: '32px',
-    color: '#FFFFFF',
+    color: '#FAFAFA',
+    marginBottom: '10px',
+    letterSpacing: '-0.02em',
+    lineHeight: '1.2',
+  },
+  subtitle: {
+    fontSize: '14px',
+    color: '#71717A',
+    lineHeight: '1.5',
   },
   promptContainer: {
-    background: '#16161A',
-    borderRadius: '16px',
-    padding: '24px',
-    border: '1px solid #2E2E36',
-    marginBottom: '32px',
+    background: '#0F0F12',
+    borderRadius: '14px',
+    padding: '20px',
+    border: '1px solid rgba(63, 63, 70, 0.4)',
+    marginBottom: '28px',
+    overflow: 'hidden',
   },
   promptInput: {
     width: '100%',
-    background: '#1C1C21',
-    border: '1px solid #2E2E36',
-    borderRadius: '8px',
-    padding: '16px',
-    color: '#FFFFFF',
+    background: 'rgba(24, 24, 27, 0.6)',
+    border: '1px solid rgba(63, 63, 70, 0.3)',
+    borderRadius: '10px',
+    padding: '14px 16px',
+    color: '#FAFAFA',
     fontSize: '14px',
     resize: 'none',
-    marginBottom: '16px',
+    marginBottom: '12px',
     fontFamily: 'inherit',
     outline: 'none',
     boxSizing: 'border-box',
+    lineHeight: '1.5',
+    transition: 'border-color 0.15s',
   },
-  dataSourceLabel: {
-    fontSize: '11px',
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
+  dataRow: { marginBottom: '12px' },
+  dataSourceToggle: {
+    background: 'none',
+    border: 'none',
     color: '#52525B',
+    fontSize: '12px',
+    cursor: 'pointer',
+    padding: '4px 0',
+    fontFamily: 'inherit',
+    transition: 'color 0.15s',
+  },
+  dataChip: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    background: 'rgba(6, 182, 212, 0.08)',
+    border: '1px solid rgba(6, 182, 212, 0.15)',
+    borderRadius: '6px',
+    padding: '6px 10px',
+    fontSize: '12px',
+    color: '#06B6D4',
+  },
+  dataChipText: {
+    maxWidth: '300px',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  dataChipRemove: {
+    background: 'none',
+    border: 'none',
+    color: '#06B6D4',
+    fontSize: '14px',
+    cursor: 'pointer',
+    padding: '0 2px',
+    marginLeft: '4px',
+    opacity: 0.6,
+    fontFamily: 'inherit',
+  },
+  dataSourcePanel: {
+    background: 'rgba(24, 24, 27, 0.4)',
+    borderRadius: '10px',
+    padding: '14px',
     marginBottom: '12px',
+    border: '1px solid rgba(63, 63, 70, 0.2)',
+    overflow: 'hidden',
   },
   dataSeparator: {
     display: 'flex',
     alignItems: 'center',
-    gap: '12px',
-    margin: '12px 0',
+    gap: '10px',
+    margin: '10px 0',
   },
-  separatorLine: { flex: 1, height: '1px', background: '#2E2E36' },
-  separatorText: { fontSize: '12px', color: '#52525B' },
-  fileInfo: {
-    fontSize: '12px',
-    color: '#71717A',
-    marginTop: '12px',
-    marginBottom: '16px',
-    padding: '8px 12px',
-    background: '#232329',
-    borderRadius: '6px',
+  separatorLine: { flex: 1, height: '1px', background: 'rgba(63, 63, 70, 0.3)' },
+  separatorText: {
+    fontSize: '11px',
+    color: '#3F3F46',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
   },
   generateButton: {
     width: '100%',
-    background: '#00765F',
+    background: 'linear-gradient(135deg, #06B6D4 0%, #0891B2 100%)',
     color: 'white',
     border: 'none',
-    padding: '14px 24px',
-    borderRadius: '8px',
+    padding: '13px 24px',
+    borderRadius: '10px',
     fontWeight: '600',
     fontSize: '14px',
     cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    marginTop: '16px',
-  },
-  templates: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(3, 1fr)',
-    gap: '16px',
-    marginBottom: '32px',
-  },
-  templateCard: {
-    background: '#16161A',
-    borderRadius: '12px',
-    padding: '20px',
-    border: '1px solid #2E2E36',
-    textAlign: 'center',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-  },
-  templateIcon: {
-    width: '40px',
-    height: '40px',
-    background: '#232329',
-    borderRadius: '8px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    margin: '0 auto 12px',
-    fontSize: '16px',
-    color: '#A1A1AA',
+    fontFamily: 'inherit',
+    letterSpacing: '-0.01em',
   },
-  templateName: { fontSize: '14px', fontWeight: '500', color: '#FFFFFF', marginBottom: '4px' },
-  templateDesc: { fontSize: '12px', color: '#71717A' },
-  logsContainer: {
-    background: '#16161A',
-    borderRadius: '12px',
-    padding: '16px',
-    border: '1px solid #2E2E36',
-  },
-  logsTitle: {
-    fontSize: '10px',
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-    color: '#52525B',
-    marginBottom: '12px',
-  },
-  logs: {
-    fontFamily: 'JetBrains Mono, monospace',
+  suggestionsSection: { marginBottom: '40px' },
+  suggestionsLabel: {
     fontSize: '11px',
-    color: '#71717A',
-    maxHeight: '100px',
-    overflow: 'auto',
+    fontWeight: '500',
+    color: '#3F3F46',
+    textTransform: 'uppercase',
+    letterSpacing: '0.06em',
+    marginBottom: '10px',
   },
-  logLine: { padding: '2px 0' },
+  suggestionsGrid: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '8px',
+  },
+  suggestionChip: {
+    background: 'rgba(24, 24, 27, 0.6)',
+    border: '1px solid rgba(63, 63, 70, 0.3)',
+    borderRadius: '20px',
+    padding: '7px 14px',
+    fontSize: '12px',
+    color: '#A1A1AA',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    whiteSpace: 'nowrap',
+  },
+  footerRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+  },
+  footerText: { fontSize: '11px', color: '#27272A' },
+  footerDot: { color: '#27272A', fontSize: '11px' },
   generationScreen: {
     display: 'flex',
     alignItems: 'center',
@@ -913,63 +1374,68 @@ const styles = {
     width: '100%',
   },
   generationCard: {
-    background: '#16161A',
+    background: '#0F0F12',
     borderRadius: '16px',
     padding: '40px',
-    border: '1px solid #2E2E36',
+    border: '1px solid rgba(63, 63, 70, 0.4)',
     textAlign: 'center',
     minWidth: '400px',
-    maxWidth: '500px',
+    maxWidth: '480px',
   },
   progressBar: {
-    height: '4px',
-    background: '#232329',
+    height: '3px',
+    background: '#18181B',
     borderRadius: '2px',
     marginBottom: '32px',
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
-    background: 'linear-gradient(90deg, #00765F, #00A382)',
+    background: 'linear-gradient(90deg, #06B6D4, #22D3EE)',
     borderRadius: '2px',
-    transition: 'width 0.5s ease',
   },
   generationTitle: {
     fontSize: '18px',
     fontWeight: '600',
-    color: '#FFFFFF',
-    marginBottom: '12px',
+    color: '#FAFAFA',
+    marginBottom: '8px',
+    letterSpacing: '-0.02em',
   },
   agentStatus: {
-    fontSize: '13px',
-    color: '#F59E0B',
+    fontSize: '12px',
+    color: '#06B6D4',
     marginBottom: '24px',
-    fontFamily: 'JetBrains Mono, monospace',
+    fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+    opacity: 0.8,
   },
-  stepsList: { textAlign: 'left', marginBottom: '24px' },
+  stepsList: { textAlign: 'left' },
   stepItem: {
     display: 'flex',
     alignItems: 'center',
-    gap: '12px',
-    padding: '8px 0',
+    gap: '10px',
+    padding: '7px 0',
   },
-  stepIcon: { fontSize: '16px', width: '20px', textAlign: 'center' },
-  stepLabel: { fontSize: '14px' },
+  stepIcon: {
+    fontSize: '12px',
+    width: '18px',
+    textAlign: 'center',
+    fontFamily: 'inherit',
+  },
+  stepLabel: { fontSize: '13px' },
   appFullScreen: {
     position: 'relative',
     width: '100vw',
     height: '100vh',
-    background: '#0F0F12',
+    background: '#09090B',
   },
   fullScreenPreview: {
     width: '100%',
-    height: 'calc(100% - 60px)',
+    height: 'calc(100% - 56px)',
     border: 'none',
   },
   hiddenIframe: {
     position: 'fixed',
-    top: 0,
-    left: 0,
+    top: 0, left: 0,
     width: '1280px',
     height: '800px',
     opacity: 0,
@@ -978,60 +1444,60 @@ const styles = {
   },
   bottomBar: {
     position: 'fixed',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: '60px',
-    background: 'rgba(22, 22, 26, 0.95)',
-    backdropFilter: 'blur(8px)',
-    borderTop: '1px solid #2E2E36',
-    padding: '0 16px',
+    bottom: 0, left: 0, right: 0,
+    height: '56px',
+    background: 'rgba(15, 15, 18, 0.92)',
+    backdropFilter: 'blur(12px)',
+    borderTop: '1px solid rgba(63, 63, 70, 0.3)',
+    padding: '0 14px',
     display: 'flex',
     alignItems: 'center',
-    gap: '12px',
+    gap: '10px',
     zIndex: 1000,
   },
   bottomActions: {
     display: 'flex',
-    gap: '8px',
+    gap: '6px',
     flexShrink: 0,
   },
   feedbackContainer: {
     display: 'flex',
-    gap: '8px',
+    gap: '6px',
     flex: 1,
   },
   feedbackInput: {
     flex: 1,
-    background: '#1C1C21',
-    border: '1px solid #2E2E36',
+    background: 'rgba(24, 24, 27, 0.6)',
+    border: '1px solid rgba(63, 63, 70, 0.3)',
     borderRadius: '8px',
-    padding: '10px 16px',
-    color: '#FFFFFF',
+    padding: '10px 14px',
+    color: '#FAFAFA',
     fontSize: '13px',
     fontFamily: 'inherit',
     outline: 'none',
   },
   floatingButton: {
-    background: 'rgba(22, 22, 26, 0.95)',
+    background: 'rgba(24, 24, 27, 0.8)',
     color: '#A1A1AA',
-    border: '1px solid #2E2E36',
-    padding: '10px 16px',
+    border: '1px solid rgba(63, 63, 70, 0.3)',
+    padding: '9px 14px',
     borderRadius: '8px',
-    fontSize: '13px',
+    fontSize: '12px',
     cursor: 'pointer',
-    transition: 'all 0.2s ease',
+    transition: 'all 0.15s ease',
+    fontFamily: 'inherit',
   },
   floatingButtonPrimary: {
-    background: '#00765F',
+    background: 'linear-gradient(135deg, #06B6D4 0%, #0891B2 100%)',
     color: 'white',
     border: 'none',
-    padding: '10px 16px',
+    padding: '9px 16px',
     borderRadius: '8px',
-    fontSize: '13px',
+    fontSize: '12px',
     fontWeight: '500',
     cursor: 'pointer',
-    transition: 'all 0.2s ease',
+    transition: 'all 0.15s ease',
+    fontFamily: 'inherit',
   },
 };
 
