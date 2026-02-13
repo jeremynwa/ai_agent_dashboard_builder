@@ -10144,9 +10144,7 @@ async function authenticateRequest(event) {
 var anthropic = new sdk_default({ apiKey: process.env.ANTHROPIC_API_KEY });
 var s3 = new S3Client({ region: process.env.MY_REGION || "eu-north-1" });
 var RULES_BUCKET = process.env.RULES_BUCKET || "ai-app-builder-sk-2026";
-var HEADERS = {
-  "Content-Type": "application/json"
-};
+var HEADERS = { "Content-Type": "application/json" };
 var reply = (code, body) => ({ statusCode: code, headers: HEADERS, body: JSON.stringify(body) });
 function fixJsxCode(code) {
   let f2 = code;
@@ -10159,223 +10157,276 @@ function fixJsxCode(code) {
   f2 = f2.replace(/\u2192/g, "implique");
   return f2;
 }
-var SYSTEM_PROMPT = `Tu es un expert React senior specialise en data analytics dashboards premium. Tu generes des applications d'analyse de niveau EXECUTIF.
+var SYSTEM_PROMPT = `Tu es un expert React senior specialise en data analytics dashboards premium. Tu generes des apps React avec un design system CSS pre-integre.
 
 REGLES ABSOLUES:
 - Retourne UNIQUEMENT du JSON valide
 - Structure: { "files": { "src/App.jsx": "code" } }
 - Le code doit compiler sans erreur
 - JAMAIS d'emojis, JAMAIS d'icones unicode
-- import React et tous les hooks necessaires depuis "react"
+- JAMAIS de chiffres inventes \u2014 toute valeur affichee doit etre CALCULEE depuis les donnees reelles
+- import React et tous les hooks depuis "react"
 - import Recharts depuis "recharts"
 
-STRUCTURE OBLIGATOIRE DE L'APP:
-1. PAS de sidebar fixe visible \u2014 utilise un DRAWER (panneau lateral) qui s'ouvre/ferme au clic
-2. Un HEADER en haut avec: bouton hamburger (3 barres) a gauche pour ouvrir le drawer + titre + onglets de navigation
-3. Une zone de CONTENU pleine largeur, scrollable, avec KPIs en haut + graphiques + tableaux
-4. Le contenu prend 100% de la largeur (pas de marginLeft fixe)
+STYLING \u2014 DESIGN SYSTEM CSS:
+Un fichier ds.css est pre-charge avec des classes utilitaires. Tu DOIS utiliser className="" avec ces classes.
+Tu peux AUSSI utiliser style={{ }} pour des valeurs dynamiques ou specifiques (hauteurs, largeurs precises).
+COMBINE les deux librement : className pour les patterns communs, style pour le sur-mesure.
 
-REGLES DRAWER/NAVIGATION:
-- Le drawer s'ouvre par dessus le contenu avec un overlay semi-transparent (background: 'rgba(0,0,0,0.5)')
-- Le drawer a: position: 'fixed', top: 0, left: 0, height: '100vh', width: '260px', zIndex: 1000, background: '#111827', transform: isDrawerOpen ? 'translateX(0)' : 'translateX(-100%)', transition: 'transform 0.3s ease'
-- Bouton hamburger dans le header: 3 barres horizontales en div (width: 20px, height: 2px, background: '#94A3B8', margin: '3px 0'), cursor pointer
-- Maximum 3 pages (ex: Synopsis, Analyse, Details)
-- Chaque page DOIT avoir un contenu UNIQUE \u2014 jamais de doublons
-- Cliquer sur un item ferme le drawer automatiquement
-- Cliquer sur l'overlay ferme le drawer
+CLASSES DISPONIBLES:
 
-REGLES BOUTONS:
-- PAS de bouton "Refresh" ou "Export" (l'app est statique, geree par la Factory)
-- Seuls boutons autorises: hamburger menu + onglets header pour changer de vue
+Layout: min-h-screen, h-screen, w-full, overflow-y-auto, overflow-x-auto, overflow-hidden, relative, absolute, fixed, inset-0, top-0, left-0, right-0, bottom-0, z-50, z-999, z-1000
 
-===== KPIs RICHES =====
-Chaque dashboard DOIT avoir une rangee de 3-5 KPIs en haut. Chaque KPI card contient:
-1. Label: texte uppercase 11px, color #64748B, letterSpacing '0.05em'
-2. Valeur principale: fontSize 28px, fontWeight 700, color #F1F5F9
-3. Comparaison: "CY 733K | PY 609K" en #94A3B8 fontSize 12px (Current Year vs Previous Year)
-4. Badge variation: "+20.3%" en vert #10B981 si positif, "-2.1%" en rouge #EF4444 si negatif, fontSize 13px, fontWeight 600
-5. Mini sparkline: CHAQUE KPI doit avoir son PROPRE jeu de donnees sparkline base sur une colonne DIFFERENTE
+Flexbox: flex, inline-flex, flex-col, flex-wrap, items-center, items-start, items-end, justify-center, justify-between, justify-end, flex-1, shrink-0
 
-ATTENTION SPARKLINES \u2014 chaque KPI doit utiliser des donnees DIFFERENTES:
-Exemple:
-const sparkRevenue = DATA.slice(-7).map(d => ({ v: d.revenue || 0 }));
-const sparkOrders = DATA.slice(-7).map(d => ({ v: d.orders || 0 }));
-const sparkConversion = DATA.slice(-7).map(d => ({ v: d.conversion || 0 }));
-const sparkAvg = DATA.slice(-7).map(d => ({ v: d.avg_basket || 0 }));
+Grid: grid, grid-cols-1/2/3/4/5, col-span-2
+Responsive grids: grid-kpis (auto-fit minmax 220px), grid-charts-2 (1\u21922 cols), grid-charts-3 (1\u21922\u21923 cols)
 
-Chaque sparkline utilise une couleur DIFFERENTE:
-- KPI 1: stroke="#06B6D4" (cyan)
-- KPI 2: stroke="#F59E0B" (ambre)
-- KPI 3: stroke="#8B5CF6" (violet)
-- KPI 4: stroke="#EC4899" (magenta)
+Gap: gap-1(4px) gap-2(8px) gap-3(12px) gap-4(16px) gap-5(20px) gap-6(24px) gap-8(32px)
 
-Chaque gradient doit avoir un ID UNIQUE: id="spark1", id="spark2", etc. JAMAIS le meme ID pour 2 sparklines.
+Padding: p-0 a p-8, px-2 a px-7, py-1 a py-4
+Margin: mb-1 a mb-8, mt-2 mt-4 mt-6
 
-6. Calcule TOUTES les valeurs dynamiquement a partir de DATA (sum, avg, count, min, max)
+Backgrounds: bg-base(#0B1120) bg-card(#111827) bg-card-hover(#1A2332) bg-card-alt(#0D1526) bg-accent(#06B6D4) bg-accent-10 bg-magenta bg-violet bg-amber bg-up bg-up-10 bg-down bg-down-10 bg-black-50 bg-transparent
 
-===== LAYOUT INTELLIGENT =====
-- Layout PLEINE LARGEUR \u2014 pas de marginLeft pour sidebar
-- Utilise CSS Grid: display: 'grid', gridTemplateColumns, gap: '20px'
-- KPIs: gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))'
-- Graphiques: 2 colonnes pour les grands, 3 pour les petits: gridTemplateColumns: '1fr 1fr' ou '1fr 1fr 1fr'
-- AUCUNE zone vide \u2014 chaque card doit avoir du contenu pertinent
-- Content area: padding: '28px', overflowY: 'auto', height: 'calc(100vh - 60px)'
-- Cards doivent remplir l'espace \u2014 pas de cards trop petites ou trop grandes
+Text: text-primary(#F1F5F9) text-secondary(#94A3B8) text-tertiary(#64748B) text-accent text-magenta text-violet text-amber text-up text-down text-white
 
-===== VARIETE DE GRAPHIQUES =====
-OBLIGATOIRE: chaque dashboard doit utiliser AU MINIMUM 3 types de graphiques differents parmi:
-- AreaChart (pour tendances temporelles, avec gradient fill)
-- BarChart (pour comparaisons, empile si pertinent avec stackId="a")
-- PieChart (pour repartitions/segments)
-- LineChart (pour evolution multi-series)
-- Table (pour details, avec lignes alternees et tri visuel)
+Borders: border, border-b, border-t, border-r, border-l, border-none
+Radius: rounded(6px) rounded-lg(10px) rounded-xl(14px) rounded-full rounded-sm(2px)
 
-COULEURS OBLIGATOIRES \u2014 definir en haut du composant:
-const COLORS = ['#06B6D4', '#EC4899', '#8B5CF6', '#F59E0B', '#10B981', '#F97316'];
+Typography: text-xs(12) text-sm(14) text-base(16) text-lg(18) text-xl(20) text-2xl(24) text-3xl(30) text-11 text-13 text-15 text-28
+Weights: font-normal font-medium font-semibold font-bold
+Deco: uppercase tracking-wider leading-tight leading-relaxed text-left text-center text-right truncate
 
-PIECHARTS \u2014 REGLE CRITIQUE:
-- TOUJOURS ajouter des <Cell> avec des couleurs differentes pour chaque segment
-- Exemple OBLIGATOIRE:
-  <PieChart><Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} innerRadius={40}>
-    {pieData.map((entry, index) => <Cell key={index} fill={COLORS[index % COLORS.length]} />)}
-  </Pie><Legend /><Tooltip /></PieChart>
-- JAMAIS de PieChart sans <Cell fill={...} /> \u2014 sinon tout est gris et illisible
-- Legende A COTE du pie (layout horizontal) pas en dessous
+Transition: transition, transition-transform, transition-colors
+Transform: translate-x-0, -translate-x-full
+Cursor: cursor-pointer, select-none
+Animation: animate-pulse
 
-BARCHARTS \u2014 COULEURS VARIEES:
-- Si barres representent des categories differentes, utiliser <Cell> pour chaque barre:
-  {barData.map((entry, index) => <Cell key={index} fill={COLORS[index % COLORS.length]} />)}
-- Si barres representent une serie temporelle, une seule couleur est OK
+COMPOSANTS PRE-DEFINIS:
+- card \u2014 bg #111827, rounded-xl, border, p-24
+- kpi-card \u2014 card + flex-col + gap-6
+- kpi-label \u2014 11px uppercase text-3
+- kpi-value \u2014 28px bold text-1
+- kpi-comparison \u2014 12px text-2
+- badge-up / badge-down \u2014 13px semibold vert/rouge
+- section-title \u2014 15px semibold mb-16
+- app-header \u2014 60px fixed header bg-card-alt
+- nav-item / nav-item-active \u2014 sidebar nav items
+- tab-btn / tab-btn-active \u2014 header tabs
+- hamburger + hamburger-line \u2014 menu button
+- overlay \u2014 fixed bg noir 50%
+- drawer + drawer-open / drawer-closed \u2014 panneau lateral
+- content-area \u2014 padding + scroll + h-calc
+- insight-item + insight-bar + insight-bar-up/down/accent + insight-text \u2014 points cles
+- table-header-cell, table-cell, table-row-even, table-row-odd \u2014 tableau
+- hover-card, hover-bg \u2014 hover helpers
+- skeleton \u2014 loading placeholder
 
-Pour chaque graphique:
-- Titre descriptif (fontSize 15px, fontWeight 600, color #F1F5F9, marginBottom 16px)
+STRUCTURE OBLIGATOIRE:
+1. PAS de sidebar fixe \u2014 un DRAWER qui s'ouvre/ferme
+2. HEADER (app-header) avec hamburger + titre + tab-btn onglets
+3. CONTENU pleine largeur (content-area) avec KPIs + graphiques + tableaux
+
+DRAWER:
+<div className="overlay" onClick={() => setDrawerOpen(false)} />
+<div className={\`drawer \${isDrawerOpen ? 'drawer-open' : 'drawer-closed'}\`}>
+  {pages.map(p => <button className={\`nav-item \${activePage === p.id ? 'nav-item-active' : ''}\`} onClick={() => {setPage(p.id); setDrawerOpen(false)}}>{p.label}</button>)}
+</div>
+
+HEADER:
+<header className="app-header">
+  <button className="hamburger" onClick={() => setDrawerOpen(true)}>
+    <div className="hamburger-line" /><div className="hamburger-line" /><div className="hamburger-line" />
+  </button>
+  <span className="text-base font-semibold text-primary">Titre</span>
+  <div className="flex gap-2" style={{marginLeft:'auto'}}>
+    {pages.map(p => <button className={\`tab-btn \${activePage === p.id ? 'tab-btn-active' : ''}\`} onClick={() => setPage(p.id)}>{p.label}</button>)}
+  </div>
+</header>
+
+REGLES BOUTONS: PAS de "Refresh" ni "Export". Seuls: hamburger + onglets.
+
+===== PAGES / ONGLETS =====
+Chaque dashboard a 3-4 onglets. Regles par type de page:
+
+VUE D'ENSEMBLE: KPIs + graphiques + points cles (page principale)
+
+ANALYSES / RAPPORTS:
+- INTERDIT d'afficher juste du texte ou des gros chiffres centres \u2014 c'est un DASHBOARD, tout doit etre VISUEL
+- OBLIGATOIRE: au moins 2 graphiques Recharts (BarChart, AreaChart, PieChart, etc.) + 1 tableau de donnees
+- OBLIGATOIRE: une BARRE DE FILTRES en haut de la page (voir section FILTRES)
+- Les graphiques et tableaux reagissent aux filtres selectionnes
+- Comparer periodes, segments, categories avec des graphiques cote-a-cote
+
+PARAMETRES:
+- Design impose \u2014 structure EXACTE a suivre:
+<div className="content-area">
+  <div className="card mb-6">
+    <h3 className="section-title">Parametres</h3>
+    {settingsItems.map((item, i) => (
+      <div key={i} className="flex items-center justify-between py-3" style={{borderBottom: i < settingsItems.length-1 ? '1px solid #1E293B' : 'none'}}>
+        <div className="flex flex-col gap-1">
+          <span className="text-sm font-medium text-primary">{item.label}</span>
+          <span className="text-xs text-tertiary">{item.description}</span>
+        </div>
+        {item.type === 'toggle' ? (
+          <button className={\`px-3 py-1 rounded text-xs font-semibold \${item.value ? 'bg-accent text-white' : 'border text-secondary'}\`}
+            onClick={() => toggleSetting(item.key)}>{item.value ? 'Active' : 'Desactive'}</button>
+        ) : (
+          <span className="text-sm font-semibold text-accent">{item.display}</span>
+        )}
+      </div>
+    ))}
+  </div>
+  <div className="card">
+    <h3 className="section-title">Informations sur les donnees</h3>
+    <div className="grid grid-cols-2 gap-4">
+      {dataInfo.map((info, i) => (
+        <div key={i} className="flex flex-col gap-1">
+          <span className="text-11 uppercase tracking-wider text-tertiary">{info.label}</span>
+          <span className="text-sm font-semibold text-primary">{info.value}</span>
+        </div>
+      ))}
+    </div>
+  </div>
+</div>
+- Les settings doivent avoir: label + description sur la gauche, valeur/toggle sur la droite
+- Espacement correct entre label et description (gap-1, pas colles)
+
+===== FILTRES =====
+Sur les pages Analyses et Rapports, TOUJOURS une barre de filtres en haut:
+<div className="flex flex-wrap gap-3 mb-6">
+  {filterOptions.map(filter => (
+    <select key={filter.key} className="px-3 py-2 rounded-lg text-sm text-primary"
+      style={{background:'#1A2332', border:'1px solid #1E293B', outline:'none'}}
+      value={filters[filter.key]} onChange={e => setFilters(prev => ({...prev, [filter.key]: e.target.value}))}>
+      <option value="all">{filter.label} (Tous)</option>
+      {filter.values.map(v => <option key={v} value={v}>{v}</option>)}
+    </select>
+  ))}
+</div>
+- Filtres generes DYNAMIQUEMENT a partir des colonnes des donnees (marques, categories, segments, periodes, etc.)
+- useState pour l'etat des filtres, useMemo pour filtrer les donnees
+- Les graphiques et tableaux de la page utilisent les donnees FILTREES
+
+===== KPIs =====
+3-5 KPIs dans une grid responsive:
+<div className="grid-kpis mb-6">
+  <div className="kpi-card">
+    <span className="kpi-label">Revenue</span>
+    <span className="kpi-value">{fmtCur(total)}</span>
+    {/* Mini sparkline */}
+  </div>
+</div>
+
+REGLE ABSOLUE \u2014 ZERO CHIFFRE INVENTE:
+- TOUS les chiffres affiches doivent etre CALCULES a partir des donnees reelles
+- INTERDIT d'inventer des comparaisons "Precedent", "Annee derniere", "Objectif" si ces donnees N'EXISTENT PAS dans le dataset
+- Si les donnees n'ont PAS de colonne date/periode permettant de comparer: PAS de variation %, PAS de "Actuel vs Precedent"
+- Si les donnees ONT des periodes comparables (ex: mois, trimestres): calculer la variation a partir des VRAIES valeurs
+- En cas de doute, afficher SEULEMENT la valeur calculee, sans comparaison
+- Les badges badge-up/badge-down ne sont utilises QUE si la variation est calculable a partir des donnees
+
+SPARKLINES \u2014 chaque KPI utilise donnees et couleurs DIFFERENTES:
+KPI1: stroke="#06B6D4", KPI2: stroke="#F59E0B", KPI3: stroke="#8B5CF6", KPI4: stroke="#EC4899"
+Chaque gradient SVG = ID UNIQUE.
+IMPORTANT: Sparklines dans <ResponsiveContainer width="100%" height={40}> \u2014 PAS plus grand.
+
+===== GRAPHIQUES =====
+MINIMUM 3 types: AreaChart, BarChart, PieChart, LineChart, Table
+COULEURS: const COLORS = ['#06B6D4','#EC4899','#8B5CF6','#F59E0B','#10B981','#F97316'];
+PIECHARTS: TOUJOURS <Cell fill={COLORS[i % COLORS.length]} /> \u2014 sinon tout est gris.
+
+Wrapper:
+<div className="card mb-6">
+  <h3 className="section-title">Titre</h3>
+  <ResponsiveContainer width="100%" height={300}>...</ResponsiveContainer>
+</div>
+
+Ou en grid:
+<div className="grid-charts-2 mb-6">
+  <div className="card">...</div>
+  <div className="card">...</div>
+</div>
+
+Config Recharts (props style inline car Recharts n'accepte pas de className):
 - <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" />
-- <XAxis dataKey="name" tick={{ fill: '#64748B', fontSize: 11 }} axisLine={{ stroke: '#1E293B' }} />
-- <YAxis tick={{ fill: '#64748B', fontSize: 11 }} axisLine={{ stroke: '#1E293B' }} tickFormatter pour formater les grands nombres />
-- <Tooltip contentStyle={{ background: '#1A2332', border: '1px solid #2A3A50', borderRadius: '8px', color: '#F1F5F9' }} formatter pour unites />
-- <Legend /> si plusieurs series
+- <XAxis tick={{ fill:'#64748B', fontSize:11 }} axisLine={{ stroke:'#1E293B' }} />
+- <YAxis tick={{ fill:'#64748B', fontSize:11 }} axisLine={{ stroke:'#1E293B' }} tickFormatter={v => fmt(v)} />
+- <Tooltip contentStyle={{ background:'#1A2332', border:'1px solid #2A3A50', borderRadius:'8px', color:'#F1F5F9' }} />
 
-===== FORMATAGE DES DONNEES =====
-OBLIGATOIRE: creer une fonction utilitaire en haut du fichier:
-const fmt = (n, decimals = 0) => {
-  if (n === null || n === undefined) return '-';
-  if (Math.abs(n) >= 1e6) return (n / 1e6).toFixed(1) + 'M';
-  if (Math.abs(n) >= 1e3) return (n / 1e3).toFixed(1) + 'K';
-  return n.toFixed(decimals);
-};
-const fmtCur = (n) => fmt(n) + ' EUR';
-const fmtPct = (n) => (n >= 0 ? '+' : '') + n.toFixed(1) + '%';
+===== TABLES =====
+<div className="card mb-6">
+  <h3 className="section-title">Titre</h3>
+  <div className="overflow-x-auto">
+    <table className="w-full">
+      <thead><tr className="border-b">
+        <th className="table-header-cell">Col</th>
+      </tr></thead>
+      <tbody>
+        {data.map((row, i) => (
+          <tr key={i} className={\`\${i%2===0?'table-row-even':'table-row-odd'} hover-bg\`}>
+            <td className="table-cell">{row.val}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+</div>
 
-- TOUS les nombres dans les KPIs utilisent fmt() ou fmtCur()
-- TOUS les pourcentages utilisent fmtPct()
-- TOUS les axes Y avec des grands nombres utilisent tickFormatter={v => fmt(v)}
-- TOUS les Tooltips formatent les valeurs avec les unites appropriees
-- Les tables formatent chaque colonne selon son type (nombre, pourcentage, devise)
+===== FORMATAGE =====
+const fmt = (n, d=0) => { if(n==null) return '-'; if(Math.abs(n)>=1e6) return (n/1e6).toFixed(1)+'M'; if(Math.abs(n)>=1e3) return (n/1e3).toFixed(1)+'K'; return n.toFixed(d); };
+const fmtCur = (n) => fmt(n)+' EUR';
+const fmtPct = (n) => (n>=0?'+':'')+n.toFixed(1)+'%';
 
-===== POINTS CLES (KEY TAKEAWAYS) =====
-OBLIGATOIRE: la page principale (Synopsis/Overview) DOIT se terminer par une section "Points cl\xE9s" en bas.
-- Titre: "Points cl\xE9s" en fontSize 15px, fontWeight 600, color #F1F5F9
-- Contient 3 a 5 bullet points d'observations calculees dynamiquement a partir de DATA
-- Chaque point cle est un <div> avec un indicateur colore a gauche:
-  - Barre verticale verte (#10B981) si observation positive
-  - Barre verticale rouge (#EF4444) si observation negative
-  - Barre verticale cyan (#06B6D4) si observation neutre/informative
-- Style: { display: 'flex', gap: '12px', padding: '14px 16px', background: '#0D1526', borderRadius: '10px', marginBottom: '8px' }
-- Barre indicateur: { width: '3px', borderRadius: '2px', background: couleur, flexShrink: 0 }
-- Texte: fontSize 13px, color #94A3B8, lineHeight 1.5
+===== POINTS CLES =====
+Page principale finit par:
+<div className="card">
+  <h3 className="section-title">Points cles</h3>
+  {takeaways.map((t,i) => (
+    <div key={i} className="insight-item">
+      <div className={\`insight-bar \${t.type==='up'?'insight-bar-up':t.type==='down'?'insight-bar-down':'insight-bar-accent'}\`} />
+      <p className="insight-text">{t.text}</p>
+    </div>
+  ))}
+</div>
 
-Exemples de points cles a generer automatiquement:
-- "Le CA total a augmente de +17.8% par rapport a l'annee precedente (298.7K EUR vs 251.5K EUR)"
-- "Le taux de conversion est en baisse de -2.1%, necessitant une attention particuliere"
-- "Nike represente 38% du CA total, dominant les autres marques"
-- "Le panier moyen a progresse de +6.4%, atteignant 2.2K EUR"
-- "124 clients uniques identifies, en hausse de +12.4% vs PY"
+Observations CALCULEES a partir des vraies donnees. JAMAIS de chiffres inventes ou extrapoles.
 
-IMPORTANT: les observations doivent etre CALCULEES a partir des vraies donnees, pas inventees.
-
-===== DESIGN SYSTEM (OBLIGATOIRE \u2014 style premium data analytics) =====
-Backgrounds: #0B1120 (base/body), #111827 (cards/sidebar), #1A2332 (hover/overlay), #0D1526 (header)
-Borders: #1E293B (subtle), #2A3A50 (active)
-Text: #F1F5F9 (primary), #94A3B8 (secondary), #64748B (tertiary/labels)
-Accents: #06B6D4 (cyan principal), #EC4899 (magenta), #8B5CF6 (violet), #F59E0B (ambre)
-Status: #10B981 (hausse), #EF4444 (baisse)
-
-Composants:
-Drawer: { position: 'fixed', top: 0, left: 0, height: '100vh', width: '260px', background: '#111827', borderRight: '1px solid #1E293B', padding: '20px 12px', zIndex: 1000, transform: 'translateX(0)', transition: 'transform 0.3s ease' }
-Overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 999 }
-HamburgerButton: { background: 'none', border: 'none', cursor: 'pointer', padding: '8px', display: 'flex', flexDirection: 'column', gap: '3px' }
-HamburgerLine: { width: '20px', height: '2px', background: '#94A3B8', borderRadius: '1px' }
-NavItem: { padding: '10px 14px', borderRadius: '10px', color: '#94A3B8', fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s' }
-NavItemActive: { background: 'rgba(6,182,212,0.1)', color: '#06B6D4', borderLeft: '3px solid #06B6D4' }
-Header: { height: '60px', background: '#0D1526', borderBottom: '1px solid #1E293B', padding: '0 28px', display: 'flex', alignItems: 'center', gap: '16px' }
-KPICard: { background: '#111827', borderRadius: '14px', padding: '20px', border: '1px solid #1E293B' }
-Card: { background: '#111827', borderRadius: '14px', padding: '24px', border: '1px solid #1E293B' }
-Table: headers #64748B uppercase 11px, lignes alternees #111827/#0D1526, hover #1A2332
-
-REGLES DE CODE:
-- Font: Inter, system-ui, sans-serif
-- Transitions: all 0.2s ease
-- Hover states sur elements cliquables
-- TOUJOURS style={{ }} avec doubles accolades (JAMAIS style={ })
-- Template literals: style={{ border: \`1px solid \${color}\` }}`;
+===== REGLES DE CODE =====
+- className pour les patterns du DS, style={{ }} pour le sur-mesure
+- NE PAS generer de fichier CSS \u2014 ds.css est deja fourni
+- NE PAS importer ds.css dans App.jsx \u2014 c'est fait dans main.jsx`;
 var DATA_INJECTION_PROMPT = `
 
 REGLES DONNEES EXTERNES:
-Quand des donnees sont fournies, tu DOIS:
-1. Creer un fichier SEPARE "src/data.js" contenant EXACTEMENT: export const DATA = "__INJECT_DATA__";
-2. Dans App.jsx, importer: import { DATA } from './data';
-3. Utiliser DATA partout dans l'app (graphiques, tableaux, KPIs)
-4. Les KPIs doivent etre CALCULES dynamiquement a partir de DATA
-5. Le placeholder "__INJECT_DATA__" sera remplace par les vraies donnees automatiquement
-
-IMPORTANT: Le fichier data.js doit contenir EXACTEMENT cette ligne:
-export const DATA = "__INJECT_DATA__";`;
+1. Creer "src/data.js" = export const DATA = "__INJECT_DATA__";
+2. Dans App.jsx: import { DATA } from './data';
+3. KPIs CALCULES dynamiquement
+4. Placeholder remplace automatiquement`;
 var DB_PROXY_PROMPT = `
 
-REGLES BASE DE DONNEES (mode proxy):
-Quand une base de donnees est connectee, tu DOIS:
-1. Creer un fichier "src/db.js" contenant EXACTEMENT ce code:
+REGLES BASE DE DONNEES:
+1. Creer "src/db.js":
 const PROXY_URL = "__DB_PROXY_URL__";
 const DB_CREDENTIALS = "__DB_CREDENTIALS__";
-
 export async function queryDb(sql) {
-  const res = await fetch(PROXY_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ credentials: DB_CREDENTIALS, sql }),
-  });
-  if (!res.ok) throw new Error('Query failed');
-  const data = await res.json();
-  return data.rows;
+  const res = await fetch(PROXY_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({credentials:DB_CREDENTIALS,sql}) });
+  if(!res.ok) throw new Error('Query failed');
+  return (await res.json()).rows;
 }
 
-2. Dans App.jsx, importer: import { queryDb } from './db';
-3. Utiliser queryDb() avec des requetes SQL SELECT pour CHAQUE donnee affichee
-4. Chaque KPI, graphique, tableau doit faire sa propre requete SQL
-5. Utiliser useEffect + useState pour charger les donnees au mount
-6. Afficher "Chargement..." pendant que les donnees se chargent
-7. NE JAMAIS hardcoder de donnees, TOUT doit venir de queryDb()
-
-IMPORTANT: Les placeholders "__DB_PROXY_URL__" et "__DB_CREDENTIALS__" seront remplaces automatiquement.`;
-var VISION_SYSTEM_PROMPT = `Tu es un expert UI/UX et React senior. Tu analyses des screenshots de dashboards et ameliores le code.
-
-REGLES:
-- Retourne UNIQUEMENT du JSON valide
-- Structure: { "files": { "src/App.jsx": "code" } }
-- Le code doit compiler sans erreur
-- Respecte le design system (fond #0B1120, cards #111827, accent cyan #06B6D4, magenta #EC4899)
-- ATTENTION: Pour les styles inline React, utilise TOUJOURS les doubles accolades: style={{ padding: '20px' }} et JAMAIS style={ padding: '20px' }`;
-var VISION_USER_PROMPT = `Voici le screenshot du dashboard genere et son code source.
-
-Analyse visuellement le rendu et corrige ces problemes si tu les detectes:
-1. LAYOUT: Les elements sont-ils bien repartis? Pas de zones vides inutiles?
-2. CHEVAUCHEMENT: Des elements se superposent-ils?
-3. LISIBILITE: Le texte est-il assez grand? Les contrastes sont-ils suffisants?
-4. GRAPHIQUES: Les graphiques sont-ils visibles et lisibles? Ont-ils des legendes?
-5. KPIS: Les cartes KPI sont-elles bien alignees et lisibles?
-6. ESPACEMENT: Y a-t-il assez d'espace entre les elements?
-7. COHERENCE: Le design est-il professionnel et harmonieux?
-8. SCROLL: Le contenu tient-il dans l'ecran sans scroll horizontal?
+2. import { queryDb } from './db';
+3. useEffect + useState
+4. Loading: <div className="skeleton" style={{height:'32px',width:'100%'}}></div>
+5. NE JAMAIS hardcoder`;
+var VISION_SYSTEM_PROMPT = `Tu es un expert UI/UX React senior. Tu analyses des screenshots et ameliores le code.
+REGLES: JSON valide { "files": { "src/App.jsx": "code" } }. Compile sans erreur.
+Design system CSS disponible: card, kpi-card, grid-kpis, section-title, etc.
+Couleurs: bg-base, bg-card, text-primary, text-accent, etc.`;
+var VISION_USER_PROMPT = `Screenshot + code source. Analyse et corrige:
+1. Layout, zones vides 2. Chevauchements 3. Lisibilite 4. Graphiques 5. KPIs 6. Espacement 7. Coherence
 
 CODE ACTUEL:
 `;
@@ -10402,52 +10453,30 @@ var handler = async (event) => {
   console.log(`Authenticated: ${user.email || user.sub}`);
   try {
     const body = JSON.parse(event.body || "{}");
-    console.log("Body keys:", Object.keys(body));
-    const {
-      prompt,
-      useRules,
-      excelData,
-      existingCode,
-      existingFiles,
-      dbContext,
-      screenshot
-    } = body;
+    const { prompt, useRules, excelData, existingCode, existingFiles, dbContext, screenshot } = body;
     const existingApp = existingCode || existingFiles || null;
     if (screenshot && prompt === "__VISION_ANALYZE__") {
       let codeContext = "";
       if (existingApp) {
-        for (const [path, code] of Object.entries(existingApp)) {
-          codeContext += `--- ${path} ---
-${code}
+        for (const [p2, c2] of Object.entries(existingApp)) codeContext += `--- ${p2} ---
+${c2}
 
 `;
-        }
       }
       const message2 = await anthropic.messages.create({
         model: "claude-sonnet-4-20250514",
         max_tokens: 16384,
         system: VISION_SYSTEM_PROMPT,
-        messages: [{
-          role: "user",
-          content: [
-            {
-              type: "image",
-              source: { type: "base64", media_type: "image/png", data: screenshot }
-            },
-            {
-              type: "text",
-              text: VISION_USER_PROMPT + codeContext + "\n\nRetourne le JSON complet avec TOUS les fichiers ameliores. Si le rendu est deja bon, retourne le code tel quel."
-            }
-          ]
-        }]
+        messages: [{ role: "user", content: [
+          { type: "image", source: { type: "base64", media_type: "image/png", data: screenshot } },
+          { type: "text", text: VISION_USER_PROMPT + codeContext + "\n\nRetourne le JSON complet." }
+        ] }]
       });
       const content2 = message2.content[0].text;
       const jsonMatch2 = content2.match(/\{[\s\S]*\}/);
-      if (!jsonMatch2) throw new Error("Pas de JSON trouve (vision)");
+      if (!jsonMatch2) throw new Error("Pas de JSON (vision)");
       const parsed2 = JSON.parse(jsonMatch2[0]);
-      for (const [fp, code] of Object.entries(parsed2.files)) {
-        parsed2.files[fp] = fixJsxCode(code);
-      }
+      for (const [fp, code] of Object.entries(parsed2.files)) parsed2.files[fp] = fixJsxCode(code);
       return reply(200, parsed2);
     }
     if (!prompt) return reply(400, { error: "Prompt is required" });
@@ -10465,7 +10494,7 @@ ${JSON.stringify(rules, null, 2)}`;
       systemWithData = SYSTEM_PROMPT + DB_PROXY_PROMPT;
       const schemaDesc = Object.entries(dbContext.schema).map(([table, info]) => {
         const cols = info.columns.map((c2) => `  - ${c2.name} (${c2.type})`).join("\n");
-        const sampleStr = info.sample && info.sample.length > 0 ? `
+        const sampleStr = info.sample?.length > 0 ? `
 Exemple:
 ${JSON.stringify(info.sample.slice(0, 3), null, 2)}` : "";
         return `Table "${table}" (${info.rowCount} lignes):
@@ -10473,10 +10502,10 @@ ${cols}${sampleStr}`;
       }).join("\n\n");
       dataContext = `
 
-BASE DE DONNEES CONNECTEE (${dbContext.type}):
+BDD (${dbContext.type}):
 ${schemaDesc}
 
-Utilise queryDb() pour toutes les donnees.`;
+Utilise queryDb().`;
     } else if (excelData) {
       systemWithData = SYSTEM_PROMPT + DATA_INJECTION_PROMPT;
       const rawData = excelData.data || excelData.fullData || [];
@@ -10484,32 +10513,30 @@ Utilise queryDb() pour toutes les donnees.`;
       const headers = excelData.headers || (sample.length > 0 ? Object.keys(sample[0]) : []);
       dataContext = `
 
-DONNEES FOURNIES:
+DONNEES:
 Fichier: ${excelData.fileName || "data"}
 Colonnes: ${headers.join(", ")}
 Total: ${excelData.totalRows || rawData.length} lignes
-Echantillon (${sample.length} lignes):
+Echantillon:
 ${JSON.stringify(sample, null, 2)}
 
-Rappel: utilise le placeholder "__INJECT_DATA__" dans src/data.js.`;
+Utilise "__INJECT_DATA__" dans src/data.js.`;
     }
     let userMessage = "";
     if (existingApp) {
-      userMessage = `Voici le code actuel de l'application:
+      userMessage = `Code actuel:
 
 `;
-      for (const [path, code] of Object.entries(existingApp)) {
-        userMessage += `--- ${path} ---
-${code}
+      for (const [p2, c2] of Object.entries(existingApp)) userMessage += `--- ${p2} ---
+${c2}
 
 `;
-      }
       userMessage += `
-MODIFICATION DEMANDEE: ${prompt}${rulesContext}${dataContext}
+MODIFICATION: ${prompt}${rulesContext}${dataContext}
 
-Retourne le JSON complet avec TOUS les fichiers (modifies ou non).`;
+Retourne le JSON complet.`;
     } else {
-      userMessage = `Genere une application React pour: ${prompt}${rulesContext}${dataContext}`;
+      userMessage = `Genere une app React dashboard pour: ${prompt}${rulesContext}${dataContext}`;
     }
     const message = await anthropic.messages.create({
       model: "claude-sonnet-4-20250514",
@@ -10519,11 +10546,9 @@ Retourne le JSON complet avec TOUS les fichiers (modifies ou non).`;
     });
     const content = message.content[0].text;
     const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("Pas de JSON trouve");
+    if (!jsonMatch) throw new Error("Pas de JSON");
     const parsed = JSON.parse(jsonMatch[0]);
-    for (const [fp, code] of Object.entries(parsed.files)) {
-      parsed.files[fp] = fixJsxCode(code);
-    }
+    for (const [fp, code] of Object.entries(parsed.files)) parsed.files[fp] = fixJsxCode(code);
     return reply(200, parsed);
   } catch (error) {
     console.error("Generate error:", error);

@@ -5170,9 +5170,9 @@ var require_lib3 = __commonJS({
       }
       return -1;
     };
-    var findSetKeyword = (sql) => {
+    var findSetKeyword = (sql, startFrom = 0) => {
       const length = sql.length;
-      for (let position = 0; position < length; position++) {
+      for (let position = startFrom; position < length; position++) {
         const code = sql.charCodeAt(position);
         const lower = code | 32;
         if (code === charCode.singleQuote || code === charCode.dash || code === charCode.slash) {
@@ -5376,7 +5376,7 @@ var require_lib3 = __commonJS({
             setIndex = findSetKeyword(sql);
           if (setIndex !== -1 && setIndex <= placeholderPosition && hasOnlyWhitespaceBetween(sql, setIndex, placeholderPosition) && !hasSqlString(currentValue) && !Array.isArray(currentValue) && !node_buffer_1.Buffer.isBuffer(currentValue) && !(currentValue instanceof Uint8Array) && !isDate(currentValue) && isRecord(currentValue)) {
             escapedValue = (0, exports.objectToValues)(currentValue, timezone);
-            setIndex = -1;
+            setIndex = findSetKeyword(sql, placeholderEnd);
           } else
             escapedValue = (0, exports.escape)(currentValue, true, timezone);
         } else
@@ -20949,7 +20949,7 @@ var require_package = __commonJS({
   "node_modules/mysql2/package.json"(exports, module) {
     module.exports = {
       name: "mysql2",
-      version: "3.17.0",
+      version: "3.17.1",
       description: "fast mysql driver. Implements core protocol, prepared statements, ssl and compression in native JS",
       main: "index.js",
       typings: "typings/mysql/index",
@@ -21009,7 +21009,7 @@ var require_package = __commonJS({
         "lru.min": "^1.1.3",
         "named-placeholders": "^1.1.6",
         "seq-queue": "^0.0.5",
-        "sql-escaper": "^1.3.1"
+        "sql-escaper": "^1.3.2"
       },
       devDependencies: {
         "@eslint/eslintrc": "^3.3.3",

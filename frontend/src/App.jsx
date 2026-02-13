@@ -629,16 +629,57 @@ function Factory() {
     await exportToZip(files);
   };
 
+  // ============ PUBLISH (build first, then upload dist/) ============
   const handlePublish = async () => {
     if (Object.keys(files).length === 0) return;
     setIsLoading(true);
+    setAgentStatus('Build en cours...');
     try {
-      const appName = window.prompt(t('appNamePrompt')) || `app-${Date.now()}`;
-      const result = await publishApp(flattenFiles(files), appName);
-      addLog(`Published: ${result.url}`);
+      const appName = window.prompt('Nom de l\'app:') || `app-${Date.now()}`;
+
+      // 1. Run build in WebContainer
+      addLog('Publish: build en cours...');
+      const buildProcess = await webcontainerRef.current.spawn('npm', ['run', 'build']);
+      let buildOutput = '';
+      await buildProcess.output.pipeTo(new WritableStream({
+        write(data) { buildOutput += data; }
+      }));
+      const buildExit = await buildProcess.exit;
+      if (buildExit !== 0) {
+        throw new Error(`Build failed:\n${buildOutput.slice(-500)}`);
+      }
+      addLog('Publish: build OK');
+
+      // 2. Read built files from dist/
+      setAgentStatus('Lecture des fichiers...');
+      const builtFiles = {};
+      
+      async function readDir(dirPath, prefix = '') {
+        const entries = await webcontainerRef.current.fs.readdir(dirPath, { withFileTypes: true });
+        for (const entry of entries) {
+          const fullPath = dirPath + '/' + entry.name;
+          const relativePath = prefix ? prefix + '/' + entry.name : entry.name;
+          if (entry.isDirectory()) {
+            await readDir(fullPath, relativePath);
+          } else {
+            const content = await webcontainerRef.current.fs.readFile(fullPath, 'utf-8');
+            builtFiles[relativePath] = content;
+          }
+        }
+      }
+
+      await readDir('dist');
+      addLog(`Publish: ${Object.keys(builtFiles).length} fichiers à publier`);
+
+      // 3. Upload to S3
+      setAgentStatus('Publication...');
+      const result = await publishApp(builtFiles, appName);
+      addLog(`Publié : ${result.url}`);
+      setAgentStatus('');
       window.open(result.url, '_blank');
     } catch (error) {
-      addLog(`Error: ${error.message}`);
+      addLog(`Erreur publish: ${error.message}`);
+      setAgentStatus('');
     }
     setIsLoading(false);
   };
