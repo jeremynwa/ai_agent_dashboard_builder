@@ -1,0 +1,351 @@
+# Agent Skills — Anthropic Documentation
+
+Agent Skills are modular capabilities that extend Claude's functionality. Each Skill packages instructions, metadata, and optional resources (scripts, templates) that Claude uses automatically when relevant.
+
+## Why use Skills
+
+Skills are reusable, filesystem-based resources that provide Claude with domain-specific expertise: workflows, context, and best practices that transform general-purpose agents into specialists. Unlike prompts (conversation-level instructions for one-off tasks), Skills load on-demand and eliminate the need to repeatedly provide the same guidance across multiple conversations.
+
+**Key benefits:**
+
+- **Specialize Claude**: Tailor capabilities for domain-specific tasks
+- **Reduce repetition**: Create once, use automatically
+- **Compose capabilities**: Combine Skills to build complex workflows
+
+## Using Skills
+
+Anthropic provides pre-built Agent Skills for common document tasks (PowerPoint, Excel, Word, PDF), and you can create your own custom Skills. Both work the same way. Claude automatically uses them when relevant to your request.
+
+- **Pre-built Agent Skills** are available to all users on claude.ai and via the Claude API.
+- **Custom Skills** let you package domain expertise and organizational knowledge. They're available across Claude's products: create them in Claude Code, upload them via the API, or add them in claude.ai settings.
+
+## How Skills Work
+
+Skills leverage Claude's VM environment to provide capabilities beyond what's possible with prompts alone. Claude operates in a virtual machine with filesystem access, allowing Skills to exist as directories containing instructions, executable code, and reference materials.
+
+This filesystem-based architecture enables **progressive disclosure**: Claude loads information in stages as needed, rather than consuming context upfront.
+
+### Three types of Skill content, three levels of loading
+
+#### Level 1: Metadata (always loaded)
+
+The Skill's YAML frontmatter provides discovery information:
+
+```yaml
+---
+name: pdf-processing
+description: Extract text and tables from PDF files, fill forms, merge documents. Use when working with PDF files or when the user mentions PDFs, forms, or document extraction.
+---
+```
+
+Claude loads this metadata at startup and includes it in the system prompt. This lightweight approach means you can install many Skills without context penalty; Claude only knows each Skill exists and when to use it.
+
+#### Level 2: Instructions (loaded when triggered)
+
+The main body of SKILL.md contains procedural knowledge: workflows, best practices, and guidance:
+
+```markdown
+# PDF Processing
+
+## Quick start
+
+Use pdfplumber to extract text from PDFs:
+
+\`\`\`python
+import pdfplumber
+
+with pdfplumber.open("document.pdf") as pdf:
+text = pdf.pages[0].extract_text()
+\`\`\`
+
+For advanced form filling, see [FORMS.md](FORMS.md).
+```
+
+When you request something that matches a Skill's description, Claude reads SKILL.md from the filesystem via bash. Only then does this content enter the context window.
+
+#### Level 3: Resources and code (loaded as needed)
+
+Skills can bundle additional materials:
+
+```
+pdf-skill/
+├── SKILL.md (main instructions)
+├── FORMS.md (form-filling guide)
+├── REFERENCE.md (detailed API reference)
+└── scripts/
+    └── fill_form.py (utility script)
+```
+
+- **Instructions**: Additional markdown files containing specialized guidance and workflows
+- **Code**: Executable scripts that Claude runs via bash; scripts provide deterministic operations without consuming context
+- **Resources**: Reference materials like database schemas, API documentation, templates, or examples
+
+Claude accesses these files only when referenced.
+
+| Level                 | When Loaded             | Token Cost            | Content                                                               |
+| --------------------- | ----------------------- | --------------------- | --------------------------------------------------------------------- |
+| Level 1: Metadata     | Always (at startup)     | ~100 tokens per Skill | name and description from YAML frontmatter                            |
+| Level 2: Instructions | When Skill is triggered | Under 5k tokens       | SKILL.md body with instructions and guidance                          |
+| Level 3+: Resources   | As needed               | Effectively unlimited | Bundled files executed via bash without loading contents into context |
+
+## The Skills Architecture
+
+Skills run in a code execution environment where Claude has filesystem access, bash commands, and code execution capabilities. Skills exist as directories on a virtual machine, and Claude interacts with them using bash commands.
+
+**What this architecture enables:**
+
+- **On-demand file access**: Claude reads only the files needed for each specific task. A Skill can include dozens of reference files, but if your task only needs the sales schema, Claude loads just that one file.
+- **Efficient script execution**: When Claude runs `validate_form.py`, the script's code never loads into the context window. Only the script's output consumes tokens.
+- **No practical limit on bundled content**: Because files don't consume context until accessed, Skills can include comprehensive documentation, large datasets, extensive examples.
+
+### Example: Loading a PDF processing skill
+
+1. **Startup**: System prompt includes: `PDF Processing - Extract text and tables from PDF files, fill forms, merge documents`
+2. **User request**: "Extract the text from this PDF and summarize it"
+3. **Claude invokes**: `bash: read pdf-skill/SKILL.md` → Instructions loaded into context
+4. **Claude determines**: Form filling is not needed, so FORMS.md is not read
+5. **Claude executes**: Uses instructions from SKILL.md to complete the task
+
+## Where Skills Work
+
+### Claude API
+
+The Claude API supports both pre-built Agent Skills and custom Skills. Specify the relevant `skill_id` in the `container` parameter along with the code execution tool.
+
+**Prerequisites** — three beta headers required:
+
+- `code-execution-2025-08-25` — Skills run in the code execution container
+- `skills-2025-10-02` — Enables Skills functionality
+- `files-api-2025-04-14` — Required for uploading/downloading files to/from the container
+
+### Claude Code
+
+Claude Code supports only Custom Skills. Create Skills as directories with SKILL.md files. Claude discovers and uses them automatically.
+
+### Claude Agent SDK
+
+The Claude Agent SDK supports custom Skills through filesystem-based configuration. Create Skills as directories with SKILL.md files in `.claude/skills/`.
+
+### Claude.ai
+
+Claude.ai supports both pre-built Agent Skills and custom Skills.
+
+- **Pre-built**: Already working behind the scenes when you create documents.
+- **Custom**: Upload as zip files through Settings > Features. Available on Pro, Max, Team, and Enterprise plans with code execution enabled.
+
+## Skill Structure
+
+Every Skill requires a SKILL.md file with YAML frontmatter:
+
+```yaml
+---
+name: your-skill-name
+description: Brief description of what this Skill does and when to use it
+---
+
+# Your Skill Name
+
+## Instructions
+[Clear, step-by-step guidance for Claude to follow]
+
+## Examples
+[Concrete examples of using this Skill]
+```
+
+**Field requirements:**
+
+- **name**: Maximum 64 characters, only lowercase letters, numbers, and hyphens. Cannot contain XML tags or reserved words ("anthropic", "claude").
+- **description**: Non-empty, maximum 1024 characters, cannot contain XML tags. Should include both what the Skill does and when Claude should use it.
+
+## Security Considerations
+
+We strongly recommend using Skills only from trusted sources: those you created yourself or obtained from Anthropic.
+
+**Key security considerations:**
+
+- **Audit thoroughly**: Review all files bundled in the Skill. Look for unusual patterns like unexpected network calls, file access patterns, or operations that don't match the Skill's stated purpose.
+- **External sources are risky**: Skills that fetch data from external URLs pose particular risk, as fetched content may contain malicious instructions.
+- **Tool misuse**: Malicious Skills can invoke tools (file operations, bash commands, code execution) in harmful ways.
+- **Data exposure**: Skills with access to sensitive data could be designed to leak information to external systems.
+- **Treat like installing software**: Only use Skills from trusted sources.
+
+## Available Skills
+
+### Pre-built Agent Skills
+
+| Skill                   | Description                                                     |
+| ----------------------- | --------------------------------------------------------------- |
+| **PowerPoint** (`pptx`) | Create presentations, edit slides, analyze presentation content |
+| **Excel** (`xlsx`)      | Create spreadsheets, analyze data, generate reports with charts |
+| **Word** (`docx`)       | Create documents, edit content, format text                     |
+| **PDF** (`pdf`)         | Generate formatted PDF documents and reports                    |
+
+### Custom Skills
+
+See the [Skills cookbook](https://github.com/anthropics/skills) for complete examples.
+
+## Using Skills with the API
+
+### Basic usage
+
+```python
+import anthropic
+
+client = anthropic.Anthropic()
+
+response = client.beta.messages.create(
+    model="claude-sonnet-4-5-20250929",
+    max_tokens=4096,
+    betas=["code-execution-2025-08-25", "skills-2025-10-02"],
+    container={
+        "skills": [
+            {"type": "anthropic", "skill_id": "xlsx", "version": "latest"},
+            {"type": "anthropic", "skill_id": "pptx", "version": "latest"},
+            {
+                "type": "custom",
+                "skill_id": "skill_01AbCdEfGhIjKlMnOpQrStUv",
+                "version": "latest",
+            },
+        ]
+    },
+    messages=[
+        {"role": "user", "content": "Analyze sales data and create a presentation"}
+    ],
+    tools=[{"type": "code_execution_20250825", "name": "code_execution"}],
+)
+```
+
+You can include **up to 8 Skills** per request.
+
+### Upload a custom Skill
+
+```python
+# Upload using directory path
+skill = client.beta.skills.create(
+    display_title="My Custom Skill",
+    files=["my-skill/SKILL.md", "my-skill/references/guide.md"],
+    betas=["skills-2025-10-02"]
+)
+print(f"Skill ID: {skill.id}")
+```
+
+### List Skills
+
+```python
+# List all Skills
+skills = client.beta.skills.list(betas=["skills-2025-10-02"])
+for skill in skills.data:
+    print(f"{skill.id}: {skill.display_title} (source: {skill.source})")
+
+# List only custom Skills
+custom_skills = client.beta.skills.list(source="custom", betas=["skills-2025-10-02"])
+```
+
+### Retrieve a Skill
+
+```python
+skill = client.beta.skills.retrieve(
+    skill_id="skill_01AbCdEfGhIjKlMnOpQrStUv",
+    betas=["skills-2025-10-02"]
+)
+print(f"Skill: {skill.display_title}")
+print(f"Latest version: {skill.latest_version}")
+```
+
+### Delete a Skill
+
+To delete a Skill, you must first delete all its versions.
+
+```bash
+curl "https://api.anthropic.com/v1/skills/skill_01abc?beta=true" \
+  -X DELETE \
+  -H "X-Api-Key: $ANTHROPIC_API_KEY" \
+  -H "anthropic-version: 2023-06-01" \
+  -H "anthropic-beta: skills-2025-10-02"
+```
+
+### Multi-turn conversations with Skills
+
+```python
+# First request creates container
+response1 = client.beta.messages.create(
+    model="claude-sonnet-4-5-20250929",
+    max_tokens=4096,
+    betas=["code-execution-2025-08-25", "skills-2025-10-02"],
+    container={
+        "skills": [{"type": "anthropic", "skill_id": "xlsx", "version": "latest"}]
+    },
+    messages=[{"role": "user", "content": "Analyze this sales data"}],
+    tools=[{"type": "code_execution_20250825", "name": "code_execution"}],
+)
+
+# Continue conversation with same container
+messages = [
+    {"role": "user", "content": "Analyze this sales data"},
+    {"role": "assistant", "content": response1.content},
+    {"role": "user", "content": "What was the total revenue?"},
+]
+
+response2 = client.beta.messages.create(
+    model="claude-sonnet-4-5-20250929",
+    max_tokens=4096,
+    betas=["code-execution-2025-08-25", "skills-2025-10-02"],
+    container={
+        "id": response1.container.id,  # Reuse container
+        "skills": [{"type": "anthropic", "skill_id": "xlsx", "version": "latest"}],
+    },
+    messages=messages,
+    tools=[{"type": "code_execution_20250825", "name": "code_execution"}],
+)
+```
+
+When Skills create documents (Excel, PowerPoint, PDF, Word), they return `file_id` attributes in the response. You must use the Files API to download these files.
+
+## Create Skill — API Reference
+
+```
+POST /v1/skills
+
+Headers:
+  anthropic-version: 2023-06-01
+  anthropic-beta: skills-2025-10-02
+  X-Api-Key: $ANTHROPIC_API_KEY
+
+Form data:
+  display_title: String — Human-readable label (not included in prompt)
+  files: Array[String] — Files to upload (must include SKILL.md at root)
+```
+
+**Response fields:**
+
+| Field            | Type   | Description                     |
+| ---------------- | ------ | ------------------------------- |
+| `id`             | string | Unique identifier for the skill |
+| `created_at`     | string | ISO 8601 timestamp              |
+| `display_title`  | string | Human-readable label            |
+| `latest_version` | string | Most recent version identifier  |
+| `source`         | string | `"custom"` or `"anthropic"`     |
+| `type`           | string | Always `"skill"`                |
+| `updated_at`     | string | ISO 8601 timestamp              |
+
+## Limitations and Constraints
+
+### Cross-surface availability
+
+Custom Skills do not sync across surfaces. Skills uploaded to one surface are not automatically available on others.
+
+### Sharing scope
+
+| Surface     | Scope                     |
+| ----------- | ------------------------- |
+| Claude.ai   | Individual user only      |
+| Claude API  | Workspace-wide            |
+| Claude Code | Personal or project-based |
+
+### Runtime environment constraints
+
+| Surface     | Network                       | Package install                                      |
+| ----------- | ----------------------------- | ---------------------------------------------------- |
+| Claude.ai   | Varying (depends on settings) | Varies                                               |
+| Claude API  | **No network access**         | **No runtime install** — only pre-installed packages |
+| Claude Code | Full network access           | Local install only                                   |
