@@ -342,6 +342,7 @@ function Factory() {
   const [previewUrl, setPreviewUrl] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isReady, setIsReady] = useState(false);
+  const [bootError, setBootError] = useState(null);
   const [excelData, setExcelData] = useState(null);
   const [dbData, setDbData] = useState(null);
   const [prompt, setPrompt] = useState('');
@@ -376,12 +377,29 @@ function Factory() {
   useEffect(() => {
     if (bootedRef.current) return;
     bootedRef.current = true;
-    WebContainer.boot({ coep: 'credentialless' })
+
+    // Diagnostic: log COEP/COOP headers for debugging Azure issues
+    console.log('[Boot] COOP:', document.featurePolicy ? 'supported' : 'N/A');
+    console.log('[Boot] crossOriginIsolated:', window.crossOriginIsolated);
+    console.log('[Boot] SharedArrayBuffer:', typeof SharedArrayBuffer !== 'undefined' ? 'available' : 'MISSING');
+
+    const bootTimeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('WebContainer boot timeout (15s) — check COEP/COOP headers')), 15000)
+    );
+
+    Promise.race([
+      WebContainer.boot({ coep: 'credentialless' }),
+      bootTimeout,
+    ])
       .then((wc) => {
         webcontainerRef.current = wc;
         setIsReady(true);
       })
-      .catch((error) => { console.error('WebContainer boot failed:', error); addLog(`Error: ${error.message}`); });
+      .catch((error) => {
+        console.error('WebContainer boot failed:', error);
+        addLog(`Error: ${error.message}`);
+        setBootError(error.message);
+      });
   }, []);
 
   const handleDataLoaded = (data) => {
@@ -915,11 +933,13 @@ function Factory() {
           <div style={styles.footerMeta}>
             <div style={styles.statusRow}>
               <motion.span
-                style={{ ...styles.dot, background: isReady ? '#34D399' : '#F59E0B' }}
-                animate={isReady ? {} : { opacity: [1, 0.3, 1] }}
+                style={{ ...styles.dot, background: isReady ? '#34D399' : bootError ? '#EF4444' : '#F59E0B' }}
+                animate={isReady || bootError ? {} : { opacity: [1, 0.3, 1] }}
                 transition={{ duration: 1.2, repeat: Infinity }}
               />
-              <span style={styles.statusText}>{isReady ? t('engineReady') : t('booting')}</span>
+              <span style={styles.statusText}>
+                {isReady ? t('engineReady') : bootError ? 'Boot failed' : t('booting')}
+              </span>
             </div>
             <LangToggle />
           </div>

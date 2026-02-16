@@ -22,13 +22,18 @@ export default function AuthProvider({ children }) {
 
   const checkSession = async () => {
     try {
-      const session = await getSession();
+      console.log('[Auth] Checking stored session...');
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Auth session check timeout')), 10000)
+      );
+      const session = await Promise.race([getSession(), timeoutPromise]);
+      console.log('[Auth] Session result:', session ? 'valid' : 'none');
       if (session) {
         const email = session.getIdToken().payload.email;
         setUser({ email });
       }
     } catch (_) {
-      // No valid session
+      // No valid session or timeout
     } finally {
       setLoading(false);
     }
