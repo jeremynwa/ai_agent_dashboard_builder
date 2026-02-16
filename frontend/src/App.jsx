@@ -382,7 +382,20 @@ function Factory() {
     const clientId = import.meta.env.VITE_WEBCONTAINER_CLIENT_ID;
     if (clientId) {
       console.log('[Boot] Initializing WebContainer auth...');
-      auth.init({ clientId, scope: '' });
+      const result = auth.init({ clientId, scope: '' });
+      console.log('[Boot] Auth init result:', result);
+
+      if (result?.status === 'need-auth') {
+        console.log('[Boot] Starting StackBlitz OAuth flow...');
+        auth.startAuthFlow({ popup: false });
+        return; // page will redirect to StackBlitz OAuth
+      }
+
+      if (result?.status === 'auth-failed') {
+        console.error('[Boot] Auth failed:', result.error, result.description);
+        setBootError(`Auth failed: ${result.description || result.error}`);
+        return;
+      }
     } else {
       console.log('[Boot] No VITE_WEBCONTAINER_CLIENT_ID — running in localhost mode');
     }
@@ -391,7 +404,7 @@ function Factory() {
     console.log('[Boot] SharedArrayBuffer:', typeof SharedArrayBuffer !== 'undefined' ? 'available' : 'MISSING');
 
     const bootTimeout = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('WebContainer boot timeout (15s)')), 15000)
+      setTimeout(() => reject(new Error('WebContainer boot timeout (30s)')), 30000)
     );
 
     Promise.race([
