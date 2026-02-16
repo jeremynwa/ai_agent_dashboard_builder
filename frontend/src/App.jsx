@@ -383,9 +383,6 @@ function Factory() {
     console.log('[Boot] crossOriginIsolated:', window.crossOriginIsolated);
     console.log('[Boot] SharedArrayBuffer:', typeof SharedArrayBuffer !== 'undefined' ? 'available' : 'MISSING');
 
-    // Point WebContainer headless iframe to our own origin instead of stackblitz.com
-    globalThis.WEBCONTAINER_API_IFRAME_URL = window.location.origin;
-
     const bootTimeout = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('WebContainer boot timeout (15s) — check COEP/COOP headers')), 15000)
     );
