@@ -388,7 +388,7 @@ function Factory() {
     );
 
     Promise.race([
-      WebContainer.boot({ coep: 'credentialless' }),
+      WebContainer.boot({ coep: 'none' }),
       bootTimeout,
     ])
       .then((wc) => {
