@@ -1,0 +1,11 @@
+{
+  "globalHeaders": {
+    "Cross-Origin-Opener-Policy": "same-origin",
+    "Cross-Origin-Embedder-Policy": "credentialless",
+    "X-Content-Type-Options": "nosniff"
+  },
+  "mimeTypes": {
+    ".json": "application/json",
+    ".wasm": "application/wasm"
+  }
+}
