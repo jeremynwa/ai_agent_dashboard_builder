@@ -27,14 +27,15 @@ Key files:
 
 ### 2.2 Backend (AWS Lambda + SAM)
 
-Four Lambda functions deployed via SAM (Serverless Application Model):
+Five Lambda functions deployed via SAM (Serverless Application Model):
 
 | Function         | Trigger                          | Timeout | Purpose                              |
 | ---------------- | -------------------------------- | ------- | ------------------------------------ |
-| GenerateFunction | Function URL (no API GW timeout) | 600s    | AI code generation + vision analysis |
+| GenerateFunction | Function URL (no API GW timeout) | 600s    | AI code generation + vision analysis (supports Agent Skills beta) |
 | PublishFunction  | API Gateway                      | 30s     | Publish built apps to S3             |
 | RulesFunction    | API Gateway                      | 30s     | Load business rules from S3          |
 | DbFunction       | Function URL                     | 60s     | Database proxy (PostgreSQL/MySQL)    |
+| ExportFunction   | API Gateway                      | 120s    | Export dashboard data as XLSX/PPTX/PDF |
 
 ### 2.3 Authentication (AWS Cognito)
 
@@ -51,13 +52,22 @@ JWT verification in Lambda uses Web Crypto API against Cognito JWKS endpoint. JW
 ### 3.1 Generation Flow
 
 ```
-User Prompt + Data
+User Prompt + Data + Industry (optional)
         │
         ▼
+┌─── Phase 0: DATA ANALYSIS ──┐  (optional, if DATA_ANALYZER_SKILL_ID set)
+│ data-analyzer skill           │
+│ Python scripts: column types, │
+│ periods, stats, chart recs    │
+│ → analysis JSON context       │
+└───────────┬───────────────────┘
+            ▼
 ┌─── Phase 1: GENERATION ───┐
 │ Claude Sonnet 4 generates  │
 │ React code from prompt     │
-│ + data + business rules    │
+│ + data + analysis context  │
+│ + business rules           │
+│ + industry skill (if set)  │
 └───────────┬────────────────┘
             ▼
 ┌─── Phase 2: COMPILATION ──┐
@@ -93,9 +103,46 @@ User Prompt + Data
      (full-screen preview)
 ```
 
-### 3.2 System Prompt Structure
+### 3.2 System Prompt — Two Modes
 
-The generate Lambda's system prompt (`generate/index.mjs`) defines:
+The generate Lambda (`generate/index.mjs`) supports two modes for delivering the system prompt, controlled by `USE_BETA_API` and `DASHBOARD_SKILL_ID` environment variables.
+
+#### Standard Mode (fallback, `USE_BETA_API=false`)
+
+A monolithic ~2700 token `SYSTEM_PROMPT` string embedded in `index.mjs` defines all rules inline. This is the original approach and remains as a safe fallback.
+
+#### Skill Mode (`USE_BETA_API=true` + `DASHBOARD_SKILL_ID` set)
+
+Uses the Anthropic Agent Skills beta API. The system prompt is replaced by a modular **dashboard-generator** skill uploaded to Anthropic's platform. Claude reads skill files on-demand from a code execution container.
+
+**How it works:**
+
+1. A minimal system prompt (`"Use the dashboard-generator skill. MODE: Excel/Database."`) is sent instead of the full prompt
+2. The skill ID is passed via `container.skills` in the beta API call
+3. Claude reads the skill's `SKILL.md` (core rules) + reference files as needed
+4. Claude returns JSON in its text response (explicitly instructed, not via container files)
+
+**Benefits:**
+- Edit prompt rules without Lambda redeployment (update skill files, re-upload)
+- Modular: each concern (KPIs, charts, filters, etc.) in its own file
+- Progressive loading: Claude only reads references it needs
+
+**API call (skill mode):**
+```javascript
+const response = await anthropic.beta.messages.create({
+  model: 'claude-sonnet-4-20250514',
+  max_tokens: 16384,
+  betas: ['code-execution-2025-08-25', 'skills-2025-10-02'],
+  system: 'Use the dashboard-generator skill. MODE: Excel.',
+  container: {
+    skills: [{ type: 'custom', skill_id: DASHBOARD_SKILL_ID, version: 'latest' }],
+  },
+  tools: [{ type: 'code_execution_20250825', name: 'code_execution' }],
+  messages: [{ role: 'user', content: userMessage }],
+});
+```
+
+#### Prompt Rules (both modes)
 
 1. **Rules** — JSON output format, no emojis, compile-safe code
 2. **Styling** — Design system CSS classes (`className=""`) + inline styles for dynamic values. No Tailwind, no cn(), no clsx
@@ -105,7 +152,7 @@ The generate Lambda's system prompt (`generate/index.mjs`) defines:
 6. **Page rules** :
    - **Vue d'ensemble** : KPIs + charts + key takeaways
    - **Analyses / Rapports** : Minimum 2 Recharts + 1 table + mandatory filter bar (dynamic selects from data columns, useState + useMemo for filtering)
-   - **Paramètres** : Enforced JSX template (label + description left with gap-1, toggle/value right, data info grid 2 cols)
+   - **Parametres** : Enforced JSX template (label + description left with gap-1, toggle/value right, data info grid 2 cols)
 7. **Charts** — Min 3 types, CartesianGrid, labeled axes, tooltips, Cell colors for PieChart
 8. **Key Takeaways** — 3-5 auto-calculated observations, computed from real data, never invented
 9. **Data Formatting** — `fmt()`, `fmtCur()`, `fmtPct()` utility functions mandatory
@@ -125,7 +172,275 @@ Tailwind CSS doesn't work in WebContainer (PostCSS build fails, CDN blocked by C
 
 **Imported in** `main.jsx` (not in App.jsx — Claude is instructed not to import it).
 
-### 3.4 Data Injection
+### 3.4 Agent Skills (Beta)
+
+The dashboard-generator skill is an Anthropic Agent Skill that encapsulates all prompt rules in modular files. It lives in `lambda-v2/skills/dashboard-generator/` and is uploaded to Anthropic's platform via the Skills API.
+
+#### Skill Structure
+
+```
+skills/dashboard-generator/
+├── SKILL.md                     ← Entry point (frontmatter + core rules)
+├── references/
+│   ├── design-system.md         ← CSS classes + component classes
+│   ├── structure.md             ← Drawer, header, content-area JSX templates
+│   ├── pages.md                 ← Page types (overview, analyses, settings)
+│   ├── filters.md               ← Dynamic filter bar pattern
+│   ├── kpis.md                  ← KPI cards, sparklines, zero fabrication rule
+│   ├── charts.md                ← Recharts config, COLORS, PieChart Cell rule
+│   ├── tables.md                ← Table structure, alternating rows
+│   ├── formatting.md            ← fmt(), fmtCur(), fmtPct() definitions
+│   ├── insights.md              ← Key takeaways (points cles)
+│   ├── mode-excel.md            ← Excel mode: __INJECT_DATA__ placeholder
+│   └── mode-database.md         ← DB mode: __DB_PROXY_URL__ + __DB_CREDENTIALS__
+└── scripts/
+    └── validate_output.py       ← JSON output validation script
+```
+
+#### Loading Levels
+
+- **Level 1 (always)**: SKILL.md frontmatter (`name`, `description`) — ~100 tokens
+- **Level 2 (on trigger)**: SKILL.md body (core rules + pointers to references)
+- **Level 3 (as needed)**: Reference files — Claude reads only what it needs via code execution
+
+#### Management CLI
+
+```bash
+cd lambda-v2
+node manage-skills.mjs list                              # List all skills
+node manage-skills.mjs upload skills/dashboard-generator  # Upload/update skill
+node manage-skills.mjs get skill_01XkRdUeca25kPFLF3DM4b2Y  # Get skill details
+node manage-skills.mjs delete skill_01XkRdUeca25kPFLF3DM4b2Y  # Delete skill
+```
+
+#### Validation Script
+
+```bash
+python skills/dashboard-generator/scripts/validate_output.py output.json
+```
+
+Checks: valid JSON, App.jsx exists, React imports, no emojis, PieChart has Cell, COLORS defined, no ds.css import, unique gradient IDs, correct placeholders.
+
+#### Key Implementation Notes
+
+- **File upload format**: Files must include a top-level directory prefix (e.g., `dashboard-generator/SKILL.md`), matching the Python SDK convention
+- **JSON output**: Claude must be explicitly told to return JSON as text, not write files to the container. The system prompt includes: `"CRITICAL OUTPUT FORMAT: Return your final answer as a JSON object directly in your text response"`
+- **Betas required**: `code-execution-2025-08-25` + `skills-2025-10-02`
+- **SDK version**: `@anthropic-ai/sdk@^0.74.0`
+- **Current skill ID**: `skill_01XkRdUeca25kPFLF3DM4b2Y`
+
+### 3.5 Data Analyzer Skill (Beta)
+
+The data-analyzer skill pre-analyzes uploaded data using Python scripts in the code execution container **before** dashboard generation. This provides Claude with factual statistics and chart recommendations, eliminating data fabrication.
+
+#### Two-Call Strategy
+
+```
+User uploads data
+       │
+       ▼
+┌─── Call 1: DATA ANALYSIS ──────┐
+│ data-analyzer skill             │
+│ Python scripts run in container │
+│ → Column types, periods, stats  │
+│ → Chart recommendations         │
+│ Returns: analysis JSON          │
+└──────────┬──────────────────────┘
+           ▼
+┌─── Call 2: DASHBOARD GENERATION ┐
+│ dashboard-generator skill        │
+│ + analysis context injected      │
+│ → Uses real stats for KPIs       │
+│ → Follows chart recommendations  │
+│ Returns: { files: {...} } JSON   │
+└──────────────────────────────────┘
+```
+
+#### Skill Structure
+
+```
+skills/data-analyzer/
+├── SKILL.md                        ← Instructions + output format
+├── scripts/
+│   ├── analyze_columns.py          ← Column types (numeric, date, categorical, currency, %)
+│   ├── detect_periods.py           ← Temporal columns, period type, comparability
+│   ├── compute_stats.py            ← Min/max/mean/sum/quartiles + period values + variations
+│   └── suggest_charts.py           ← Chart type recommendations (AreaChart, BarChart, PieChart, etc.)
+└── references/
+    └── chart-selection-guide.md    ← When to use which chart type
+```
+
+#### Python Scripts Pipeline
+
+Scripts execute sequentially, each writing results to `/tmp/`:
+
+1. **analyze_columns.py** — Detects types per column: `numeric`, `categorical`, `date`, `currency`, `percentage`, `text`. Uses pandas type inference, regex for currency/percentage patterns, month name detection (FR+EN).
+
+2. **detect_periods.py** — Finds temporal columns. Detects: month names (Janvier, January...), quarters (Q1-Q4, T1-T4), datetime parsing. Returns `hasPeriods`, `periodType` (monthly/quarterly/yearly/daily/weekly), `canCompare`.
+
+3. **compute_stats.py** — For numeric columns: min, max, mean, median, sum, stddev, quartiles. If periods exist: per-period values (for sparklines) and variation %. For categorical columns: value counts (for PieChart data).
+
+4. **suggest_charts.py** — Recommends chart types based on data shape:
+   - Numeric + period → AreaChart/LineChart
+   - Categorical + numeric → BarChart
+   - Categorical ≤6 values → PieChart
+   - Period + category + numeric → StackedBarChart
+
+#### Lambda Integration (`analyzeData()`)
+
+```javascript
+async function analyzeData(dataContext) {
+  if (!USE_BETA_API || !DATA_ANALYZER_SKILL_ID) return null;
+  // Calls Claude with data-analyzer skill, maxTokens: 8192
+  // Returns parsed analysis JSON or null on failure (graceful degradation)
+}
+```
+
+The analysis result is injected into the generation user message:
+```
+DATA ANALYSIS (factual — computed by Python scripts, use these values):
+{ "analysis": { "columns": [...], "periods": {...}, "stats": {...}, "chartRecommendations": [...] } }
+IMPORTANT: Use the statistics and chart recommendations above. Do NOT invent values.
+```
+
+#### Key Details
+
+- **Skill ID**: `skill_01DAnrjyQM5eAJYiCvhMK7Du`
+- **Latency**: +10-15s per generation (analysis call uses maxTokens 8192)
+- **Graceful degradation**: If `DATA_ANALYZER_SKILL_ID` is empty, `analyzeData()` returns null — flow continues without pre-analysis
+- **Rollback**: Set `DATA_ANALYZER_SKILL_ID: ""` in template.yaml
+
+### 3.6 Industry Skills (x4)
+
+Four industry-specific skills inject sector KPIs, vocabulary (French), and chart recommendations into dashboard generation. The user selects an industry via chips in the frontend; the corresponding skill is added dynamically to the `skills[]` array alongside `dashboard-generator`.
+
+#### Skill IDs
+
+| Industry | Skill ID | Key KPIs |
+|----------|----------|----------|
+| Finance/Comptabilité | `skill_013h9deHQb7CaA47xd59Uytd` | EBITDA, Marge brute/nette, BFR, ROE, ROA, DSO, DPO |
+| E-commerce/Retail | `skill_014PUPgrYoGE8BRDwiDhZDMP` | Panier moyen, Taux de conversion, Abandon panier, CAC, Repeat purchase |
+| SaaS/Tech | `skill_01Ekuh6H7ZKBkA2qzdXYzr1y` | MRR, ARR, Churn rate, LTV/CAC, NPS, ARPU, Trial conversion |
+| Logistique/Supply Chain | `skill_011zy4TbPD7jcWEfiMKfi4jN` | OTIF, Lead time, Taux de rupture, Couverture stock, Taux de remplissage |
+
+#### Skill Structure (same for all 4)
+
+```
+skills/industry-<name>/
+├── SKILL.md              ← Frontmatter + sector context instructions
+└── references/
+    ├── kpis.md           ← KPI definitions, formulas, format, badge direction
+    ├── charts.md         ← Recommended chart types for this sector
+    └── vocabulary.md     ← Industry terminology (French labels)
+```
+
+#### Lambda Integration
+
+In `generate/index.mjs`:
+
+```javascript
+const INDUSTRY_SKILL_IDS = {
+  finance: process.env.INDUSTRY_FINANCE_SKILL_ID || null,
+  ecommerce: process.env.INDUSTRY_ECOMMERCE_SKILL_ID || null,
+  saas: process.env.INDUSTRY_SAAS_SKILL_ID || null,
+  logistics: process.env.INDUSTRY_LOGISTICS_SKILL_ID || null,
+};
+
+// In skill mode, after pushing dashboard-generator:
+if (industry && INDUSTRY_SKILL_IDS[industry]) {
+  skills.push(INDUSTRY_SKILL_IDS[industry]);
+  systemPrompt += ` INDUSTRY: ${industry} — see the industry skill references...`;
+}
+```
+
+#### Frontend
+
+Industry selector chips displayed between the prompt textarea and the data source row. 5 options: Généraliste (default, sends no industry), Finance, E-commerce, SaaS, Logistique. Selected chip highlighted in accent color (#06B6D4).
+
+- **Rollback**: Set `INDUSTRY_*_SKILL_ID: ""` in template.yaml → no industry skill injected
+- **Cost**: +$0.03-0.05 per generation (~2K extra context tokens)
+
+### 3.7 Multi-Format Export (XLSX, PPTX, PDF)
+
+The export feature generates professional XLSX, PPTX, or PDF files from dashboard data using **Anthropic pre-built skills** (no custom skills needed).
+
+#### Architecture
+
+```
+Frontend (export button click)
+       │
+       ▼
+POST /prod/export  (API Gateway, 120s timeout)
+  { format: "pptx", data: [...], title: "Mon Dashboard", kpis: [...] }
+       │
+       ▼
+Lambda export/index.mjs
+  → Claude with pre-built skill (type: "anthropic", skill_id: "pptx")
+  → Code execution generates file in container
+  → Extract file_id from bash_code_execution_tool_result
+  → Download via Files API (client.beta.files.download)
+  → Return { base64, filename, mimeType }
+       │
+       ▼
+Frontend
+  → Decode base64 → Blob → URL.createObjectURL → auto-download
+```
+
+#### Pre-built Skills
+
+| Format | Skill ID | MIME Type |
+|--------|----------|-----------|
+| XLSX | `xlsx` | `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` |
+| PPTX | `pptx` | `application/vnd.openxmlformats-officedocument.presentationml.presentation` |
+| PDF | `pdf` | `application/pdf` |
+
+#### API Call
+
+```javascript
+const response = await anthropic.beta.messages.create({
+  model: 'claude-sonnet-4-20250514',
+  max_tokens: 8192,
+  betas: ['code-execution-2025-08-25', 'skills-2025-10-02', 'files-api-2025-04-14'],
+  container: {
+    skills: [{ type: 'anthropic', skill_id: 'pptx', version: 'latest' }],
+  },
+  tools: [{ type: 'code_execution_20250825', name: 'code_execution' }],
+  messages: [{ role: 'user', content: prompt }],
+});
+```
+
+#### File Retrieval
+
+```javascript
+// Extract file_id from response
+function extractFileId(response) {
+  for (const block of response.content) {
+    if (block.type === 'bash_code_execution_tool_result') {
+      const result = block.content;
+      if (result.type === 'bash_code_execution_result' && result.content) {
+        for (const item of result.content) {
+          if (item.file_id) return item.file_id;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+// Download file
+const fileContent = await anthropic.beta.files.download(fileId, {
+  betas: ['files-api-2025-04-14'],
+});
+```
+
+#### Key Details
+
+- **Container pre-installed**: openpyxl, xlsxwriter, python-pptx, python-docx, reportlab, pypdf, pandas, numpy
+- **Cost**: ~$0.10-0.15 per export
+- **Timeout**: 120s (file generation typically takes 30-60s)
+- **Payload limit**: API Gateway 10MB — sufficient for most exports
+
+### 3.8 Data Injection
 
 Two modes for data:
 
@@ -250,6 +565,13 @@ MY_REGION=eu-north-1
 PUBLISH_BUCKET=ai-app-builder-sk-2026
 COGNITO_USER_POOL_ID (from Cognito resource)
 COGNITO_REGION=eu-north-1
+USE_BETA_API="true"               ← Set "true" to enable Agent Skills mode
+DASHBOARD_SKILL_ID="skill_01XkRdUeca25kPFLF3DM4b2Y"
+DATA_ANALYZER_SKILL_ID="skill_01DAnrjyQM5eAJYiCvhMK7Du"
+INDUSTRY_FINANCE_SKILL_ID="skill_013h9deHQb7CaA47xd59Uytd"
+INDUSTRY_ECOMMERCE_SKILL_ID="skill_014PUPgrYoGE8BRDwiDhZDMP"
+INDUSTRY_SAAS_SKILL_ID="skill_01Ekuh6H7ZKBkA2qzdXYzr1y"
+INDUSTRY_LOGISTICS_SKILL_ID="skill_011zy4TbPD7jcWEfiMKfi4jN"
 ```
 
 ## 7. Known Issues & Solutions
@@ -303,7 +625,10 @@ Tailwind does NOT work in WebContainer:
 
 ### 7.8 Invented Data / Fake Comparisons
 
-Claude tends to invent "Previous Year", "Objective", or variation percentages. The system prompt now explicitly forbids this — all values must be computed from real data.
+Claude tends to invent "Previous Year", "Objective", or variation percentages. Two defenses:
+
+1. **System prompt** — Explicitly forbids fabricated data (both standard and skill modes)
+2. **Data analyzer skill** — Pre-analyzes data with Python scripts to provide factual statistics. The analysis context tells Claude exactly which columns have periods, what the real stats are, and which chart types are appropriate. This dramatically reduces fabrication.
 
 ### 7.9 Publish Blank Page
 
@@ -324,11 +649,14 @@ Content-Type: application/json
   "excelData": { "headers": [...], "data": [...], "fullData": [...], "fileName": "...", "totalRows": N },
   "existingCode": { "src/App.jsx": "..." },
   "dbContext": { "type": "postgresql", "schema": {...} },
-  "screenshot": "base64..." // only for vision analysis with prompt "__VISION_ANALYZE__"
+  "screenshot": "base64...",
+  "industry": "finance"  // optional: finance, ecommerce, saas, logistics
 }
 
 Response: { "files": { "src/App.jsx": "...", "src/data.js": "..." } }
 ```
+
+When `USE_BETA_API=true` and `DATA_ANALYZER_SKILL_ID` is set, the Lambda makes two Claude API calls: first to analyze the data (data-analyzer skill), then to generate the dashboard (dashboard-generator skill with analysis context injected). If `industry` is provided, the corresponding industry skill is added to the skills array.
 
 ### 8.2 Publish App
 
@@ -376,6 +704,30 @@ Response: { "rows": [...] }
 ```
 
 ⚠️ The proxy currently accepts arbitrary SQL with no filtering. See Security section for planned improvements.
+
+### 8.5 Export (XLSX/PPTX/PDF)
+
+```
+POST {API_URL}/prod/export
+Authorization: Bearer {JWT}
+Content-Type: application/json
+
+{
+  "format": "xlsx",              // xlsx, pptx, or pdf
+  "data": [{ ... }, { ... }],   // dashboard data rows
+  "title": "Mon Dashboard",     // export title
+  "kpis": [...],                // optional: KPI definitions
+  "chartDescriptions": [...]    // optional: chart descriptions
+}
+
+Response: {
+  "base64": "UEsDBBQAAAA...",   // file content (base64-encoded)
+  "filename": "Mon Dashboard.xlsx",
+  "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+}
+```
+
+The frontend decodes base64 → Blob → `URL.createObjectURL` → triggers browser download.
 
 ## 9. Design System Reference
 

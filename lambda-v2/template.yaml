@@ -97,6 +97,13 @@ Resources:
       Environment:
         Variables:
           ANTHROPIC_API_KEY: !Ref AnthropicApiKey
+          USE_BETA_API: "true"
+          DASHBOARD_SKILL_ID: "skill_01XkRdUeca25kPFLF3DM4b2Y"
+          DATA_ANALYZER_SKILL_ID: "skill_01DAnrjyQM5eAJYiCvhMK7Du"
+          INDUSTRY_FINANCE_SKILL_ID: "skill_013h9deHQb7CaA47xd59Uytd"
+          INDUSTRY_ECOMMERCE_SKILL_ID: "skill_014PUPgrYoGE8BRDwiDhZDMP"
+          INDUSTRY_SAAS_SKILL_ID: "skill_01Ekuh6H7ZKBkA2qzdXYzr1y"
+          INDUSTRY_LOGISTICS_SKILL_ID: "skill_011zy4TbPD7jcWEfiMKfi4jN"
       FunctionUrlConfig:
         AuthType: NONE
         Cors:
@@ -233,6 +240,40 @@ Resources:
           - .js=.mjs
         EntryPoints:
           - index.mjs
+        Banner:
+          - js=import { createRequire } from 'module'; const require = createRequire(import.meta.url);
+
+  # ============ EXPORT (PPTX/XLSX/PDF) ============
+  ExportFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: app-factory-export
+      Handler: index.handler
+      CodeUri: export/
+      Timeout: 120
+      MemorySize: 512
+      Environment:
+        Variables:
+          ANTHROPIC_API_KEY: !Ref AnthropicApiKey
+      Events:
+        Post:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref AppFactoryApi
+            Path: /export
+            Method: POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: false
+        Target: es2022
+        Format: esm
+        OutExtension:
+          - .js=.mjs
+        EntryPoints:
+          - index.mjs
+        External:
+          - '@aws-sdk/*'
         Banner:
           - js=import { createRequire } from 'module'; const require = createRequire(import.meta.url);
 

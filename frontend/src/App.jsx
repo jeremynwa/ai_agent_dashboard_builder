@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, createContext, useContext } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { WebContainer } from '@webcontainer/api';
 import { baseFiles } from './services/files-template';
-import { generateApp, visionAnalyze, publishApp, API_BASE, DB_PROXY_URL } from './services/api';
+import { generateApp, visionAnalyze, publishApp, exportApp, API_BASE, DB_PROXY_URL } from './services/api';
 import { exportToZip } from './services/export';
 import FileUpload from './components/FileUpload';
 import DbConnect from './components/DbConnect';
@@ -101,6 +101,18 @@ const translations = {
       hrAnalytics: 'HR Analytics',
       supplyChain: 'Supply Chain',
     },
+    industryLabel: 'Industry',
+    industries: {
+      none: 'General',
+      finance: 'Finance',
+      ecommerce: 'E-commerce',
+      saas: 'SaaS / Tech',
+      logistics: 'Logistics',
+    },
+    exportXlsx: 'Export XLSX',
+    exportPptx: 'Export PPTX',
+    exportPdf: 'Export PDF',
+    exporting: 'Exporting...',
   },
   fr: {
     title: 'Que voulez-vous construire ?',
@@ -148,6 +160,18 @@ const translations = {
       hrAnalytics: 'Analytics RH',
       supplyChain: 'Supply Chain',
     },
+    industryLabel: 'Secteur',
+    industries: {
+      none: 'Généraliste',
+      finance: 'Finance',
+      ecommerce: 'E-commerce',
+      saas: 'SaaS / Tech',
+      logistics: 'Logistique',
+    },
+    exportXlsx: 'Export XLSX',
+    exportPptx: 'Export PPTX',
+    exportPdf: 'Export PDF',
+    exporting: 'Export en cours...',
   },
 };
 
@@ -328,6 +352,8 @@ function Factory() {
   const [feedback, setFeedback] = useState('');
   const [currentFiles, setCurrentFiles] = useState({});
   const [showDataSource, setShowDataSource] = useState(false);
+  const [selectedIndustry, setSelectedIndustry] = useState('');
+  const [exportingFormat, setExportingFormat] = useState(null);
   const webcontainerRef = useRef(null);
   const bootedRef = useRef(false);
   const iframeRef = useRef(null);
@@ -508,12 +534,12 @@ function Factory() {
       if (attempt === 0) {
         setAgentStatus(t('generatingCode'));
         setGenerationStep(1);
-        const result = await generateApp(userPrompt, excelData, currentCode, dbContext);
+        const result = await generateApp(userPrompt, excelData, currentCode, dbContext, selectedIndustry || null);
         currentCode = result.files;
       } else {
         setAgentStatus(t('autoFix').replace('{n}', attempt).replace('{max}', MAX_FIX_ATTEMPTS));
         const fixPrompt = `L'application a une erreur de compilation. Corrige le code.\n\nERREUR:\n${lastError}\n\nCorrige cette erreur et retourne le JSON complet avec TOUS les fichiers.`;
-        const result = await generateApp(fixPrompt, excelData, stripDataFiles(currentCode), dbContext);
+        const result = await generateApp(fixPrompt, excelData, stripDataFiles(currentCode), dbContext, selectedIndustry || null);
         currentCode = result.files;
       }
 
@@ -629,6 +655,32 @@ function Factory() {
     await exportToZip(files);
   };
 
+  const handleExportFormat = async (format) => {
+    if (!excelData && !dbData) return;
+    setExportingFormat(format);
+    try {
+      const data = excelData?.data || [];
+      const title = generatedApp?.name || 'Dashboard';
+      const result = await exportApp(format, data, title);
+      if (result.base64) {
+        const mimeTypes = { xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', pdf: 'application/pdf' };
+        const byteCharacters = atob(result.base64);
+        const byteArray = new Uint8Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) byteArray[i] = byteCharacters.charCodeAt(i);
+        const blob = new Blob([byteArray], { type: mimeTypes[format] });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${title}.${format}`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch (error) {
+      addLog(`Export error: ${error.message}`);
+    }
+    setExportingFormat(null);
+  };
+
   // ============ PUBLISH (build first, then upload dist/) ============
   const handlePublish = async () => {
     if (Object.keys(files).length === 0) return;
@@ -723,6 +775,19 @@ function Factory() {
             <button onClick={handleExport} style={styles.floatingButton}>
               {t('export')}
             </button>
+            {(excelData || dbData) && (
+              <>
+                <button onClick={() => handleExportFormat('xlsx')} style={styles.floatingButton} disabled={!!exportingFormat}>
+                  {exportingFormat === 'xlsx' ? t('exporting') : t('exportXlsx')}
+                </button>
+                <button onClick={() => handleExportFormat('pptx')} style={styles.floatingButton} disabled={!!exportingFormat}>
+                  {exportingFormat === 'pptx' ? t('exporting') : t('exportPptx')}
+                </button>
+                <button onClick={() => handleExportFormat('pdf')} style={styles.floatingButton} disabled={!!exportingFormat}>
+                  {exportingFormat === 'pdf' ? t('exporting') : t('exportPdf')}
+                </button>
+              </>
+            )}
             <button onClick={handlePublish} style={styles.floatingButtonPrimary}>
               {t('publish')}
             </button>
@@ -938,6 +1003,36 @@ function Factory() {
                   }}
                   rows={3}
                 />
+
+                {/* Industry selector */}
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                  <span style={{ color: '#71717A', fontSize: '12px', alignSelf: 'center', marginRight: '4px' }}>{t('industryLabel')}</span>
+                  {['none', 'finance', 'ecommerce', 'saas', 'logistics'].map((ind) => (
+                    <button
+                      key={ind}
+                      onClick={() => setSelectedIndustry(ind === 'none' ? '' : ind)}
+                      style={{
+                        padding: '5px 12px',
+                        borderRadius: '16px',
+                        border: (ind === 'none' ? !selectedIndustry : selectedIndustry === ind)
+                          ? '1px solid #06B6D4'
+                          : '1px solid rgba(63, 63, 70, 0.3)',
+                        background: (ind === 'none' ? !selectedIndustry : selectedIndustry === ind)
+                          ? 'rgba(6, 182, 212, 0.15)'
+                          : 'rgba(24, 24, 27, 0.4)',
+                        color: (ind === 'none' ? !selectedIndustry : selectedIndustry === ind)
+                          ? '#06B6D4'
+                          : '#A1A1AA',
+                        fontSize: '13px',
+                        cursor: 'pointer',
+                        fontFamily: 'inherit',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      {t(`industries.${ind}`)}
+                    </button>
+                  ))}
+                </div>
 
                 {/* Data source */}
                 <div style={styles.dataRow}>

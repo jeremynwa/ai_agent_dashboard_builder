@@ -14,12 +14,14 @@ async function authHeaders() {
 }
 
 // ============ GENERATE ============
-export async function generateApp(prompt, excelData = null, existingCode = null, dbContext = null) {
+export async function generateApp(prompt, excelData = null, existingCode = null, dbContext = null, industry = null) {
   const headers = await authHeaders();
+  const body = { prompt, useRules: true, excelData, existingCode, dbContext };
+  if (industry) body.industry = industry;
   const res = await fetch(GENERATE_URL, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ prompt, useRules: true, excelData, existingCode, dbContext }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     const errBody = await res.json().catch(() => ({}));
@@ -79,6 +81,22 @@ export async function getDbSchema(credentials) {
   if (!res.ok) {
     const errBody = await res.json().catch(() => ({}));
     throw new Error(errBody.error || 'DB schema failed');
+  }
+  return res.json();
+}
+
+// ============ EXPORT (PPTX/XLSX/PDF) ============
+export async function exportApp(format, data, title, kpis = [], chartDescriptions = []) {
+  const headers = await authHeaders();
+  const res = await fetch(`${API_BASE}/export`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ format, data, title, kpis, chartDescriptions }),
+  });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    if (res.status === 401) throw new Error('Session expirée. Reconnectez-vous.');
+    throw new Error(errBody.error || 'Export failed');
   }
   return res.json();
 }

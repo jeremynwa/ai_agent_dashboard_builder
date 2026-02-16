@@ -5,6 +5,90 @@ import { authenticateRequest } from './auth.mjs';
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const s3 = new S3Client({ region: process.env.MY_REGION || 'eu-north-1' });
 const RULES_BUCKET = process.env.RULES_BUCKET || 'ai-app-builder-sk-2026';
+const USE_BETA_API = process.env.USE_BETA_API === 'true';
+const DASHBOARD_SKILL_ID = process.env.DASHBOARD_SKILL_ID || null;
+const DATA_ANALYZER_SKILL_ID = process.env.DATA_ANALYZER_SKILL_ID || null;
+const INDUSTRY_SKILL_IDS = {
+  finance: process.env.INDUSTRY_FINANCE_SKILL_ID || null,
+  ecommerce: process.env.INDUSTRY_ECOMMERCE_SKILL_ID || null,
+  saas: process.env.INDUSTRY_SAAS_SKILL_ID || null,
+  logistics: process.env.INDUSTRY_LOGISTICS_SKILL_ID || null,
+};
+
+// ============================================================================
+// callClaude — wrapper that supports both standard and beta (skills) API
+// ============================================================================
+async function callClaude({ system, messages, skills = [], maxTokens = 16384 }) {
+  if (!USE_BETA_API || skills.length === 0) {
+    // Standard API (current behavior)
+    return await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: maxTokens,
+      system,
+      messages,
+    });
+  }
+
+  // Beta API with code execution + skills
+  const response = await anthropic.beta.messages.create({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: maxTokens,
+    betas: ['code-execution-2025-08-25', 'skills-2025-10-02'],
+    system,
+    container: {
+      skills: skills.map(s =>
+        typeof s === 'string'
+          ? { type: 'custom', skill_id: s, version: 'latest' }
+          : s
+      ),
+    },
+    tools: [{ type: 'code_execution_20250825', name: 'code_execution' }],
+    messages,
+  });
+
+  return response;
+}
+
+// Helper: extract text from response (works for both standard and beta)
+function extractResponseText(response) {
+  return response.content
+    .filter(c => c.type === 'text')
+    .map(c => c.text)
+    .join('\n');
+}
+
+// ============================================================================
+// analyzeData — pre-analyze data with data-analyzer skill before generation
+// ============================================================================
+async function analyzeData(dataContext) {
+  if (!USE_BETA_API || !DATA_ANALYZER_SKILL_ID) return null;
+
+  console.log('Running data analysis with data-analyzer skill...');
+  const systemPrompt = 'Use the data-analyzer skill. Run the analysis scripts on the provided data. Return the analysis JSON in your text response. Do NOT write the result to a file — return it directly as text.';
+
+  try {
+    const message = await callClaude({
+      system: systemPrompt,
+      messages: [{ role: 'user', content: `Analyze this data:\n${dataContext}` }],
+      skills: [DATA_ANALYZER_SKILL_ID],
+      maxTokens: 8192,
+    });
+
+    const text = extractResponseText(message);
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.warn('Data analyzer returned no JSON, skipping analysis');
+      return null;
+    }
+
+    const result = JSON.parse(jsonMatch[0]);
+    console.log('Data analysis complete.');
+    return result;
+  } catch (e) {
+    console.warn('Data analysis failed:', e.message);
+    return null;
+  }
+}
 
 const HEADERS = { 'Content-Type': 'application/json' };
 const reply = (code, body) => ({ statusCode: code, headers: HEADERS, body: JSON.stringify(body) });
@@ -326,7 +410,7 @@ export const handler = async (event) => {
 
   try {
     const body = JSON.parse(event.body || '{}');
-    const { prompt, useRules, excelData, existingCode, existingFiles, dbContext, screenshot } = body;
+    const { prompt, useRules, excelData, existingCode, existingFiles, dbContext, screenshot, industry } = body;
     const existingApp = existingCode || existingFiles || null;
 
     // ============ VISION ============
@@ -359,11 +443,9 @@ export const handler = async (event) => {
       if (Object.keys(rules).length > 0) rulesContext = `\n\nREGLES METIER:\n${JSON.stringify(rules, null, 2)}`;
     }
 
-    let systemWithData = SYSTEM_PROMPT;
+    // Build data context (same for both modes)
     let dataContext = '';
-
     if (dbContext) {
-      systemWithData = SYSTEM_PROMPT + DB_PROXY_PROMPT;
       const schemaDesc = Object.entries(dbContext.schema).map(([table, info]) => {
         const cols = info.columns.map(c => `  - ${c.name} (${c.type})`).join('\n');
         const sampleStr = info.sample?.length > 0 ? `\nExemple:\n${JSON.stringify(info.sample.slice(0,3), null, 2)}` : '';
@@ -371,28 +453,67 @@ export const handler = async (event) => {
       }).join('\n\n');
       dataContext = `\n\nBDD (${dbContext.type}):\n${schemaDesc}\n\nUtilise queryDb().`;
     } else if (excelData) {
-      systemWithData = SYSTEM_PROMPT + DATA_INJECTION_PROMPT;
       const rawData = excelData.data || excelData.fullData || [];
       const sample = rawData.slice(0, 30);
       const headers = excelData.headers || (sample.length > 0 ? Object.keys(sample[0]) : []);
       dataContext = `\n\nDONNEES:\nFichier: ${excelData.fileName || 'data'}\nColonnes: ${headers.join(', ')}\nTotal: ${excelData.totalRows || rawData.length} lignes\nEchantillon:\n${JSON.stringify(sample, null, 2)}\n\nUtilise "__INJECT_DATA__" dans src/data.js.`;
     }
 
+    // Pre-analyze data with data-analyzer skill (if available)
+    let analysisContext = '';
+    if (dataContext && USE_BETA_API && DATA_ANALYZER_SKILL_ID) {
+      const analysis = await analyzeData(dataContext);
+      if (analysis) {
+        analysisContext = `\n\nDATA ANALYSIS (factual — computed by Python scripts, use these values):\n${JSON.stringify(analysis, null, 2)}\n\nIMPORTANT: Use the statistics and chart recommendations above. Do NOT invent values not present in the data.`;
+      }
+    }
+
+    // Determine system prompt and skills
+    let systemPrompt;
+    let skills = [];
+
+    if (USE_BETA_API && DASHBOARD_SKILL_ID) {
+      // Skill mode: minimal system prompt (skill has all the rules)
+      systemPrompt = 'Use the dashboard-generator skill.';
+      skills.push(DASHBOARD_SKILL_ID);
+
+      if (dbContext) {
+        systemPrompt += ' MODE: Database — see references/mode-database.md in the skill.';
+      } else if (excelData) {
+        systemPrompt += ' MODE: Excel — see references/mode-excel.md in the skill.';
+      }
+
+      // Add industry skill if selected
+      if (industry && INDUSTRY_SKILL_IDS[industry]) {
+        skills.push(INDUSTRY_SKILL_IDS[industry]);
+        systemPrompt += ` INDUSTRY: ${industry} — see the industry skill references for sector-specific KPIs, chart types, and vocabulary.`;
+      }
+
+      // Force JSON output in text (not in container files)
+      systemPrompt += '\n\nCRITICAL OUTPUT FORMAT: Return your final answer as a JSON object directly in your text response: { "files": { "src/App.jsx": "...", ... } }. Do NOT write files to the container. Return the complete JSON as TEXT.';
+    } else {
+      // Standard mode: full monolithic prompt (fallback)
+      systemPrompt = SYSTEM_PROMPT;
+      if (dbContext) systemPrompt += DB_PROXY_PROMPT;
+      else if (excelData) systemPrompt += DATA_INJECTION_PROMPT;
+    }
+
     let userMessage = '';
     if (existingApp) {
       userMessage = `Code actuel:\n\n`;
       for (const [p, c] of Object.entries(existingApp)) userMessage += `--- ${p} ---\n${c}\n\n`;
-      userMessage += `\nMODIFICATION: ${prompt}${rulesContext}${dataContext}\n\nRetourne le JSON complet.`;
+      userMessage += `\nMODIFICATION: ${prompt}${rulesContext}${dataContext}${analysisContext}\n\nRetourne le JSON complet.`;
     } else {
-      userMessage = `Genere une app React dashboard pour: ${prompt}${rulesContext}${dataContext}`;
+      userMessage = `Genere une app React dashboard pour: ${prompt}${rulesContext}${dataContext}${analysisContext}`;
     }
 
-    const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514', max_tokens: 16384, system: systemWithData,
+    const message = await callClaude({
+      system: systemPrompt,
       messages: [{ role: 'user', content: userMessage }],
+      skills,
     });
 
-    const content = message.content[0].text;
+    const content = extractResponseText(message);
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('Pas de JSON');
     const parsed = JSON.parse(jsonMatch[0]);

@@ -1,0 +1,9 @@
+{
+  "name": "app-factory-tools",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Management scripts for App Factory (skills, tests)",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.74.0"
+  }
+}
