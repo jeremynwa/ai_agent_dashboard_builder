@@ -71,6 +71,13 @@
 - [x] `manage-skills.mjs` upload auto-replace (détecte + supprime ancien skill avant re-upload)
 - [x] `manage-skills.mjs` upload prefix = skill name (API constraint: folder prefix must match SKILL.md name)
 - [x] Skill renamed `dashboard-generator-v2` (API ne supporte pas delete versions → contournement)
+- [x] Dashboard Reviewer skill — vérifications statiques Python (`check_code.py`) + review qualité IA (skill_01G3LJaHUFQn9WTbcrmTFCrB)
+- [x] Vision Analyzer skill — détection problèmes visuels depuis screenshots (skill_016hJRgXdpBiDrcbknvQYQLW)
+- [x] Review pipeline skill-based dans generate Lambda (fallback standard si skill non configuré)
+- [x] Vision pipeline converti vers `callClaude()` avec skill + fallback direct API
+- [x] Monitoring structuré : logs JSON dans `callClaude()` (tokens, latence, skill, modèle)
+- [x] Skill upload automation dans `deploy.ps1` (prompt optionnel post-deploy)
+- [x] Integration test: `test-review-vision.mjs` (review bad/good code + vision)
 
 ### En cours / À faire
 
@@ -167,6 +174,7 @@ ai_agent_dashboard_builder/
     ├── test-beta.mjs             ← Beta API verification tests
     ├── test-skill-generation.mjs ← Skill integration test (24 checks)
     ├── test-data-analyzer.mjs    ← Data analyzer test (31 checks)
+    ├── test-review-vision.mjs    ← Review + Vision skills test
     ├── shared/auth.mjs
     ├── generate/
     │   ├── index.mjs             ← system prompt + callClaude() + analyzeData() + generate + vision
@@ -198,6 +206,16 @@ ai_agent_dashboard_builder/
         ├── industry-saas/        ← Secteur SaaS/Tech
         │   ├── SKILL.md
         │   └── references/
+        ├── dashboard-reviewer/   ← Review qualité code (Python checks + IA)
+        │   ├── SKILL.md
+        │   ├── scripts/
+        │   │   └── check_code.py    ← 15 vérifications statiques JSX
+        │   └── references/
+        │       └── checklist.md
+        ├── vision-analyzer/      ← Analyse visuelle screenshots
+        │   ├── SKILL.md
+        │   └── references/
+        │       └── common-issues.md ← 12 patterns bugs visuels + fixes
         └── industry-logistics/   ← Secteur Logistique/Supply Chain
             ├── SKILL.md
             └── references/
@@ -257,6 +275,19 @@ Le mode est contrôlé par `USE_BETA_API` + `DASHBOARD_SKILL_ID` + `DATA_ANALYZE
 - **Lambda** : `industry` paramètre dans le body → skill ajouté dynamiquement à `skills[]`
 - **Rollback** : `INDUSTRY_*_SKILL_ID: ""` dans template.yaml → pas de skill industrie
 
+### Agent Skills — Review & Vision
+
+| Skill | Skill ID | Rôle |
+|-------|----------|------|
+| Dashboard Reviewer | `skill_01G3LJaHUFQn9WTbcrmTFCrB` | Vérifications statiques (check_code.py) + review qualité IA |
+| Vision Analyzer | `skill_016hJRgXdpBiDrcbknvQYQLW` | Analyse screenshots, détecte problèmes visuels, corrige code |
+
+- **Review** : `check_code.py` (15 checks : imports, PieChart+Cell, COLORS, emojis, gradient IDs, insights, filtres, IDs bruts)
+- **Vision** : `common-issues.md` (12 patterns : overlaps, espaces vides, texte illisible, PieChart gris, filtres cassés)
+- **Pipeline** : Generate → Compile → Review (conditional) → Vision → Final Compile
+- **Fallback** : si `REVIEWER_SKILL_ID=""` → review via path generate standard ; si `VISION_SKILL_ID=""` → vision via API directe
+- **Test** : `REVIEWER_SKILL_ID=skill_01... VISION_SKILL_ID=skill_01... node test-review-vision.mjs`
+
 ### Export Lambda (XLSX, PPTX, PDF)
 
 - **Endpoint** : `POST /prod/export`
@@ -297,12 +328,15 @@ node manage-skills.mjs upload skills/industry-finance     # Upload industry skil
 node manage-skills.mjs upload skills/industry-ecommerce
 node manage-skills.mjs upload skills/industry-saas
 node manage-skills.mjs upload skills/industry-logistics
+node manage-skills.mjs upload skills/dashboard-reviewer    # Upload reviewer skill
+node manage-skills.mjs upload skills/vision-analyzer       # Upload vision skill
 node manage-skills.mjs get <skill-id>                     # Get skill details
 
 # Tests
 node test-beta.mjs                                        # Verify beta API access
 DASHBOARD_SKILL_ID=skill_01... node test-skill-generation.mjs  # Test skill generation
 DATA_ANALYZER_SKILL_ID=skill_01... node test-data-analyzer.mjs  # Test data analysis
+REVIEWER_SKILL_ID=skill_01... VISION_SKILL_ID=skill_01... node test-review-vision.mjs  # Test review + vision
 ```
 
 ## Notes Dev
@@ -329,3 +363,8 @@ DATA_ANALYZER_SKILL_ID=skill_01... node test-data-analyzer.mjs  # Test data anal
 - Export Lambda : Anthropic pre-built skills (`pptx`, `xlsx`, `pdf`) — pas de custom skill, type `"anthropic"`
 - Files API : `files-api-2025-04-14` beta — download fichier généré via `client.beta.files.download(fileId)`
 - Export timeout : 120s (génération fichier dans container peut prendre 30-60s)
+- `REVIEWER_SKILL_ID` + `VISION_SKILL_ID` : env vars pour activer review/vision via skills (vides = fallback)
+- Review skill-based : `check_code.py` vérifie 15 points (imports, PieChart+Cell, COLORS, emojis, gradient IDs, insights, filtres, IDs bruts) → Claude corrige
+- Vision skill-based : utilise `callClaude()` avec `common-issues.md` comme référence, fallback vers API directe si skill non configuré
+- Monitoring : `callClaude()` log JSON structuré (event, label, model, skills, tokens, elapsed_ms, stop_reason) → CloudWatch Logs Insights
+- `deploy.ps1` : prompt optionnel "Upload/update Agent Skills?" après SAM deploy, boucle sur les 8 dossiers skills

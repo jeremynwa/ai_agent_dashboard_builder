@@ -80,24 +80,28 @@ User Prompt + Data + Industry (optional)
 │ If error → auto-fix (3x)   │
 └───────────┬────────────────┘
             ▼
-┌─── Phase 3: QUALITY REVIEW ┐
-│ Claude reviews the code:    │
-│ • Labels, legends, units    │
-│ • Formatting, spacing       │
-│ • Color system compliance   │
-│ • Error handling            │
-│                             │
-│ If review breaks → revert   │
-└───────────┬─────────────────┘
+┌─── Phase 3: QUALITY REVIEW ┐  (conditional: skip if simple prompt)
+│ dashboard-reviewer skill:    │
+│ • check_code.py (15 static   │
+│   checks: imports, PieChart, │
+│   COLORS, emojis, IDs, etc.) │
+│ • AI review: labels, spacing,│
+│   formatting, compliance     │
+│                              │
+│ Fallback: standard prompt    │
+│ If review breaks → revert    │
+└───────────┬──────────────────┘
             ▼
 ┌─── Phase 4: VISION ANALYSIS ┐
-│ html2canvas screenshot       │
-│ → Claude analyzes rendering  │
-│ → Fixes layout, overlap,     │
-│   readability issues         │
-│                              │
-│ If vision breaks → revert    │
-└───────────┬──────────────────┘
+│ html2canvas screenshot        │
+│ → vision-analyzer skill:      │
+│   common-issues.md reference  │
+│ → Fixes layout, overlap,      │
+│   readability issues           │
+│                                │
+│ Fallback: direct API call      │
+│ If vision breaks → revert      │
+└───────────┬────────────────────┘
             ▼
      Dashboard Ready
      (full-screen preview)
@@ -360,7 +364,63 @@ Industry selector chips displayed between the prompt textarea and the data sourc
 - **Rollback**: Set `INDUSTRY_*_SKILL_ID: ""` in template.yaml → no industry skill injected
 - **Cost**: +$0.03-0.05 per generation (~2K extra context tokens)
 
-### 3.7 Multi-Format Export (XLSX, PPTX, PDF)
+### 3.7 Review & Vision Skills
+
+Two skills replace the hardcoded review/vision prompts with modular, testable components.
+
+#### Dashboard Reviewer (`skill_01G3LJaHUFQn9WTbcrmTFCrB`)
+
+```
+skills/dashboard-reviewer/
+├── SKILL.md                    ← Instructions: run check_code.py, review, fix, return JSON
+├── scripts/
+│   └── check_code.py           ← 15 static checks on App.jsx
+└── references/
+    └── checklist.md            ← Visual quality checklist (manual review)
+```
+
+**check_code.py** runs these static checks:
+1. React import present
+2. Recharts import (if charts used)
+3. ResponsiveContainer import (if charts used)
+4. COLORS array defined (if charts used)
+5. PieChart has `<Cell>` elements
+6. Formatting functions (fmt/fmtCur/fmtPct) defined
+7. No emojis in code
+8. No ds.css import (already in main.jsx)
+9. SVG gradient IDs unique
+10. Insight/key takeaways section present
+11. Filter `<select>` has dark background styling
+12. No raw ID columns as chart dataKey
+13. `content-area` wrapper class present
+14. Drawer/hamburger pattern present
+15. Fabrication keyword detection (warning)
+
+Returns JSON: `{ "errors": [...], "warnings": [...], "passed": N, "failed": N }`
+
+**Lambda integration**: When `modelHint === 'review'` AND `REVIEWER_SKILL_ID` is set, the Lambda routes to a dedicated review block that calls `callClaude()` with the reviewer skill. If the skill is not configured, the request falls through to the standard generate path (backward compatible).
+
+#### Vision Analyzer (`skill_016hJRgXdpBiDrcbknvQYQLW`)
+
+```
+skills/vision-analyzer/
+├── SKILL.md                     ← Instructions: analyze screenshot, fix code, return JSON
+└── references/
+    └── common-issues.md         ← 12 common visual bug patterns + fixes
+```
+
+**common-issues.md** covers: overlapping elements, empty space, unreadable text, charts cut off, grey PieChart, misaligned KPIs, broken filter selects, invisible table headers, sparklines too large, content behind header, drawer issues, invisible tooltips.
+
+**Lambda integration**: The vision block in `generate/index.mjs` checks `VISION_SKILL_ID`. If set, uses `callClaude()` with the skill (Claude gets common-issues.md as reference). If not set, falls back to the existing direct `anthropic.messages.create()` call with hardcoded prompts.
+
+#### Key Details
+
+- **Env vars**: `REVIEWER_SKILL_ID`, `VISION_SKILL_ID` in template.yaml
+- **Models**: Both use `REVIEW_MODEL` / `VISION_MODEL` (default Haiku for cost, Sonnet for quality)
+- **Fallback**: Empty skill ID → graceful degradation to previous behavior
+- **Test**: `REVIEWER_SKILL_ID=... VISION_SKILL_ID=... node test-review-vision.mjs`
+
+### 3.8 Multi-Format Export (XLSX, PPTX, PDF)
 
 The export feature generates professional XLSX, PPTX, or PDF files from dashboard data using **Anthropic pre-built skills** (no custom skills needed).
 
@@ -440,7 +500,7 @@ const fileContent = await anthropic.beta.files.download(fileId, {
 - **Timeout**: 120s (file generation typically takes 30-60s)
 - **Payload limit**: API Gateway 10MB — sufficient for most exports
 
-### 3.8 Cost Optimization
+### 3.9 Cost Optimization
 
 Several optimizations reduce API costs without impacting output quality:
 
@@ -490,7 +550,34 @@ The frontend caches the `_analysisResult` returned by the first generation call.
 | Conditional review | -$0.145 (simple prompts) | Low |
 | stripToAppOnly | -$0.01 (-2%) | None |
 
-### 3.9 Data Injection
+### 3.10 Monitoring
+
+All `callClaude()` calls log structured JSON to CloudWatch:
+
+```json
+{
+  "event": "claude_call",
+  "label": "generate",          // generate, data-analyze, review, vision, review-fallback, vision-fallback
+  "model": "claude-sonnet-4-20250514",
+  "skills": ["skill_01GMx6ta9DNWD6wDmX4S6PhN"],
+  "input_tokens": 12345,
+  "output_tokens": 6789,
+  "cache_creation_input_tokens": 0,
+  "cache_read_input_tokens": 11000,
+  "elapsed_ms": 45230,
+  "stop_reason": "end_turn"
+}
+```
+
+**Labels**: `generate` (main generation), `data-analyze` (pre-analysis), `review` (skill-based review), `vision` (skill-based vision), `review-fallback` (standard prompt review), `vision-fallback` (direct API vision).
+
+**Queryable** via CloudWatch Logs Insights:
+```
+filter event = "claude_call"
+| stats avg(elapsed_ms) as avg_latency, sum(input_tokens) as total_input, sum(output_tokens) as total_output by label
+```
+
+### 3.11 Data Injection
 
 Two modes for data:
 
@@ -590,9 +677,10 @@ The PowerShell script:
 1. Uploads business rules to S3 (`rules/` prefix)
 2. Runs `sam build`
 3. Runs `sam deploy` with parameters (API key, bucket, region)
-4. Fetches CloudFormation outputs (API URL, Generate URL, DB Proxy URL, Cognito IDs)
-5. Auto-writes `frontend/.env` with all values
-6. Optionally creates first Cognito user
+4. Optionally uploads/updates all 8 Agent Skills via `manage-skills.mjs`
+5. Fetches CloudFormation outputs (API URL, Generate URL, DB Proxy URL, Cognito IDs)
+6. Auto-writes `frontend/.env` with all values
+7. Optionally creates first Cognito user
 
 ### 6.3 Environment Variables
 
@@ -622,6 +710,8 @@ INDUSTRY_FINANCE_SKILL_ID="skill_013h9deHQb7CaA47xd59Uytd"
 INDUSTRY_ECOMMERCE_SKILL_ID="skill_014PUPgrYoGE8BRDwiDhZDMP"
 INDUSTRY_SAAS_SKILL_ID="skill_01Ekuh6H7ZKBkA2qzdXYzr1y"
 INDUSTRY_LOGISTICS_SKILL_ID="skill_011zy4TbPD7jcWEfiMKfi4jN"
+REVIEWER_SKILL_ID="skill_01G3LJaHUFQn9WTbcrmTFCrB"    ← Review skill (empty = fallback to standard prompt)
+VISION_SKILL_ID="skill_016hJRgXdpBiDrcbknvQYQLW"       ← Vision skill (empty = fallback to direct API)
 REVIEW_MODEL="claude-haiku-4-5-20251001"     ← TEST: Haiku for review (PROD: remove or set claude-sonnet-4-20250514)
 VISION_MODEL="claude-haiku-4-5-20251001"     ← TEST: Haiku for vision (PROD: remove or set claude-sonnet-4-20250514)
 EXPORT_MODEL="claude-haiku-4-5-20251001"     ← TEST: Haiku for export (PROD: remove or set claude-sonnet-4-20250514)

@@ -52,6 +52,38 @@ sam deploy `
     --no-confirm-changeset `
     --no-fail-on-empty-changeset
 
+# ─── Upload Agent Skills (optional) ──────────────────
+$skillsUpload = Read-Host "Upload/update Agent Skills? (y/N)"
+if ($skillsUpload -eq "y") {
+    Write-Host "Uploading Agent Skills..." -ForegroundColor Yellow
+
+    $skillDirs = @(
+        "skills/dashboard-generator",
+        "skills/data-analyzer",
+        "skills/dashboard-reviewer",
+        "skills/vision-analyzer",
+        "skills/industry-finance",
+        "skills/industry-ecommerce",
+        "skills/industry-saas",
+        "skills/industry-logistics"
+    )
+
+    foreach ($dir in $skillDirs) {
+        $fullPath = Join-Path $PSScriptRoot $dir
+        if (Test-Path (Join-Path $fullPath "SKILL.md")) {
+            Write-Host "  Uploading $dir..." -ForegroundColor Cyan
+            node manage-skills.mjs upload $dir
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "  WARNING: Failed to upload $dir" -ForegroundColor Red
+            }
+        }
+    }
+
+    Write-Host "Skills upload complete." -ForegroundColor Green
+    Write-Host ""
+    Write-Host "REMINDER: Update skill IDs in template.yaml if they changed, then redeploy." -ForegroundColor Yellow
+}
+
 # ─── Fetch all outputs ───────────────────────────────
 Write-Host ""
 Write-Host "Fetching stack outputs..." -ForegroundColor Yellow

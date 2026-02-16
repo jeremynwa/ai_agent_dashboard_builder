@@ -14,16 +14,21 @@ const INDUSTRY_SKILL_IDS = {
   saas: process.env.INDUSTRY_SAAS_SKILL_ID || null,
   logistics: process.env.INDUSTRY_LOGISTICS_SKILL_ID || null,
 };
+const REVIEWER_SKILL_ID = process.env.REVIEWER_SKILL_ID || null;
+const VISION_SKILL_ID = process.env.VISION_SKILL_ID || null;
 const REVIEW_MODEL = process.env.REVIEW_MODEL || 'claude-sonnet-4-20250514';
 const VISION_MODEL = process.env.VISION_MODEL || 'claude-sonnet-4-20250514';
 
 // ============================================================================
 // callClaude — wrapper that supports both standard and beta (skills) API
 // ============================================================================
-async function callClaude({ system, messages, skills = [], maxTokens = 16384, model = 'claude-sonnet-4-20250514', temperature = 0 }) {
+async function callClaude({ system, messages, skills = [], maxTokens = 16384, model = 'claude-sonnet-4-20250514', temperature = 0, label = 'unknown' }) {
+  const startMs = Date.now();
+  let response;
+
   if (!USE_BETA_API || skills.length === 0) {
     // Standard API — with prompt caching on system prompt
-    return await anthropic.messages.create({
+    response = await anthropic.messages.create({
       model,
       max_tokens: maxTokens,
       temperature,
@@ -34,25 +39,41 @@ async function callClaude({ system, messages, skills = [], maxTokens = 16384, mo
       }],
       messages,
     });
+  } else {
+    // Beta API with code execution + skills
+    response = await anthropic.beta.messages.create({
+      model,
+      max_tokens: maxTokens,
+      temperature,
+      betas: ['code-execution-2025-08-25', 'skills-2025-10-02'],
+      system,
+      container: {
+        skills: skills.map(s =>
+          typeof s === 'string'
+            ? { type: 'custom', skill_id: s, version: 'latest' }
+            : s
+        ),
+      },
+      tools: [{ type: 'code_execution_20250825', name: 'code_execution' }],
+      messages,
+    });
   }
 
-  // Beta API with code execution + skills
-  const response = await anthropic.beta.messages.create({
+  // Structured monitoring log
+  const elapsedMs = Date.now() - startMs;
+  const usage = response.usage || {};
+  console.log(JSON.stringify({
+    event: 'claude_call',
+    label,
     model,
-    max_tokens: maxTokens,
-    temperature,
-    betas: ['code-execution-2025-08-25', 'skills-2025-10-02'],
-    system,
-    container: {
-      skills: skills.map(s =>
-        typeof s === 'string'
-          ? { type: 'custom', skill_id: s, version: 'latest' }
-          : s
-      ),
-    },
-    tools: [{ type: 'code_execution_20250825', name: 'code_execution' }],
-    messages,
-  });
+    skills: skills.map(s => typeof s === 'string' ? s : s.skill_id || s.type),
+    input_tokens: usage.input_tokens || 0,
+    output_tokens: usage.output_tokens || 0,
+    cache_creation_input_tokens: usage.cache_creation_input_tokens || 0,
+    cache_read_input_tokens: usage.cache_read_input_tokens || 0,
+    elapsed_ms: elapsedMs,
+    stop_reason: response.stop_reason,
+  }));
 
   return response;
 }
@@ -80,6 +101,7 @@ async function analyzeData(dataContext) {
       messages: [{ role: 'user', content: `Analyze this data:\n${dataContext}` }],
       skills: [DATA_ANALYZER_SKILL_ID],
       maxTokens: 8192,
+      label: 'data-analyze',
     });
 
     const text = extractResponseText(message);
@@ -421,21 +443,72 @@ export const handler = async (event) => {
     const { prompt, useRules, excelData, existingCode, existingFiles, dbContext, screenshot, industry, modelHint, cachedAnalysis } = body;
     const existingApp = existingCode || existingFiles || null;
 
+    // ============ REVIEW (skill-based) ============
+    if (modelHint === 'review' && USE_BETA_API && REVIEWER_SKILL_ID && existingApp) {
+      console.log('Running skill-based review...');
+      const appCode = existingApp['src/App.jsx'] || '';
+
+      const reviewMessage = await callClaude({
+        system: 'Use the dashboard-reviewer skill. Run check_code.py on the provided code, then review for visual quality using references/checklist.md. Fix all errors and return the complete fixed code as JSON: { "files": { "src/App.jsx": "..." } }. Return JSON in your TEXT response, NOT as a file.',
+        messages: [{ role: 'user', content: `Review and fix this React dashboard code:\n\n${appCode}` }],
+        skills: [REVIEWER_SKILL_ID],
+        maxTokens: 16384,
+        model: REVIEW_MODEL,
+        label: 'review',
+      });
+
+      const reviewContent = extractResponseText(reviewMessage);
+      const reviewJsonMatch = reviewContent.match(/\{[\s\S]*\}/);
+      if (!reviewJsonMatch) throw new Error('No JSON from reviewer');
+      const reviewParsed = JSON.parse(reviewJsonMatch[0]);
+      for (const [fp, code] of Object.entries(reviewParsed.files)) reviewParsed.files[fp] = fixJsxCode(code);
+      return reply(200, reviewParsed);
+    }
+
     // ============ VISION ============
     if (screenshot && prompt === '__VISION_ANALYZE__') {
       let codeContext = '';
       if (existingApp) { for (const [p, c] of Object.entries(existingApp)) codeContext += `--- ${p} ---\n${c}\n\n`; }
 
-      const message = await anthropic.messages.create({
-        model: VISION_MODEL, max_tokens: 16384,
-        system: [{ type: 'text', text: VISION_SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
-        messages: [{ role: 'user', content: [
-          { type: 'image', source: { type: 'base64', media_type: 'image/png', data: screenshot } },
-          { type: 'text', text: VISION_USER_PROMPT + codeContext + '\n\nRetourne le JSON complet.' },
-        ]}],
-      });
+      let visionResponse;
+      const startVision = Date.now();
 
-      const content = message.content[0].text;
+      if (USE_BETA_API && VISION_SKILL_ID) {
+        // Skill mode: vision-analyzer skill provides reference files for common issues
+        console.log('Running skill-based vision analysis...');
+        visionResponse = await callClaude({
+          system: 'Use the vision-analyzer skill. Analyze the screenshot and fix visual issues in the code. Return JSON: { "files": { "src/App.jsx": "..." } }. Return JSON in your TEXT response, NOT as a file.',
+          messages: [{ role: 'user', content: [
+            { type: 'image', source: { type: 'base64', media_type: 'image/png', data: screenshot } },
+            { type: 'text', text: 'Screenshot + code source. Analyse et corrige:\n1. Layout 2. Chevauchements 3. Lisibilite 4. Graphiques 5. KPIs 6. Espacement 7. Coherence\n\nCODE ACTUEL:\n' + codeContext + '\n\nRetourne le JSON complet.' },
+          ]}],
+          skills: [VISION_SKILL_ID],
+          maxTokens: 16384,
+          model: VISION_MODEL,
+          label: 'vision',
+        });
+      } else {
+        // Fallback: standard API with hardcoded prompts
+        visionResponse = await anthropic.messages.create({
+          model: VISION_MODEL, max_tokens: 16384,
+          system: [{ type: 'text', text: VISION_SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
+          messages: [{ role: 'user', content: [
+            { type: 'image', source: { type: 'base64', media_type: 'image/png', data: screenshot } },
+            { type: 'text', text: VISION_USER_PROMPT + codeContext + '\n\nRetourne le JSON complet.' },
+          ]}],
+        });
+        // Log for fallback vision call
+        const visionUsage = visionResponse.usage || {};
+        console.log(JSON.stringify({
+          event: 'claude_call', label: 'vision-fallback', model: VISION_MODEL, skills: [],
+          input_tokens: visionUsage.input_tokens || 0, output_tokens: visionUsage.output_tokens || 0,
+          cache_creation_input_tokens: visionUsage.cache_creation_input_tokens || 0,
+          cache_read_input_tokens: visionUsage.cache_read_input_tokens || 0,
+          elapsed_ms: Date.now() - startVision, stop_reason: visionResponse.stop_reason,
+        }));
+      }
+
+      const content = extractResponseText(visionResponse);
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (!jsonMatch) throw new Error('Pas de JSON (vision)');
       const parsed = JSON.parse(jsonMatch[0]);
@@ -536,11 +609,13 @@ RAPPELS CRITIQUES (en plus du skill):
       : modelHint === 'vision' ? VISION_MODEL
       : 'claude-sonnet-4-20250514';
 
+    const generateLabel = modelHint === 'review' ? 'review-fallback' : 'generate';
     const message = await callClaude({
       system: systemPrompt,
       messages: [{ role: 'user', content: userMessage }],
       skills,
       model: effectiveModel,
+      label: generateLabel,
     });
 
     const content = extractResponseText(message);

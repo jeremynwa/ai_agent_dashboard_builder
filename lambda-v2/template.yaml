@@ -104,6 +104,8 @@ Resources:
           INDUSTRY_ECOMMERCE_SKILL_ID: "skill_014PUPgrYoGE8BRDwiDhZDMP"
           INDUSTRY_SAAS_SKILL_ID: "skill_01Ekuh6H7ZKBkA2qzdXYzr1y"
           INDUSTRY_LOGISTICS_SKILL_ID: "skill_011zy4TbPD7jcWEfiMKfi4jN"
+          REVIEWER_SKILL_ID: "skill_01G3LJaHUFQn9WTbcrmTFCrB"
+          VISION_SKILL_ID: "skill_016hJRgXdpBiDrcbknvQYQLW"
           REVIEW_MODEL: "claude-haiku-4-5-20251001"
           VISION_MODEL: "claude-haiku-4-5-20251001"
       FunctionUrlConfig:
