@@ -1,10 +1,4 @@
 {
-  "routes": [
-    {
-      "route": "/headless",
-      "rewrite": "/headless.html"
-    }
-  ],
   "globalHeaders": {
     "Cross-Origin-Opener-Policy": "same-origin",
     "Cross-Origin-Embedder-Policy": "credentialless",
