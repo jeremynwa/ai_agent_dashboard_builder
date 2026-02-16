@@ -1,7 +1,13 @@
 {
+  "routes": [
+    {
+      "route": "/headless",
+      "rewrite": "/headless/index.html"
+    }
+  ],
   "navigationFallback": {
     "rewrite": "/index.html",
-    "exclude": ["/assets/*", "/*.svg", "/*.ico"]
+    "exclude": ["/assets/*", "/headless/*", "*.js", "*.css", "*.svg", "*.png", "*.ico", "*.wasm"]
   },
   "globalHeaders": {
     "Cross-Origin-Opener-Policy": "same-origin",
