@@ -14,10 +14,12 @@ async function authHeaders() {
 }
 
 // ============ GENERATE ============
-export async function generateApp(prompt, excelData = null, existingCode = null, dbContext = null, industry = null) {
+export async function generateApp(prompt, excelData = null, existingCode = null, dbContext = null, industry = null, { modelHint, cachedAnalysis } = {}) {
   const headers = await authHeaders();
   const body = { prompt, useRules: true, excelData, existingCode, dbContext };
   if (industry) body.industry = industry;
+  if (modelHint) body.modelHint = modelHint;
+  if (cachedAnalysis) body.cachedAnalysis = cachedAnalysis;
   const res = await fetch(GENERATE_URL, {
     method: 'POST',
     headers,

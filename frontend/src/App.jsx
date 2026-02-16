@@ -387,12 +387,16 @@ function Factory() {
   const handleDataLoaded = (data) => {
     setExcelData(data);
     setDbData(null);
+    cachedAnalysisRef.current = null;
+    cachedDataHashRef.current = null;
     addLog(`File loaded: ${data.fileName}`);
   };
 
   const handleSchemaLoaded = (data) => {
     setDbData(data);
     setExcelData(null);
+    cachedAnalysisRef.current = null;
+    cachedDataHashRef.current = null;
     addLog(`DB connected: ${data.totalTables} tables`);
   };
 
@@ -523,6 +527,16 @@ function Factory() {
     return stripped;
   };
 
+  // For review/vision: only send App.jsx (other files never change)
+  const stripToAppOnly = (codeFiles) => {
+    if (codeFiles['src/App.jsx']) return { 'src/App.jsx': codeFiles['src/App.jsx'] };
+    return stripDataFiles(codeFiles);
+  };
+
+  // Cache data analysis result to avoid re-analyzing same dataset
+  const cachedAnalysisRef = useRef(null);
+  const cachedDataHashRef = useRef(null);
+
   // ============ FULL AGENT LOOP ============
   const agentGenerate = async (userPrompt, existingCode = null, skipReview = false, skipVision = false) => {
     const dbContext = dbData ? { type: dbData.type, schema: dbData.schema } : null;
@@ -530,12 +544,23 @@ function Factory() {
     let lastError = null;
     let latestUrl = null;
 
+    // Compute a simple hash of current data to detect dataset changes
+    const dataHash = excelData ? `${excelData.fileName}_${excelData.totalRows}` : dbContext ? JSON.stringify(dbContext.schema).slice(0, 100) : null;
+    const hasCachedAnalysis = dataHash && dataHash === cachedDataHashRef.current && cachedAnalysisRef.current;
+
     for (let attempt = 0; attempt <= MAX_FIX_ATTEMPTS; attempt++) {
       if (attempt === 0) {
         setAgentStatus(t('generatingCode'));
         setGenerationStep(1);
-        const result = await generateApp(userPrompt, excelData, currentCode, dbContext, selectedIndustry || null);
+        const result = await generateApp(userPrompt, excelData, currentCode, dbContext, selectedIndustry || null, {
+          cachedAnalysis: hasCachedAnalysis ? cachedAnalysisRef.current : undefined,
+        });
         currentCode = result.files;
+        // Cache analysis result for subsequent calls with same dataset
+        if (result._analysisResult) {
+          cachedAnalysisRef.current = result._analysisResult;
+          cachedDataHashRef.current = dataHash;
+        }
       } else {
         setAgentStatus(t('autoFix').replace('{n}', attempt).replace('{max}', MAX_FIX_ATTEMPTS));
         const fixPrompt = `L'application a une erreur de compilation. Corrige le code.\n\nERREUR:\n${lastError}\n\nCorrige cette erreur et retourne le JSON complet avec TOUS les fichiers.`;
@@ -552,11 +577,15 @@ function Factory() {
         latestUrl = compileResult.url;
         setPreviewUrl(compileResult.url);
 
-        if (!skipReview) {
+        // Conditional review: skip for very simple prompts with small datasets
+        const isSimple = !dbContext && (excelData?.totalRows || 0) < 100 && userPrompt.split(' ').length < 50;
+        const shouldReview = !skipReview && !isSimple;
+
+        if (shouldReview) {
           setAgentStatus(t('qualityReview'));
           setGenerationStep(3);
           try {
-            const reviewResult = await generateApp(REVIEW_PROMPT, excelData, stripDataFiles(currentCode), dbContext);
+            const reviewResult = await generateApp(REVIEW_PROMPT, excelData, stripToAppOnly(currentCode), dbContext, null, { modelHint: 'review' });
             setAgentStatus(t('recompiling'));
             const reviewCompile = await tryCompile(reviewResult.files);
             if (reviewCompile.success) {
@@ -575,7 +604,7 @@ function Factory() {
           const screenshot = await captureScreenshot();
           if (screenshot) {
             try {
-              const visionResult = await visionAnalyze(screenshot, stripDataFiles(currentCode), excelData, dbContext);
+              const visionResult = await visionAnalyze(screenshot, stripToAppOnly(currentCode), excelData, dbContext);
               setAgentStatus(t('finalRecompile'));
               const visionCompile = await tryCompile(visionResult.files);
               if (visionCompile.success) {
@@ -631,7 +660,9 @@ function Factory() {
     setAgentStatus(t('modifying'));
     try {
       const dbContext = dbData ? { type: dbData.type, schema: dbData.schema } : null;
-      const result = await generateApp(feedback, excelData, stripDataFiles(currentFiles), dbContext);
+      const result = await generateApp(feedback, excelData, stripDataFiles(currentFiles), dbContext, selectedIndustry || null, {
+        cachedAnalysis: cachedAnalysisRef.current || undefined,
+      });
       const compileResult = await tryCompile(result.files);
       if (compileResult.success) {
         setCurrentFiles(result.files);

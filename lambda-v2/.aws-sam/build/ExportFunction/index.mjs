@@ -4939,6 +4939,7 @@ async function authenticateRequest(event) {
 
 // index.mjs
 var anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+var EXPORT_MODEL = process.env.EXPORT_MODEL || "claude-sonnet-4-20250514";
 var CORS_HEADERS = {
   "Content-Type": "application/json",
   "Access-Control-Allow-Origin": "*",
@@ -5022,7 +5023,7 @@ async function generateExport({ format, data, title, kpis, chartDescriptions }) 
   const prompt = buildExportPrompt(format, data, title, kpis, chartDescriptions);
   console.log(`Generating ${format} export for "${title}" (${data?.length || 0} rows)...`);
   const response = await anthropic.beta.messages.create({
-    model: "claude-sonnet-4-20250514",
+    model: EXPORT_MODEL,
     max_tokens: 8192,
     betas: ["code-execution-2025-08-25", "skills-2025-10-02", "files-api-2025-04-14"],
     container: {

@@ -4,7 +4,13 @@
       "Bash(npm install:*)",
       "Bash(node test-beta.mjs:*)",
       "Bash(node manage-skills.mjs:*)",
-      "Bash(DASHBOARD_SKILL_ID=skill_01XkRdUeca25kPFLF3DM4b2Y node test-skill-generation.mjs:*)"
+      "Bash(DASHBOARD_SKILL_ID=skill_01XkRdUeca25kPFLF3DM4b2Y node test-skill-generation.mjs:*)",
+      "Bash(find:*)",
+      "Bash(npm run build:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git status:*)"
     ]
   }
 }

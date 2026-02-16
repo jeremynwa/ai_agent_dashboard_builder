@@ -4953,18 +4953,26 @@ var INDUSTRY_SKILL_IDS = {
   saas: process.env.INDUSTRY_SAAS_SKILL_ID || null,
   logistics: process.env.INDUSTRY_LOGISTICS_SKILL_ID || null
 };
-async function callClaude({ system, messages, skills = [], maxTokens = 16384 }) {
+var REVIEW_MODEL = process.env.REVIEW_MODEL || "claude-sonnet-4-20250514";
+var VISION_MODEL = process.env.VISION_MODEL || "claude-sonnet-4-20250514";
+async function callClaude({ system, messages, skills = [], maxTokens = 16384, model = "claude-sonnet-4-20250514", temperature = 0 }) {
   if (!USE_BETA_API || skills.length === 0) {
     return await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
+      model,
       max_tokens: maxTokens,
-      system,
+      temperature,
+      system: [{
+        type: "text",
+        text: system,
+        cache_control: { type: "ephemeral" }
+      }],
       messages
     });
   }
   const response = await anthropic.beta.messages.create({
-    model: "claude-sonnet-4-20250514",
+    model,
     max_tokens: maxTokens,
+    temperature,
     betas: ["code-execution-2025-08-25", "skills-2025-10-02"],
     system,
     container: {
@@ -5315,7 +5323,7 @@ var handler = async (event) => {
   console.log(`Authenticated: ${user.email || user.sub}`);
   try {
     const body = JSON.parse(event.body || "{}");
-    const { prompt, useRules, excelData, existingCode, existingFiles, dbContext, screenshot, industry } = body;
+    const { prompt, useRules, excelData, existingCode, existingFiles, dbContext, screenshot, industry, modelHint, cachedAnalysis } = body;
     const existingApp = existingCode || existingFiles || null;
     if (screenshot && prompt === "__VISION_ANALYZE__") {
       let codeContext = "";
@@ -5326,9 +5334,9 @@ ${c}
 `;
       }
       const message2 = await anthropic.messages.create({
-        model: "claude-sonnet-4-20250514",
+        model: VISION_MODEL,
         max_tokens: 16384,
-        system: VISION_SYSTEM_PROMPT,
+        system: [{ type: "text", text: VISION_SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
         messages: [{ role: "user", content: [
           { type: "image", source: { type: "base64", media_type: "image/png", data: screenshot } },
           { type: "text", text: VISION_USER_PROMPT + codeContext + "\n\nRetourne le JSON complet." }
@@ -5382,9 +5390,20 @@ ${JSON.stringify(sample, null, 2)}
 Utilise "__INJECT_DATA__" dans src/data.js.`;
     }
     let analysisContext = "";
-    if (dataContext && USE_BETA_API && DATA_ANALYZER_SKILL_ID) {
+    let analysisResult = null;
+    if (cachedAnalysis) {
+      console.log("Using cached data analysis from frontend");
+      analysisResult = cachedAnalysis;
+      analysisContext = `
+
+DATA ANALYSIS (factual \u2014 computed by Python scripts, use these values):
+${JSON.stringify(cachedAnalysis, null, 2)}
+
+IMPORTANT: Use the statistics and chart recommendations above. Do NOT invent values not present in the data.`;
+    } else if (dataContext && USE_BETA_API && DATA_ANALYZER_SKILL_ID) {
       const analysis = await analyzeData(dataContext);
       if (analysis) {
+        analysisResult = analysis;
         analysisContext = `
 
 DATA ANALYSIS (factual \u2014 computed by Python scripts, use these values):
@@ -5396,7 +5415,15 @@ IMPORTANT: Use the statistics and chart recommendations above. Do NOT invent val
     let systemPrompt;
     let skills = [];
     if (USE_BETA_API && DASHBOARD_SKILL_ID) {
-      systemPrompt = "Use the dashboard-generator skill.";
+      systemPrompt = `Use the dashboard-generator skill. Read ALL reference files before generating.
+
+RAPPELS CRITIQUES (en plus du skill):
+- OBLIGATOIRE: Section "Points cles" (insight-item) en bas de la page Vue d'Ensemble \u2014 NE JAMAIS l'omettre
+- OBLIGATOIRE: Filtres <select> styles avec style={{background:'#1A2332', border:'1px solid #1E293B', outline:'none'}} sur les pages Analyses
+- INTERDIT: Colonnes ID (order_id, product_id, transaction_id, customer_id) comme axes de graphiques ou colonnes principales de tableaux \u2014 utiliser noms, categories, dates
+- INTERDIT: Tableaux de donnees brutes (commandes individuelles, transactions) \u2014 toujours agreger (Top 10-15 par dimension significative)
+- INTERDIT: PieChart sans <Cell fill={COLORS[i % COLORS.length]} />
+- Voir references/data-intelligence.md pour les regles completes d'agregation et de qualite des donnees`;
       skills.push(DASHBOARD_SKILL_ID);
       if (dbContext) {
         systemPrompt += " MODE: Database \u2014 see references/mode-database.md in the skill.";
@@ -5429,16 +5456,21 @@ Retourne le JSON complet.`;
     } else {
       userMessage = `Genere une app React dashboard pour: ${prompt}${rulesContext}${dataContext}${analysisContext}`;
     }
+    const effectiveModel = modelHint === "review" ? REVIEW_MODEL : modelHint === "vision" ? VISION_MODEL : "claude-sonnet-4-20250514";
     const message = await callClaude({
       system: systemPrompt,
       messages: [{ role: "user", content: userMessage }],
-      skills
+      skills,
+      model: effectiveModel
     });
     const content = extractResponseText(message);
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error("Pas de JSON");
     const parsed = JSON.parse(jsonMatch[0]);
     for (const [fp, code] of Object.entries(parsed.files)) parsed.files[fp] = fixJsxCode(code);
+    if (analysisResult && !cachedAnalysis) {
+      parsed._analysisResult = analysisResult;
+    }
     return reply(200, parsed);
   } catch (error) {
     console.error("Generate error:", error);

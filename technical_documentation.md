@@ -440,7 +440,57 @@ const fileContent = await anthropic.beta.files.download(fileId, {
 - **Timeout**: 120s (file generation typically takes 30-60s)
 - **Payload limit**: API Gateway 10MB — sufficient for most exports
 
-### 3.8 Data Injection
+### 3.8 Cost Optimization
+
+Several optimizations reduce API costs without impacting output quality:
+
+#### Prompt Caching
+
+System prompts are sent with `cache_control: { type: 'ephemeral' }`. Cached tokens cost 90% less on input ($0.30/MTok vs $3/MTok). The cache lasts 5 minutes, covering typical multi-call pipelines (data analysis → generation → review → vision).
+
+#### Configurable Model per Phase
+
+Three environment variables control which model is used for non-creative phases:
+
+```yaml
+# template.yaml
+REVIEW_MODEL: "claude-haiku-4-5-20251001"   # Quality review (checklist verification)
+VISION_MODEL: "claude-haiku-4-5-20251001"   # Screenshot analysis (visual corrections)
+EXPORT_MODEL: "claude-haiku-4-5-20251001"   # File generation (XLSX/PPTX/PDF)
+```
+
+- **Current config (test)**: Haiku (`claude-haiku-4-5-20251001`) — configured in template.yaml for cost testing
+- **Production**: Sonnet (`claude-sonnet-4-20250514`) — the default fallback when env vars are removed or changed back
+- Toggle: Change in AWS Lambda console (immediate effect) or template.yaml (requires deploy)
+- Main generation always uses Sonnet (creative code generation)
+
+#### Conditional Review Skip
+
+The review phase is automatically skipped for simple prompts:
+- Prompt < 50 words AND dataset < 100 rows AND no DB mode
+- Saves ~$0.02-0.15 per generation depending on model
+
+#### Data Analysis Caching
+
+The frontend caches the `_analysisResult` returned by the first generation call. Subsequent calls with the same dataset (same fileName + totalRows) reuse the cached analysis instead of calling the data-analyzer skill again. Cache is cleared when a new file is uploaded or a new DB is connected.
+
+#### Minimal Code for Review/Vision
+
+`stripToAppOnly()` sends only `src/App.jsx` (the only file that changes) instead of all source files. Saves ~500-1000 input tokens per review/vision call.
+
+#### Cost Summary
+
+| Optimization | Savings per pipeline | Risk |
+|-------------|---------------------|------|
+| Prompt caching | -$0.028 (-6%) | None |
+| Haiku for review | -$0.124 (-29%) | Low |
+| Haiku for vision | -$0.125 (-29%) | Medium |
+| Haiku for export | -$0.025/export | Low |
+| Analysis caching | -$0.020/iteration | None |
+| Conditional review | -$0.145 (simple prompts) | Low |
+| stripToAppOnly | -$0.01 (-2%) | None |
+
+### 3.9 Data Injection
 
 Two modes for data:
 
@@ -572,6 +622,9 @@ INDUSTRY_FINANCE_SKILL_ID="skill_013h9deHQb7CaA47xd59Uytd"
 INDUSTRY_ECOMMERCE_SKILL_ID="skill_014PUPgrYoGE8BRDwiDhZDMP"
 INDUSTRY_SAAS_SKILL_ID="skill_01Ekuh6H7ZKBkA2qzdXYzr1y"
 INDUSTRY_LOGISTICS_SKILL_ID="skill_011zy4TbPD7jcWEfiMKfi4jN"
+REVIEW_MODEL="claude-haiku-4-5-20251001"     ← TEST: Haiku for review (PROD: remove or set claude-sonnet-4-20250514)
+VISION_MODEL="claude-haiku-4-5-20251001"     ← TEST: Haiku for vision (PROD: remove or set claude-sonnet-4-20250514)
+EXPORT_MODEL="claude-haiku-4-5-20251001"     ← TEST: Haiku for export (PROD: remove or set claude-sonnet-4-20250514)
 ```
 
 ## 7. Known Issues & Solutions
