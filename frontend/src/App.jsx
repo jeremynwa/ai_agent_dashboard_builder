@@ -381,7 +381,7 @@ function Factory() {
         webcontainerRef.current = wc;
         setIsReady(true);
       })
-      .catch((error) => addLog(`Error: ${error.message}`));
+      .catch((error) => { console.error('WebContainer boot failed:', error); addLog(`Error: ${error.message}`); });
   }, []);
 
   const handleDataLoaded = (data) => {
