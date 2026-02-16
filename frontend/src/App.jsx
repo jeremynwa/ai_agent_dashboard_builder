@@ -1,4 +1,4 @@
-// frontend/src/App.jsx
+// frontend/src/App.jsx — WebContainer API auth integration
 import { useState, useEffect, useRef, createContext, useContext } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { WebContainer, auth } from '@webcontainer/api';
