@@ -376,7 +376,7 @@ function Factory() {
   useEffect(() => {
     if (bootedRef.current) return;
     bootedRef.current = true;
-    WebContainer.boot()
+    WebContainer.boot({ coep: 'credentialless' })
       .then((wc) => {
         webcontainerRef.current = wc;
         setIsReady(true);

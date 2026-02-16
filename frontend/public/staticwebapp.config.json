@@ -1,7 +1,7 @@
 {
   "navigationFallback": {
     "rewrite": "/index.html",
-    "exclude": ["/assets/*", "/*.svg", "/*.ico"]
+    "exclude": ["/assets/*", "/*.svg", "/*.ico", "/headless*"]
   },
   "globalHeaders": {
     "Cross-Origin-Opener-Policy": "same-origin",
