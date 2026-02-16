@@ -1,7 +1,7 @@
 // frontend/src/App.jsx — WebContainer API auth integration
 import { useState, useEffect, useRef, createContext, useContext } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { WebContainer, auth } from '@webcontainer/api';
+import { WebContainer, auth, configureAPIKey } from '@webcontainer/api';
 import { baseFiles } from './services/files-template';
 import { generateApp, visionAnalyze, publishApp, exportApp, API_BASE, DB_PROXY_URL } from './services/api';
 import { exportToZip } from './services/export';
@@ -378,24 +378,11 @@ function Factory() {
     if (bootedRef.current) return;
     bootedRef.current = true;
 
-    // Authenticate with StackBlitz WebContainer API (must be called before boot)
+    // Configure WebContainer API key for production (must be called before boot)
     const clientId = import.meta.env.VITE_WEBCONTAINER_CLIENT_ID;
     if (clientId) {
-      console.log('[Boot] Initializing WebContainer auth...');
-      const result = auth.init({ clientId, scope: '' });
-      console.log('[Boot] Auth init result:', result);
-
-      if (result?.status === 'need-auth') {
-        console.log('[Boot] Starting StackBlitz OAuth flow...');
-        auth.startAuthFlow({ popup: false });
-        return; // page will redirect to StackBlitz OAuth
-      }
-
-      if (result?.status === 'auth-failed') {
-        console.error('[Boot] Auth failed:', result.error, result.description);
-        setBootError(`Auth failed: ${result.description || result.error}`);
-        return;
-      }
+      console.log('[Boot] Configuring WebContainer API key...');
+      configureAPIKey(clientId);
     } else {
       console.log('[Boot] No VITE_WEBCONTAINER_CLIENT_ID — running in localhost mode');
     }
@@ -408,7 +395,7 @@ function Factory() {
     );
 
     Promise.race([
-      WebContainer.boot({ coep: 'credentialless' }),
+      WebContainer.boot({ coep: 'none' }),
       bootTimeout,
     ])
       .then((wc) => {
