@@ -10,6 +10,8 @@
     "exclude": ["/assets/*", "/headless/*", "*.js", "*.css", "*.svg", "*.png", "*.ico", "*.wasm"]
   },
   "globalHeaders": {
+    "Cross-Origin-Embedder-Policy": "credentialless",
+    "Cross-Origin-Opener-Policy": "same-origin",
     "X-Content-Type-Options": "nosniff"
   },
   "mimeTypes": {
