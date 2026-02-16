@@ -1,7 +1,7 @@
 // frontend/src/App.jsx
 import { useState, useEffect, useRef, createContext, useContext } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { WebContainer } from '@webcontainer/api';
+import { WebContainer, auth } from '@webcontainer/api';
 import { baseFiles } from './services/files-template';
 import { generateApp, visionAnalyze, publishApp, exportApp, API_BASE, DB_PROXY_URL } from './services/api';
 import { exportToZip } from './services/export';
@@ -378,17 +378,24 @@ function Factory() {
     if (bootedRef.current) return;
     bootedRef.current = true;
 
-    // Diagnostic: log COEP/COOP headers for debugging Azure issues
-    console.log('[Boot] COOP:', document.featurePolicy ? 'supported' : 'N/A');
+    // Authenticate with StackBlitz WebContainer API (must be called before boot)
+    const clientId = import.meta.env.VITE_WEBCONTAINER_CLIENT_ID;
+    if (clientId) {
+      console.log('[Boot] Initializing WebContainer auth...');
+      auth.init({ clientId, scope: '' });
+    } else {
+      console.log('[Boot] No VITE_WEBCONTAINER_CLIENT_ID — running in localhost mode');
+    }
+
     console.log('[Boot] crossOriginIsolated:', window.crossOriginIsolated);
     console.log('[Boot] SharedArrayBuffer:', typeof SharedArrayBuffer !== 'undefined' ? 'available' : 'MISSING');
 
     const bootTimeout = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('WebContainer boot timeout (15s) — check COEP/COOP headers')), 15000)
+      setTimeout(() => reject(new Error('WebContainer boot timeout (15s)')), 15000)
     );
 
     Promise.race([
-      WebContainer.boot({ coep: 'none' }),
+      WebContainer.boot({ coep: 'credentialless' }),
       bootTimeout,
     ])
       .then((wc) => {
