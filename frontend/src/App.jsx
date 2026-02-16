@@ -1,7 +1,7 @@
 // frontend/src/App.jsx — WebContainer API auth integration
 import { useState, useEffect, useRef, createContext, useContext } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { WebContainer, auth } from '@webcontainer/api';
+import { WebContainer, configureAPIKey } from '@webcontainer/api';
 import { baseFiles } from './services/files-template';
 import { generateApp, visionAnalyze, publishApp, exportApp, API_BASE, DB_PROXY_URL } from './services/api';
 import { exportToZip } from './services/export';
@@ -378,30 +378,11 @@ function Factory() {
     if (bootedRef.current) return;
     bootedRef.current = true;
 
-    // Authenticate with StackBlitz WebContainer API (must be called before boot)
+    // Configure WebContainer API key for production (must be called before boot)
     const clientId = import.meta.env.VITE_WEBCONTAINER_CLIENT_ID;
     if (clientId) {
-      // Clear stale tokens from previous failed attempts
-      try { localStorage.removeItem('__wc_api_tokens__'); } catch (_) {}
-
-      console.log('[Boot] Initializing WebContainer auth...');
-      const result = auth.init({ clientId, scope: '' });
-      console.log('[Boot] Auth init result:', result);
-
-      if (result?.status === 'need-auth') {
-        console.log('[Boot] Starting StackBlitz OAuth flow...');
-        auth.startAuthFlow({ popup: false });
-        return; // page will redirect to StackBlitz OAuth
-      }
-
-      if (result?.status === 'auth-failed') {
-        console.error('[Boot] Auth failed:', result.error, result.description);
-        setBootError(`Auth failed: ${result.description || result.error}`);
-        return;
-      }
-
-      // status === 'authorized' — wait for token exchange then boot
-      console.log('[Boot] Auth status: authorized, proceeding to boot...');
+      console.log('[Boot] Configuring WebContainer API key...');
+      configureAPIKey(clientId);
     } else {
       console.log('[Boot] No VITE_WEBCONTAINER_CLIENT_ID — running in localhost mode');
     }
@@ -410,7 +391,7 @@ function Factory() {
     console.log('[Boot] SharedArrayBuffer:', typeof SharedArrayBuffer !== 'undefined' ? 'available' : 'MISSING');
 
     const bootTimeout = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('WebContainer boot timeout (60s)')), 60000)
+      setTimeout(() => reject(new Error('WebContainer boot timeout (30s)')), 30000)
     );
 
     Promise.race([
