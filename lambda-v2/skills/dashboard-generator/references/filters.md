@@ -43,3 +43,18 @@ const filteredData = useMemo(() => {
 
 // Utiliser filteredData dans les graphiques et tableaux
 ```
+
+## Style OBLIGATOIRE
+
+Le style inline des `<select>` est **NON-NEGOCIABLE** — ne pas l'omettre:
+
+```jsx
+style={{background:'#1A2332', border:'1px solid #1E293B', outline:'none'}}
+```
+
+Sans ce style, les selects apparaissent en blanc/gris par defaut du navigateur — visuellement casse sur le fond sombre du dashboard.
+
+**INTERDIT**:
+- `<select>` sans style inline (fond blanc par defaut = illisible)
+- `<select>` sans className `px-3 py-2 rounded-lg text-sm text-primary`
+- Filtres sans espacement (`mb-6` sur le conteneur flex)

@@ -2,19 +2,35 @@
 
 Chaque dashboard a 3-4 onglets. Regles par type de page:
 
-## Vue d'Ensemble (page principale)
+## Vue d'Ensemble (page principale) — Layout FIXE
 
-- KPIs en haut (grid-kpis)
-- Graphiques varies (AreaChart, BarChart, PieChart)
-- Points cles en bas (voir `references/insights.md`)
+Suivre cet ordre EXACT de composants, de haut en bas:
 
-## Analyses / Rapports
+1. **KPIs** (grid-kpis) — 4 KPIs avec sparklines (voir `references/kpis.md` pour la selection)
+2. **Graphique temporel** (card pleine largeur) — AreaChart si 1 metrique temporelle, LineChart si 2-4 metriques temporelles, BarChart si pas de dimension temporelle
+3. **Grille 2 colonnes** (grid-charts-2) — PieChart (repartition/proportion, max 6 categories) + BarChart (comparaison top categories)
+4. **Points cles** (card) — section insight-item OBLIGATOIRE — voir `references/insights.md`
+
+**NE PAS** changer l'ordre. **NE PAS** omettre de composant. **NE PAS** ajouter de tableau sur cette page.
+
+**INTERDIT sur Vue d'Ensemble**:
+- Tableaux de donnees brutes (commandes individuelles, transactions, etc.)
+- Colonnes ID (order_id, product_id, etc.) dans les graphiques ou tableaux
+- Voir `references/data-intelligence.md` pour les regles d'agregation
+
+## Analyses / Rapports — Layout FIXE
+
+Suivre cet ordre EXACT de composants, de haut en bas:
+
+1. **Barre de filtres** — selects styles en haut (voir `references/filters.md`)
+2. **Grille 2 colonnes** (grid-charts-2) — 2 graphiques Recharts (BarChart, AreaChart, PieChart, etc.) qui reagissent aux filtres
+3. **Tableau** (card) — Top 10-15 agrege par dimension significative, trie par metrique decroissante
 
 - **INTERDIT** d'afficher juste du texte ou des gros chiffres centres — c'est un DASHBOARD, tout doit etre VISUEL
-- **OBLIGATOIRE**: au moins 2 graphiques Recharts (BarChart, AreaChart, PieChart, etc.) + 1 tableau de donnees
-- **OBLIGATOIRE**: une BARRE DE FILTRES en haut de la page (voir `references/filters.md`)
-- Les graphiques et tableaux reagissent aux filtres selectionnes
-- Comparer periodes, segments, categories avec des graphiques cote-a-cote
+- Les graphiques et tableaux utilisent les donnees **FILTREES** (useMemo)
+- **INTERDIT**: tableaux de donnees brutes (commandes individuelles, transactions ligne par ligne)
+- Axes des graphiques = noms/categories/dates, JAMAIS des IDs
+- Voir `references/data-intelligence.md` pour les regles d'agregation
 
 ## Parametres
 

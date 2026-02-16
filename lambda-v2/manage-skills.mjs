@@ -166,11 +166,25 @@ async function uploadSkill(skillPath) {
   }
   console.log();
 
-  // 4. Upload via SDK using createReadStream
+  // 4. Check if a skill with the same name already exists — delete it first
+  {
+    try {
+      const existing = await anthropic.beta.skills.list({ betas: [BETA_HEADER] });
+      const duplicate = existing.data?.find(s => s.display_title === name);
+      if (duplicate) {
+        console.log(`  Existing skill found: ${duplicate.id} — deleting to replace...`);
+        await deleteSkill(duplicate.id);
+      }
+    } catch (e) {
+      console.warn(`  Warning: could not check for existing skills: ${e.message}`);
+    }
+  }
+
+  // 5. Upload via SDK using createReadStream
   //    File paths must include a top-level directory prefix (like Python SDK)
   //    e.g. "dashboard-generator/SKILL.md", "dashboard-generator/references/charts.md"
   {
-    const skillDirName = path.basename(absPath); // e.g. "dashboard-generator"
+    const skillDirName = name; // Must match SKILL.md frontmatter name (API enforces this)
 
     // SKILL.md must be first
     const sortedFiles = [...allFiles].sort((a, b) => {
@@ -196,7 +210,7 @@ async function uploadSkill(skillPath) {
       betas: [BETA_HEADER]
     });
 
-    console.log('Skill created successfully!\n');
+    console.log('\nSkill created successfully!\n');
     console.log(`  ID: ${skill.id}`);
     console.log(`  Title: ${skill.display_title}`);
     console.log(`  Version: ${skill.latest_version}`);
@@ -230,17 +244,46 @@ async function collectFiles(dir, rootDir) {
 async function deleteSkill(skillId) {
   console.log(`Deleting skill ${skillId}...\n`);
 
-  // Per docs: must delete all versions first, then the skill
+  // Step 1: List and delete all versions first
+  try {
+    const versionsResp = await fetch(`${API_BASE}/skills/${skillId}/versions?beta=true`, {
+      headers: apiHeaders()
+    });
+    if (versionsResp.ok) {
+      const versionsData = await versionsResp.json();
+      const versions = versionsData.data || versionsData.versions || [];
+      if (versions.length > 0) {
+        console.log(`  Found ${versions.length} version(s) to delete...`);
+        for (const v of versions) {
+          const versionId = v.version || v.id || v;
+          const delV = await fetch(`${API_BASE}/skills/${skillId}/versions/${versionId}?beta=true`, {
+            method: 'DELETE',
+            headers: apiHeaders()
+          });
+          if (delV.ok) {
+            console.log(`  Deleted version ${versionId}`);
+          } else {
+            const err = await delV.json().catch(() => ({}));
+            console.warn(`  Warning: version ${versionId} delete failed:`, JSON.stringify(err));
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn(`  Warning: could not list versions: ${e.message}`);
+  }
+
+  // Step 2: Delete the skill itself
   const response = await fetch(`${API_BASE}/skills/${skillId}?beta=true`, {
     method: 'DELETE',
     headers: apiHeaders()
   });
 
   if (response.ok) {
-    console.log('Skill deleted successfully.\n');
+    console.log('  Skill deleted successfully.\n');
   } else {
     const error = await response.json();
-    console.error('Delete failed:', JSON.stringify(error, null, 2));
+    console.error('  Delete failed:', JSON.stringify(error, null, 2));
   }
 }
 

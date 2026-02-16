@@ -1,6 +1,17 @@
 # KPIs
 
-3-5 KPIs dans une grid responsive.
+4 KPIs dans une grid responsive. Toujours 4, pas plus, pas moins.
+
+## Selection des KPIs — Ordre de Priorite
+
+Choisir les 4 KPIs dans cet ordre de priorite:
+
+1. **Metrique monetaire principale** (revenue, CA, montant total) → `sum()` → `fmtCur()`
+2. **Nombre d'enregistrements** (commandes, transactions, clients) → `count` → `fmt()`
+3. **Metrique de performance** (taux, marge, moyenne) → `avg()` → `fmtPct()` ou `fmt()`
+4. **Variation ou metrique secondaire** — si periodes comparables: variation % de la metrique #1. Sinon: une autre metrique numerique pertinente.
+
+Si les donnees n'ont qu'une seule colonne numerique, deriver les 4 KPIs: total, moyenne, min, max.
 
 ## Structure
 

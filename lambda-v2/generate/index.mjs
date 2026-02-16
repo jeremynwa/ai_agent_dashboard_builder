@@ -14,25 +14,33 @@ const INDUSTRY_SKILL_IDS = {
   saas: process.env.INDUSTRY_SAAS_SKILL_ID || null,
   logistics: process.env.INDUSTRY_LOGISTICS_SKILL_ID || null,
 };
+const REVIEW_MODEL = process.env.REVIEW_MODEL || 'claude-sonnet-4-20250514';
+const VISION_MODEL = process.env.VISION_MODEL || 'claude-sonnet-4-20250514';
 
 // ============================================================================
 // callClaude — wrapper that supports both standard and beta (skills) API
 // ============================================================================
-async function callClaude({ system, messages, skills = [], maxTokens = 16384 }) {
+async function callClaude({ system, messages, skills = [], maxTokens = 16384, model = 'claude-sonnet-4-20250514', temperature = 0 }) {
   if (!USE_BETA_API || skills.length === 0) {
-    // Standard API (current behavior)
+    // Standard API — with prompt caching on system prompt
     return await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model,
       max_tokens: maxTokens,
-      system,
+      temperature,
+      system: [{
+        type: 'text',
+        text: system,
+        cache_control: { type: 'ephemeral' },
+      }],
       messages,
     });
   }
 
   // Beta API with code execution + skills
   const response = await anthropic.beta.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model,
     max_tokens: maxTokens,
+    temperature,
     betas: ['code-execution-2025-08-25', 'skills-2025-10-02'],
     system,
     container: {
@@ -410,7 +418,7 @@ export const handler = async (event) => {
 
   try {
     const body = JSON.parse(event.body || '{}');
-    const { prompt, useRules, excelData, existingCode, existingFiles, dbContext, screenshot, industry } = body;
+    const { prompt, useRules, excelData, existingCode, existingFiles, dbContext, screenshot, industry, modelHint, cachedAnalysis } = body;
     const existingApp = existingCode || existingFiles || null;
 
     // ============ VISION ============
@@ -419,7 +427,8 @@ export const handler = async (event) => {
       if (existingApp) { for (const [p, c] of Object.entries(existingApp)) codeContext += `--- ${p} ---\n${c}\n\n`; }
 
       const message = await anthropic.messages.create({
-        model: 'claude-sonnet-4-20250514', max_tokens: 16384, system: VISION_SYSTEM_PROMPT,
+        model: VISION_MODEL, max_tokens: 16384,
+        system: [{ type: 'text', text: VISION_SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
         messages: [{ role: 'user', content: [
           { type: 'image', source: { type: 'base64', media_type: 'image/png', data: screenshot } },
           { type: 'text', text: VISION_USER_PROMPT + codeContext + '\n\nRetourne le JSON complet.' },
@@ -460,10 +469,17 @@ export const handler = async (event) => {
     }
 
     // Pre-analyze data with data-analyzer skill (if available)
+    // Skip if cachedAnalysis provided by frontend (same dataset, different prompt)
     let analysisContext = '';
-    if (dataContext && USE_BETA_API && DATA_ANALYZER_SKILL_ID) {
+    let analysisResult = null;
+    if (cachedAnalysis) {
+      console.log('Using cached data analysis from frontend');
+      analysisResult = cachedAnalysis;
+      analysisContext = `\n\nDATA ANALYSIS (factual — computed by Python scripts, use these values):\n${JSON.stringify(cachedAnalysis, null, 2)}\n\nIMPORTANT: Use the statistics and chart recommendations above. Do NOT invent values not present in the data.`;
+    } else if (dataContext && USE_BETA_API && DATA_ANALYZER_SKILL_ID) {
       const analysis = await analyzeData(dataContext);
       if (analysis) {
+        analysisResult = analysis;
         analysisContext = `\n\nDATA ANALYSIS (factual — computed by Python scripts, use these values):\n${JSON.stringify(analysis, null, 2)}\n\nIMPORTANT: Use the statistics and chart recommendations above. Do NOT invent values not present in the data.`;
       }
     }
@@ -474,7 +490,15 @@ export const handler = async (event) => {
 
     if (USE_BETA_API && DASHBOARD_SKILL_ID) {
       // Skill mode: minimal system prompt (skill has all the rules)
-      systemPrompt = 'Use the dashboard-generator skill.';
+      systemPrompt = `Use the dashboard-generator skill. Read ALL reference files before generating.
+
+RAPPELS CRITIQUES (en plus du skill):
+- OBLIGATOIRE: Section "Points cles" (insight-item) en bas de la page Vue d'Ensemble — NE JAMAIS l'omettre
+- OBLIGATOIRE: Filtres <select> styles avec style={{background:'#1A2332', border:'1px solid #1E293B', outline:'none'}} sur les pages Analyses
+- INTERDIT: Colonnes ID (order_id, product_id, transaction_id, customer_id) comme axes de graphiques ou colonnes principales de tableaux — utiliser noms, categories, dates
+- INTERDIT: Tableaux de donnees brutes (commandes individuelles, transactions) — toujours agreger (Top 10-15 par dimension significative)
+- INTERDIT: PieChart sans <Cell fill={COLORS[i % COLORS.length]} />
+- Voir references/data-intelligence.md pour les regles completes d'agregation et de qualite des donnees`;
       skills.push(DASHBOARD_SKILL_ID);
 
       if (dbContext) {
@@ -507,10 +531,16 @@ export const handler = async (event) => {
       userMessage = `Genere une app React dashboard pour: ${prompt}${rulesContext}${dataContext}${analysisContext}`;
     }
 
+    // Determine model: review/vision use their own model, else default Sonnet
+    const effectiveModel = modelHint === 'review' ? REVIEW_MODEL
+      : modelHint === 'vision' ? VISION_MODEL
+      : 'claude-sonnet-4-20250514';
+
     const message = await callClaude({
       system: systemPrompt,
       messages: [{ role: 'user', content: userMessage }],
       skills,
+      model: effectiveModel,
     });
 
     const content = extractResponseText(message);
@@ -518,6 +548,11 @@ export const handler = async (event) => {
     if (!jsonMatch) throw new Error('Pas de JSON');
     const parsed = JSON.parse(jsonMatch[0]);
     for (const [fp, code] of Object.entries(parsed.files)) parsed.files[fp] = fixJsxCode(code);
+
+    // Include analysis result so frontend can cache it for subsequent calls
+    if (analysisResult && !cachedAnalysis) {
+      parsed._analysisResult = analysisResult;
+    }
     return reply(200, parsed);
   } catch (error) {
     console.error('Generate error:', error);

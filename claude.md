@@ -54,10 +54,27 @@
 - [x] Export Lambda (XLSX, PPTX, PDF) via Anthropic pre-built skills + Files API
 - [x] Frontend export buttons (3 formats) with base64 → Blob → download
 - [x] ExportFunction in template.yaml (API Gateway POST /export, 120s timeout)
+- [x] Cost optimization: prompt caching (`cache_control: ephemeral`) dans `callClaude()`
+- [x] Cost optimization: toggle Haiku/Sonnet via env vars (REVIEW_MODEL, VISION_MODEL, EXPORT_MODEL)
+- [x] Cost optimization: strip fichiers inutiles review/vision (n'envoyer que App.jsx)
+- [x] Cost optimization: cache analyse données côté frontend (skip re-analyse même dataset)
+- [x] Cost optimization: review conditionnelle (skip si prompt simple + petit dataset)
+- [x] Dashboard quality v2: `data-intelligence.md` reference (règles BI: zéro IDs bruts, agrégation obligatoire, tableaux Top 10-15)
+- [x] Dashboard quality v2: chart selection guide + axis rules dans `charts.md`
+- [x] Dashboard quality v2: Key Takeaways OBLIGATOIRE + layout FIXE par page dans `pages.md`
+- [x] Dashboard quality v2: filter styling enforcement dans `filters.md`
+- [x] Dashboard quality v2: table content quality rules dans `tables.md`
+- [x] Dashboard quality v2: system prompt enrichi (7 rappels critiques inline au lieu de 1 ligne)
+- [x] Dashboard quality v2: `temperature: 0` dans `callClaude()` (reproductibilité)
+- [x] Dashboard quality v2: KPI selection priority order (4 KPIs fixes) dans `kpis.md`
+- [x] Dashboard quality v2: SKILL.md section "RÈGLES CRITIQUES" (7 règles)
+- [x] `manage-skills.mjs` upload auto-replace (détecte + supprime ancien skill avant re-upload)
+- [x] `manage-skills.mjs` upload prefix = skill name (API constraint: folder prefix must match SKILL.md name)
+- [x] Skill renamed `dashboard-generator-v2` (API ne supporte pas delete versions → contournement)
 
 ### En cours / À faire
 
-- [ ] Deploy Phases 3+4 (`cd lambda-v2 && .\deploy.ps1`)
+- [ ] Deploy tout (`cd lambda-v2 && .\deploy.ps1`)
 - [ ] Tester industry selector avec chaque secteur
 - [ ] Tester export buttons (XLSX, PPTX, PDF)
 - [ ] Tester flow publish avec auth (build → S3)
@@ -297,7 +314,12 @@ DATA_ANALYZER_SKILL_ID=skill_01... node test-data-analyzer.mjs  # Test data anal
 - GenerateFunction timeout : 600s
 - handlePublish : npm run build → dist/ → S3
 - SDK 0.74.0 : supporte beta skills + code execution
-- `callClaude()` wrapper : switch auto entre standard et beta API, paramètre `maxTokens` configurable
+- `callClaude()` wrapper : switch auto entre standard et beta API, paramètre `maxTokens` + `model` configurables
+- Prompt caching : `cache_control: { type: 'ephemeral' }` sur le system prompt (input tokens 90% moins cher)
+- Toggle modèle review/vision/export via env vars : `REVIEW_MODEL`, `VISION_MODEL`, `EXPORT_MODEL`. **Haiku configuré pour test** (`claude-haiku-4-5-20251001`), **Sonnet pour la prod** (`claude-sonnet-4-20250514`, valeur par défaut si env var non définie). Changer dans la console Lambda AWS (effet immédiat) ou template.yaml (redeploy)
+- Review conditionnelle : skip auto si prompt < 50 mots ET dataset < 100 lignes ET pas de mode DB
+- Cache analyse données : frontend cache `_analysisResult` + hash dataset, skip `analyzeData()` si même data
+- `stripToAppOnly()` : review/vision n'envoient que `src/App.jsx` (économie ~500-1000 tokens/appel)
 - `analyzeData()` : pré-analyse avec data-analyzer skill, retourne null si skill non configuré (graceful degradation)
 - Two-call strategy : analyse (maxTokens 8192) → génération (maxTokens 16384), +10-15s de latence
 - Skill upload : filenames MUST include top-level dir prefix (e.g. `dashboard-generator/SKILL.md`)

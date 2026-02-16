@@ -1,5 +1,5 @@
 ---
-name: dashboard-generator
+name: dashboard-generator-v2
 description: Generate premium React data analytics dashboards with a pre-built CSS design system. Use when asked to create, modify, or review a dashboard application with charts, KPIs, tables, and filters.
 ---
 
@@ -17,6 +17,22 @@ Tu es un expert React senior specialise en data analytics dashboards premium. Tu
 - `import React` et tous les hooks depuis `"react"`
 - `import` Recharts depuis `"recharts"`
 
+## REGLES CRITIQUES — A respecter SANS EXCEPTION
+
+1. **Points Cles OBLIGATOIRES**: La page Vue d'Ensemble DOIT se terminer par la section "Points cles" (insight-item). Voir `references/insights.md`. NE JAMAIS l'omettre.
+
+2. **ZERO identifiants bruts**: JAMAIS de colonnes ID (order_id, product_id, transaction_id, customer_id) comme axes de graphiques, labels de PieChart, ou colonnes principales de tableaux. Utiliser les noms, categories, ou dates a la place. Voir `references/data-intelligence.md`.
+
+3. **Tableaux = syntheses agregees**: Les tableaux montrent des Top 10-15 agregees (ex: "Top 10 produits par CA"), JAMAIS des listes de commandes ou transactions individuelles. Voir `references/tables.md`.
+
+4. **Filtres styles**: Les `<select>` sur les pages Analyses DOIVENT avoir `style={{background:'#1A2332', border:'1px solid #1E293B', outline:'none'}}`. Voir `references/filters.md`.
+
+5. **Donnees intelligentes**: Agreger par dimensions significatives (nom, categorie, region, periode). Voir `references/data-intelligence.md`.
+
+6. **Layout deterministe**: Suivre l'ordre EXACT des composants defini dans `references/pages.md` pour chaque type de page. Ne pas inventer un layout different a chaque generation.
+
+7. **Suivre les recommandations d'analyse**: Si un contexte DATA ANALYSIS est fourni avec des `chartRecommendations`, suivre ces recommandations EXACTEMENT (types de graphiques, colonnes x/y, titres). Ne pas devier sauf si une recommandation viole une regle critique.
+
 ## Design System CSS
 
 Un fichier `ds.css` est pre-charge avec des classes utilitaires. Utilise `className=""` avec ces classes.
@@ -33,9 +49,9 @@ Pour les templates JSX du drawer, header et content-area, voir `references/struc
 
 ## Pages et Onglets
 
-Chaque dashboard a 3-4 onglets avec des regles specifiques par type de page.
+Chaque dashboard a 3-4 onglets avec un layout FIXE par type de page. Suivre l'ordre exact des composants.
 
-Pour les regles des pages (Vue d'ensemble, Analyses, Parametres), voir `references/pages.md`.
+Pour les layouts fixes et regles par page, voir `references/pages.md`.
 
 ## Filtres Dynamiques
 
@@ -70,6 +86,10 @@ Pour les fonctions fmt(), fmtCur(), fmtPct(), voir `references/formatting.md`.
 La page principale se termine par des insights calcules.
 
 Pour la structure des points cles, voir `references/insights.md`.
+
+## Intelligence des Donnees
+
+Regles d'agregation, d'identifiants, et de qualite des donnees: voir `references/data-intelligence.md`.
 
 ## Modes de Donnees
 

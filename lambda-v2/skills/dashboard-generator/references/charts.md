@@ -63,3 +63,40 @@ Props style inline (Recharts n'accepte pas className):
 <YAxis tick={{ fill:'#64748B', fontSize:11 }} axisLine={{ stroke:'#1E293B' }} tickFormatter={v => fmt(v)} />
 <Tooltip contentStyle={{ background:'#1A2332', border:'1px solid #2A3A50', borderRadius:'8px', color:'#F1F5F9' }} />
 ```
+
+## Selection du Type de Graphique
+
+### AreaChart
+- **Ideal pour**: tendance temporelle d'une seule metrique
+- **Donnees**: 1 colonne numerique + 1 colonne temporelle
+- **Exemples**: evolution du CA mensuel, progression des ventes
+- **Eviter si**: pas de dimension temporelle
+
+### LineChart
+- **Ideal pour**: comparer 2-4 metriques sur le meme axe temporel
+- **Exemples**: revenus vs depenses par mois
+- **Eviter si**: plus de 4 series (illisible)
+
+### BarChart
+- **Ideal pour**: comparer des valeurs entre categories discretes
+- **Max categories**: 15 — au-dela, utiliser un tableau
+- **Exemples**: ventes par region, top 10 produits
+
+### PieChart
+- **Ideal pour**: repartition/proportion d'un total
+- **Max categories**: 6 — au-dela, utiliser BarChart
+- **JAMAIS si**: plus de 6 categories, ou valeurs negatives
+- **Rappel**: TOUJOURS `<Cell fill={COLORS[i % COLORS.length]} />`
+
+### StackedBarChart
+- **Ideal pour**: composition par categorie au fil du temps
+- **Max segments**: 8
+
+## Regles des Axes — OBLIGATOIRE
+
+- **INTERDIT** de mettre des IDs (order_id, product_id, transaction_id, customer_id, etc.) sur les axes X ou Y
+- XAxis `dataKey` doit pointer vers un nom, une categorie, une date — JAMAIS un ID
+- Si les donnees n'ont qu'un ID, agreger par une autre colonne
+- YAxis: TOUJOURS `tickFormatter={v => fmt(v)}` pour les nombres
+- Regrouper les petites categories (< 3% du total) dans "Autres"
+- Voir `references/data-intelligence.md` pour les regles completes
