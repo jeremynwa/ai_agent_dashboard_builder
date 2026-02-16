@@ -4,3 +4,4 @@ backend/.env
 .DS_Store
 dist/
 .aws-sam/
+.claude/settings.local.json
