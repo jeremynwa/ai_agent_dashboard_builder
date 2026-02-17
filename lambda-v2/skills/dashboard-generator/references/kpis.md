@@ -34,6 +34,42 @@ Si les donnees n'ont qu'une seule colonne numerique, deriver les 4 KPIs: total, 
 - En cas de doute, afficher **SEULEMENT** la valeur calculee, sans comparaison
 - Les badges `badge-up`/`badge-down` ne sont utilises **QUE** si la variation est calculable a partir des donnees
 
+## Utilisation des Stats Pre-Calculees
+
+Si un contexte "STATISTIQUES AUTORITAIRES" est fourni:
+- KPI 1 (metrique monetaire): valider avec `stats[colonne].sum` — le code DOIT calculer dynamiquement via `DATA.reduce()`
+- KPI 2 (nombre): utiliser `DATA.length` (nombre reel apres injection)
+- KPI 3 (performance): valider avec `stats[colonne].mean` — calculer via `DATA.reduce() / DATA.length`
+- KPI 4 (variation): UNIQUEMENT si `stats[colonne].variation` existe dans le contexte d'analyse
+
+### Pattern OBLIGATOIRE pour les KPIs:
+
+```jsx
+// CORRECT — calcul dynamique
+const totalRevenue = useMemo(() => DATA.reduce((s, r) => s + (Number(r.revenue) || 0), 0), []);
+
+// INTERDIT — valeur hardcodee
+const totalRevenue = 1523456.78; // JAMAIS
+```
+
+### Pattern OBLIGATOIRE pour les variations:
+
+```jsx
+// CORRECT — variation calculee si periodes comparables
+const variation = useMemo(() => {
+  const periods = [...new Set(DATA.map(r => r.month))].sort();
+  if (periods.length < 2) return null; // Pas de variation possible
+  const current = DATA.filter(r => r.month === periods[periods.length - 1]);
+  const previous = DATA.filter(r => r.month === periods[periods.length - 2]);
+  const sumCur = current.reduce((s, r) => s + (Number(r.revenue) || 0), 0);
+  const sumPrev = previous.reduce((s, r) => s + (Number(r.revenue) || 0), 0);
+  return sumPrev > 0 ? ((sumCur - sumPrev) / sumPrev) * 100 : null;
+}, []);
+
+// INTERDIT — variation inventee
+const variation = 15.3; // JAMAIS
+```
+
 ## Sparklines
 
 Chaque KPI utilise donnees et couleurs **DIFFERENTES**:

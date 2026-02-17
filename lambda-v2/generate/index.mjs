@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { S3Client, GetObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 import { authenticateRequest } from './auth.mjs';
+import { computeLocalStats } from './local-stats.mjs';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const s3 = new S3Client({ region: process.env.MY_REGION || 'eu-north-1' });
@@ -84,6 +85,43 @@ function extractResponseText(response) {
     .filter(c => c.type === 'text')
     .map(c => c.text)
     .join('\n');
+}
+
+// ============================================================================
+// buildAuthoritativeStats — format pre-computed stats into human-readable text
+// ============================================================================
+function buildAuthoritativeStats(analysis) {
+  const stats = analysis?.analysis?.stats || analysis?.stats || {};
+  const periods = analysis?.analysis?.periods || analysis?.periods || {};
+  const charts = analysis?.analysis?.chartRecommendations || analysis?.chartRecommendations || [];
+  let output = '';
+
+  for (const [colName, colStats] of Object.entries(stats)) {
+    if (colStats.type === 'numeric' || colStats.type === 'currency' || colStats.type === 'percentage' || colStats.sum !== undefined) {
+      output += `\n${colName} (${colStats.type || 'numeric'}): sum=${colStats.sum}, mean=${colStats.mean}, median=${colStats.median}, min=${colStats.min}, max=${colStats.max}, count=${colStats.count}`;
+      if (colStats.variation) {
+        output += `\n  variation: ${colStats.variation.firstPeriod} (${colStats.variation.firstValue}) -> ${colStats.variation.lastPeriod} (${colStats.variation.lastValue}) = ${colStats.variation.changePercent}%`;
+      }
+    } else if (colStats.type === 'categorical' || colStats.uniqueCount !== undefined) {
+      output += `\n${colName} (categorical): ${colStats.uniqueCount} unique values`;
+      if (colStats.topValue) output += `, top="${colStats.topValue}" (${colStats.topCount})`;
+    }
+  }
+
+  if (periods.hasPeriods) {
+    output += `\n\nPeriode detectee: colonne "${periods.periodColumn}" (${periods.periodType}), ${periods.periods?.length || 0} periodes, comparaison possible=${periods.canCompare}`;
+  } else {
+    output += '\n\nAucune colonne de periode detectee — INTERDICTION d\'afficher des variations % ou badges up/down.';
+  }
+
+  if (charts.length > 0) {
+    output += '\n\nGraphiques recommandes:';
+    for (const c of charts) {
+      output += `\n  - ${c.type}: ${c.title || ''} (x=${c.xAxis || c.dimension}, y=${c.yAxis || c.metric})`;
+    }
+  }
+
+  return output;
 }
 
 // ============================================================================
@@ -317,7 +355,7 @@ IMPORTANT: Sparklines dans <ResponsiveContainer width="100%" height={40}> — PA
 ===== GRAPHIQUES =====
 MINIMUM 3 types: AreaChart, BarChart, PieChart, LineChart, Table
 COULEURS: const COLORS = ['#06B6D4','#EC4899','#8B5CF6','#F59E0B','#10B981','#F97316'];
-PIECHARTS: TOUJOURS <Cell fill={COLORS[i % COLORS.length]} /> — sinon tout est gris.
+PIECHARTS: TOUJOURS <Cell fill={COLORS[i % COLORS.length]} /> + <Legend wrapperStyle={{color:'#94A3B8', fontSize:'12px'}} /> — Cell pour les couleurs, Legend pour la legende.
 
 Wrapper:
 <div className="card mb-6">
@@ -342,19 +380,22 @@ Config Recharts (props style inline car Recharts n'accepte pas de className):
   <h3 className="section-title">Titre</h3>
   <div className="overflow-x-auto">
     <table className="w-full">
-      <thead><tr className="border-b">
-        <th className="table-header-cell">Col</th>
+      <thead><tr>
+        <th className="table-header-cell">Nom</th>
+        <th className="table-header-cell" style={{textAlign:'right'}}>Metrique</th>
       </tr></thead>
       <tbody>
         {data.map((row, i) => (
           <tr key={i} className={\`\${i%2===0?'table-row-even':'table-row-odd'} hover-bg\`}>
-            <td className="table-cell">{row.val}</td>
+            <td className="table-cell">{row.name}</td>
+            <td className="table-cell" style={{textAlign:'right'}}>{fmtCur(row.val)}</td>
           </tr>
         ))}
       </tbody>
     </table>
   </div>
 </div>
+REGLE TABLEAUX: Colonnes numeriques (montants, quantites, %) DOIVENT avoir style={{textAlign:'right'}} sur <th> ET <td>.
 
 ===== FORMATAGE =====
 const fmt = (n, d=0) => { if(n==null) return '-'; if(Math.abs(n)>=1e6) return (n/1e6).toFixed(1)+'M'; if(Math.abs(n)>=1e3) return (n/1e3).toFixed(1)+'K'; return n.toFixed(d); };
@@ -373,7 +414,10 @@ Page principale finit par:
   ))}
 </div>
 
-Observations CALCULEES a partir des vraies donnees. JAMAIS de chiffres inventes ou extrapoles.
+REGLE ABSOLUE INSIGHTS: Chaque insight DOIT etre un template literal avec des valeurs CALCULEES via useMemo.
+INTERDIT: const takeaways = [{text: "Le CA est de 1.5M EUR", type: "up"}]
+OBLIGATOIRE: const takeaways = useMemo(() => { const total = DATA.reduce((s,r) => s + (Number(r.col)||0), 0); return [{text: \`Le CA est de \${fmtCur(total)}\`, type: 'accent'}]; }, []);
+ZERO chiffre en dur dans les strings d'insights. ZERO comparaison "precedent"/"objectif" si pas de colonne de periode.
 
 ===== REGLES DE CODE =====
 - className pour les patterns du DS, style={{ }} pour le sur-mesure
@@ -527,6 +571,7 @@ export const handler = async (event) => {
 
     // Build data context (same for both modes)
     let dataContext = '';
+    let analyzerDataContext = '';
     if (dbContext) {
       const schemaDesc = Object.entries(dbContext.schema).map(([table, info]) => {
         const cols = info.columns.map(c => `  - ${c.name} (${c.type})`).join('\n');
@@ -536,24 +581,63 @@ export const handler = async (event) => {
       dataContext = `\n\nBDD (${dbContext.type}):\n${schemaDesc}\n\nUtilise queryDb().`;
     } else if (excelData) {
       const rawData = excelData.data || excelData.fullData || [];
-      const sample = rawData.slice(0, 30);
-      const headers = excelData.headers || (sample.length > 0 ? Object.keys(sample[0]) : []);
-      dataContext = `\n\nDONNEES:\nFichier: ${excelData.fileName || 'data'}\nColonnes: ${headers.join(', ')}\nTotal: ${excelData.totalRows || rawData.length} lignes\nEchantillon:\n${JSON.stringify(sample, null, 2)}\n\nUtilise "__INJECT_DATA__" dans src/data.js.`;
+      const promptSample = rawData.slice(0, 30);
+      const headers = excelData.headers || (promptSample.length > 0 ? Object.keys(promptSample[0]) : []);
+
+      // For Claude: 30 rows for SCHEMA understanding only (never compute aggregates from this)
+      dataContext = `\n\nDONNEES:\nFichier: ${excelData.fileName || 'data'}\nColonnes: ${headers.join(', ')}\nTotal: ${excelData.totalRows || rawData.length} lignes\nEchantillon (30 lignes pour comprendre la STRUCTURE — ne PAS calculer de valeurs depuis cet echantillon):\n${JSON.stringify(promptSample, null, 2)}\n\nUtilise "__INJECT_DATA__" dans src/data.js. Toutes les valeurs affichees doivent etre CALCULEES dynamiquement depuis le tableau DATA complet (DATA.reduce, DATA.filter, etc.).`;
+
+      // For the analyzer: all received rows (up to 2000 sent by frontend)
+      analyzerDataContext = `\n\nDONNEES COMPLETES POUR ANALYSE:\nFichier: ${excelData.fileName || 'data'}\nColonnes: ${headers.join(', ')}\nTotal: ${excelData.totalRows || rawData.length} lignes\nDonnees (${rawData.length} lignes):\n${JSON.stringify(rawData)}\n`;
     }
 
     // Pre-analyze data with data-analyzer skill (if available)
     // Skip if cachedAnalysis provided by frontend (same dataset, different prompt)
     let analysisContext = '';
     let analysisResult = null;
+    const buildAnalysisContext = (analysis) => {
+      const statsText = buildAuthoritativeStats(analysis);
+      return `\n\n===== STATISTIQUES AUTORITAIRES (calculees par Python sur les donnees reelles) =====${statsText}
+
+===== REGLES D'UTILISATION OBLIGATOIRES =====
+- Ces nombres sont CORRECTS (calcules sur les donnees reelles). UTILISER ces valeurs pour valider vos KPIs.
+- NE PAS recalculer depuis l'echantillon de 30 lignes du prompt.
+- Si "variation" est ABSENT pour une colonne → PAS de badge up/down pour ce KPI.
+- Points Cles: OBLIGATOIREMENT des template literals + expressions calculees via useMemo, JAMAIS de chiffres en dur.
+- L'echantillon de 30 lignes est pour comprendre la STRUCTURE, pas pour calculer des valeurs.
+- TOUT chiffre affiche dans le dashboard DOIT etre calcule dynamiquement depuis DATA (reduce, filter, map).
+
+${JSON.stringify(analysis, null, 2)}`;
+    };
+
     if (cachedAnalysis) {
       console.log('Using cached data analysis from frontend');
       analysisResult = cachedAnalysis;
-      analysisContext = `\n\nDATA ANALYSIS (factual — computed by Python scripts, use these values):\n${JSON.stringify(cachedAnalysis, null, 2)}\n\nIMPORTANT: Use the statistics and chart recommendations above. Do NOT invent values not present in the data.`;
+      analysisContext = buildAnalysisContext(cachedAnalysis);
+    } else if (excelData) {
+      // Priority 1: Local stats (computed on ALL received rows — fast, free, 100% accurate)
+      const rawData = excelData.data || excelData.fullData || [];
+      const localAnalysis = computeLocalStats(rawData);
+      if (localAnalysis) {
+        console.log(`Local stats computed on ${localAnalysis.rowCount} rows (source: ${localAnalysis.source})`);
+        analysisResult = localAnalysis;
+        analysisContext = buildAnalysisContext(localAnalysis);
+      }
+
+      // Priority 2: Data-analyzer skill (optional enrichment — chart recs may be smarter)
+      if (!analysisResult && dataContext && USE_BETA_API && DATA_ANALYZER_SKILL_ID) {
+        const analysis = await analyzeData(analyzerDataContext || dataContext);
+        if (analysis) {
+          analysisResult = analysis;
+          analysisContext = buildAnalysisContext(analysis);
+        }
+      }
     } else if (dataContext && USE_BETA_API && DATA_ANALYZER_SKILL_ID) {
+      // DB mode: no local stats, use data-analyzer skill if available
       const analysis = await analyzeData(dataContext);
       if (analysis) {
         analysisResult = analysis;
-        analysisContext = `\n\nDATA ANALYSIS (factual — computed by Python scripts, use these values):\n${JSON.stringify(analysis, null, 2)}\n\nIMPORTANT: Use the statistics and chart recommendations above. Do NOT invent values not present in the data.`;
+        analysisContext = buildAnalysisContext(analysis);
       }
     }
 
@@ -570,8 +654,11 @@ RAPPELS CRITIQUES (en plus du skill):
 - OBLIGATOIRE: Filtres <select> styles avec style={{background:'#1A2332', border:'1px solid #1E293B', outline:'none'}} sur les pages Analyses
 - INTERDIT: Colonnes ID (order_id, product_id, transaction_id, customer_id) comme axes de graphiques ou colonnes principales de tableaux — utiliser noms, categories, dates
 - INTERDIT: Tableaux de donnees brutes (commandes individuelles, transactions) — toujours agreger (Top 10-15 par dimension significative)
-- INTERDIT: PieChart sans <Cell fill={COLORS[i % COLORS.length]} />
-- Voir references/data-intelligence.md pour les regles completes d'agregation et de qualite des donnees`;
+- INTERDIT: PieChart sans <Cell fill={COLORS[i % COLORS.length]} /> et sans <Legend wrapperStyle={{color:'#94A3B8', fontSize:'12px'}} />
+- Voir references/data-intelligence.md pour les regles completes d'agregation et de qualite des donnees
+- ANTI-HALLUCINATION: TOUS les KPIs, badges, sparklines et Points Cles DOIVENT etre des expressions JavaScript calculees depuis DATA (reduce, filter, map). ZERO constante numerique representant une valeur de donnee.
+- ANTI-HALLUCINATION: Les Points Cles (takeaways) DOIVENT etre dans un useMemo avec template literals. Ex: \`Le CA total est de \${fmtCur(total)}\` — JAMAIS: "Le CA total est de 1.5M EUR"
+- ANTI-HALLUCINATION: L'echantillon de 30 lignes dans le prompt est pour comprendre la STRUCTURE. NE PAS calculer de valeurs depuis cet echantillon. Le tableau DATA complet sera injecte a l'execution.`;
       skills.push(DASHBOARD_SKILL_ID);
 
       if (dbContext) {

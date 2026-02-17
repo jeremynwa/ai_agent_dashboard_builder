@@ -10,9 +10,10 @@ MINIMUM 3 types: AreaChart, BarChart, PieChart, LineChart, Table
 const COLORS = ['#06B6D4','#EC4899','#8B5CF6','#F59E0B','#10B981','#F97316'];
 ```
 
-## PieChart — OBLIGATOIRE: Cell avec COLORS
+## PieChart — OBLIGATOIRE: Cell + Legend
 
-TOUJOURS utiliser `<Cell>` avec le tableau COLORS — sinon tout est gris:
+TOUJOURS utiliser `<Cell>` avec le tableau COLORS — sinon tout est gris.
+TOUJOURS ajouter `<Legend>` — sinon l'utilisateur ne sait pas quoi represente chaque tranche.
 
 ```jsx
 <PieChart>
@@ -22,8 +23,14 @@ TOUJOURS utiliser `<Cell>` avec le tableau COLORS — sinon tout est gris:
     ))}
   </Pie>
   <Tooltip contentStyle={{background:'#1A2332', border:'1px solid #2A3A50', borderRadius:'8px', color:'#F1F5F9'}} />
+  <Legend wrapperStyle={{color:'#94A3B8', fontSize:'12px'}} />
 </PieChart>
 ```
+
+**Checklist PieChart** (les 3 sont OBLIGATOIRES):
+1. `<Cell fill={COLORS[index % COLORS.length]} />` — couleurs
+2. `<Tooltip>` — details au survol
+3. `<Legend>` — legende avec noms des categories
 
 ## Wrapper Graphique
 

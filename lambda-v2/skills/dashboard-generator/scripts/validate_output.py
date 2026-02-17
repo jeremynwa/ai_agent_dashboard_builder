@@ -51,10 +51,12 @@ def validate_output(output_json):
         if emoji_pattern.search(app_code):
             errors.append("App.jsx contains emojis — forbidden!")
 
-        # Check PieChart without Cell
+        # Check PieChart without Cell or Legend
         if "PieChart" in app_code and "<Pie" in app_code:
             if "<Cell" not in app_code:
                 errors.append("PieChart without <Cell> — all slices will be grey!")
+            if "<Legend" not in app_code:
+                errors.append("PieChart without <Legend> — users cannot identify slices!")
 
         # Check COLORS array when charts present
         chart_types = ["PieChart", "BarChart", "AreaChart", "LineChart"]
@@ -71,17 +73,38 @@ def validate_output(output_json):
         if len(gradient_ids) != len(set(gradient_ids)):
             errors.append("Duplicate SVG gradient IDs — sparklines need unique IDs")
 
-        # Warn about potential fabricated comparisons
+        # Fabrication keywords — PROMOTED TO ERROR
         fabrication_keywords = [
             r"Precedent", r"Previous", r"Objectif", r"Target",
             r"Last Year", r"Annee derniere", r"Budget"
         ]
+        found_fab = []
         for kw in fabrication_keywords:
             if re.search(kw, app_code, re.IGNORECASE):
-                warnings.append(
-                    f"Keyword '{kw}' detected — ensure this is calculated from real data"
+                found_fab.append(kw)
+        if found_fab:
+            errors.append(
+                f"Fabrication keywords detected: {found_fab} — remove or compute from real data"
+            )
+
+        # Hardcoded numbers in insight/takeaway strings
+        insight_hardcoded = re.findall(
+            r"""(?:text|insight|takeaway)\s*[:=]\s*["'][^"']*\d+[.,]?\d*\s*(?:%|EUR|K|M|\u20ac|\$)[^"']*["']""",
+            app_code,
+        )
+        if insight_hardcoded:
+            errors.append(
+                f"Hardcoded numbers in insights: {insight_hardcoded[:3]} — use template literals with computed values"
+            )
+
+        # Static takeaways without useMemo
+        has_takeaways = re.search(r"(?:takeaways|insights)\s*=\s*\[", app_code)
+        has_memo = re.search(r"(?:takeaways|insights)\s*=\s*useMemo", app_code)
+        if has_takeaways and ("insight-item" in app_code or "insight-bar" in app_code):
+            if not has_memo:
+                errors.append(
+                    "takeaways/insights defined without useMemo — must use useMemo with template literals"
                 )
-                break
 
     # 4. Check data.js (Excel mode)
     if "src/data.js" in files:

@@ -61,11 +61,15 @@ def check_code(code):
             is_error=False,
         )
 
-    # 5. PieChart with Cell
+    # 5. PieChart with Cell + Legend
     if "PieChart" in code and "<Pie" in code:
         check(
             "<Cell" in code,
             "PieChart without <Cell> — all slices will be grey!",
+        )
+        check(
+            "<Legend" in code,
+            "PieChart without <Legend> — users cannot identify what each slice represents!",
         )
 
     # 6. Formatting functions
@@ -139,7 +143,7 @@ def check_code(code):
         is_error=False,
     )
 
-    # 15. Fabrication keywords
+    # 15. Fabrication keywords — PROMOTED TO ERROR
     fabrication_keywords = [
         "Precedent", "Previous", "Objectif", "Target",
         "Last Year", "Annee derniere", "Budget",
@@ -149,9 +153,53 @@ def check_code(code):
         if re.search(kw, code, re.IGNORECASE):
             found_fabrication.append(kw)
     if found_fabrication:
-        warnings.append(
-            f"Potential fabricated data keywords: {found_fabrication} — ensure computed from real data"
+        errors.append(
+            f"Fabrication keywords detected: {found_fabrication} — these comparisons require data columns that likely don't exist. Remove or compute from real data."
         )
+
+    # 16. Hardcoded numbers in insight/takeaway strings
+    # Detect: text: "Le CA est de 1.5M EUR" or text: "augmentation de 15.3%"
+    insight_hardcoded = re.findall(
+        r"""(?:text|insight|takeaway)\s*[:=]\s*["'][^"']*\d+[.,]?\d*\s*(?:%|EUR|K|M|\u20ac|\$)[^"']*["']""",
+        code,
+    )
+    if insight_hardcoded:
+        check(
+            False,
+            f"Hardcoded numbers in insights/takeaways: {insight_hardcoded[:3]} — insights must use template literals with computed values (useMemo + backticks)",
+        )
+    else:
+        checks_passed += 1
+
+    # 17. Static takeaways array (not using useMemo)
+    has_takeaways = re.search(r"(?:takeaways|insights)\s*=\s*\[", code)
+    has_takeaways_memo = re.search(r"(?:takeaways|insights)\s*=\s*useMemo\s*\(", code)
+    if has_takeaways and ("insight-item" in code or "insight-bar" in code):
+        check(
+            has_takeaways_memo is not None,
+            "takeaways/insights array is statically defined — must use useMemo(() => { ...compute... }, []) with template literals",
+        )
+
+    # 18. Hardcoded percentages in badge-up/badge-down context
+    badge_hardcoded = re.findall(
+        r"""badge-(?:up|down)[^>]*>\s*[+-]?\d+[.,]?\d*\s*%""",
+        code,
+    )
+    check(
+        len(badge_hardcoded) == 0,
+        f"Hardcoded percentages in badges: {badge_hardcoded[:3]} — variation badges must display computed values",
+    )
+
+    # 19. Hardcoded large numbers in kpi-value spans
+    # Detect: className="kpi-value">1,523,456 or kpi-value">{1523456}
+    kpi_hardcoded = re.findall(
+        r"""kpi-value[^>]*>\s*\{?\s*["']?[\d,]{4,}\.?\d*["']?\s*\}?\s*<""",
+        code,
+    )
+    check(
+        len(kpi_hardcoded) == 0,
+        f"Hardcoded numbers in KPI values: {len(kpi_hardcoded)} instances — KPI values must be computed expressions (e.g., {{fmtCur(total)}})",
+    )
 
     return {
         "errors": errors,

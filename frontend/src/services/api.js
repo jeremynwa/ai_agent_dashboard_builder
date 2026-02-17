@@ -14,9 +14,46 @@ async function authHeaders() {
 }
 
 // ============ GENERATE ============
+// Lambda Function URL payload limit is 6MB. We cap the data payload at ~4.5MB
+// to leave room for prompt, rules, existingCode, etc. in the same request.
+const MAX_DATA_PAYLOAD_BYTES = 4.5 * 1024 * 1024;
+
+function trimDataToFit(allData, maxBytes) {
+  // Try sending all data first
+  let sample = allData;
+  let json = JSON.stringify(sample);
+  if (json.length <= maxBytes) return sample;
+
+  // Binary search for the largest slice that fits
+  let lo = 0, hi = allData.length;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    const testJson = JSON.stringify(allData.slice(0, mid));
+    if (testJson.length <= maxBytes) lo = mid;
+    else hi = mid - 1;
+  }
+  return allData.slice(0, lo);
+}
+
 export async function generateApp(prompt, excelData = null, existingCode = null, dbContext = null, industry = null, { modelHint, cachedAnalysis } = {}) {
   const headers = await authHeaders();
-  const body = { prompt, useRules: true, excelData, existingCode, dbContext };
+
+  // Send as many rows as possible for accurate local stats (computed in Lambda).
+  // fullData stays client-side for __INJECT_DATA__ replacement only.
+  // Capped by payload size (~4.5MB for data) to stay under Lambda Function URL 6MB limit.
+  let excelPayload = null;
+  if (excelData) {
+    const allData = excelData.fullData || excelData.data || [];
+    const trimmedData = trimDataToFit(allData, MAX_DATA_PAYLOAD_BYTES);
+    excelPayload = {
+      fileName: excelData.fileName,
+      headers: excelData.headers,
+      data: trimmedData,
+      totalRows: excelData.totalRows,
+    };
+  }
+
+  const body = { prompt, useRules: true, excelData: excelPayload, existingCode, dbContext };
   if (industry) body.industry = industry;
   if (modelHint) body.modelHint = modelHint;
   if (cachedAnalysis) body.cachedAnalysis = cachedAnalysis;
@@ -36,6 +73,19 @@ export async function generateApp(prompt, excelData = null, existingCode = null,
 // ============ VISION ANALYZE ============
 export async function visionAnalyze(screenshot, currentCode, excelData = null, dbContext = null) {
   const headers = await authHeaders();
+
+  // Strip fullData for vision calls too (only schema needed)
+  let excelPayload = null;
+  if (excelData) {
+    const allData = excelData.fullData || excelData.data || [];
+    excelPayload = {
+      fileName: excelData.fileName,
+      headers: excelData.headers,
+      data: allData.slice(0, 30),
+      totalRows: excelData.totalRows,
+    };
+  }
+
   const res = await fetch(GENERATE_URL, {
     method: 'POST',
     headers,
@@ -43,7 +93,7 @@ export async function visionAnalyze(screenshot, currentCode, excelData = null, d
       prompt: '__VISION_ANALYZE__',
       screenshot,
       existingCode: currentCode,
-      excelData,
+      excelData: excelPayload,
       dbContext,
       useRules: true,
     }),

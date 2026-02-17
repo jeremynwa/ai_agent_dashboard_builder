@@ -602,8 +602,9 @@ function Factory() {
         latestUrl = compileResult.url;
         setPreviewUrl(compileResult.url);
 
-        // Conditional review: skip for very simple prompts with small datasets
-        const isSimple = !dbContext && (excelData?.totalRows || 0) < 100 && userPrompt.split(' ').length < 50;
+        // Conditional review: NEVER skip when data is involved (anti-hallucination)
+        const hasData = !!(excelData || dbContext);
+        const isSimple = !hasData && userPrompt.split(' ').length < 50;
         const shouldReview = !skipReview && !isSimple;
 
         if (shouldReview) {

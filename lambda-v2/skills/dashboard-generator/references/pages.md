@@ -75,3 +75,19 @@ Design impose — structure EXACTE a suivre:
 
 - Les settings doivent avoir: label + description sur la gauche, valeur/toggle sur la droite
 - Espacement correct entre label et description (gap-1, pas colles)
+
+### Section "Informations sur les donnees" — OBLIGATOIRE
+
+Le tableau `dataInfo` DOIT contenir au minimum:
+
+```jsx
+const dataInfo = [
+  { label: 'Source', value: 'fichier.csv' },          // ou 'Base de donnees PostgreSQL'
+  { label: 'Lignes', value: fmt(DATA.length) },        // TOUJOURS DATA.length dynamique
+  { label: 'Colonnes', value: String(Object.keys(DATA[0] || {}).length) },
+  { label: 'Derniere mise a jour', value: new Date().toLocaleDateString('fr-FR') },
+];
+```
+
+- `DATA.length` DOIT etre dynamique (pas hardcode)
+- Le nom du fichier source doit correspondre au fichier uploade

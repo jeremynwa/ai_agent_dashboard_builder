@@ -273,10 +273,12 @@ table { border-collapse: collapse; }
 .insight-text { font-size: 13px; color: var(--text-2); line-height: 1.5; }
 
 /* Table */
-.table-header-cell { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-3); padding: 12px 16px; text-align: left; }
-.table-cell { padding: 12px 16px; color: var(--text-2); font-size: 14px; }
+.w-full { width: 100%; border-collapse: collapse; border-spacing: 0; }
+.table-header-cell { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-3); padding: 10px 16px; text-align: left; white-space: nowrap; border-bottom: 1px solid var(--border); }
+.table-cell { padding: 10px 16px; color: var(--text-2); font-size: 13px; white-space: nowrap; border-bottom: 1px solid rgba(30,41,59,0.5); }
 .table-row-even { background: var(--card); }
 .table-row-odd { background: var(--card-alt); }
+.table-cell:first-child { color: var(--text-1); font-weight: 500; }
 
 /* Responsive Grid */
 .grid-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; }
