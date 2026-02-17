@@ -303,9 +303,30 @@ import ReactDOM from 'react-dom/client'
 import './ds.css'
 import App from './App'
 
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(error) { return { error }; }
+  render() {
+    if (this.state.error) {
+      return React.createElement('div', {
+        style: { padding: '40px', background: '#0B1120', color: '#F1F5F9', minHeight: '100vh', fontFamily: 'Inter, sans-serif' }
+      },
+        React.createElement('h1', { style: { color: '#EF4444', fontSize: '20px', marginBottom: '16px' } }, 'Runtime Error'),
+        React.createElement('pre', {
+          style: { background: '#111827', padding: '16px', borderRadius: '8px', fontSize: '13px', overflowX: 'auto', color: '#F59E0B', whiteSpace: 'pre-wrap' }
+        }, this.state.error.toString()),
+        React.createElement('p', { style: { marginTop: '16px', color: '#94A3B8', fontSize: '13px' } }, 'Check the generated App.jsx for undefined variables or missing imports.')
+      );
+    }
+    return this.props.children;
+  }
+}
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </React.StrictMode>,
 )
 `
