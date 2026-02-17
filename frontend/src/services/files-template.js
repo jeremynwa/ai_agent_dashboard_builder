@@ -281,7 +281,7 @@ table { border-collapse: collapse; }
 .table-cell:first-child { color: var(--text-1); font-weight: 500; }
 
 /* Responsive Grid */
-.grid-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; }
+.grid-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-bottom: 24px; }
 .grid-charts-2 { display: grid; grid-template-columns: 1fr; gap: 20px; }
 .grid-charts-3 { display: grid; grid-template-columns: 1fr; gap: 20px; }
 @media (min-width: 768px) { .grid-charts-2 { grid-template-columns: 1fr 1fr; } .grid-charts-3 { grid-template-columns: 1fr 1fr; } }

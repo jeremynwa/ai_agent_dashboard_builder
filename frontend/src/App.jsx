@@ -347,7 +347,12 @@ function Factory() {
   const [dbData, setDbData] = useState(null);
   const [prompt, setPrompt] = useState('');
   const [generatedApp, setGeneratedApp] = useState(null);
-  const [savedApps, setSavedApps] = useState([]);
+  const [savedApps, setSavedApps] = useState(() => {
+    try {
+      const stored = localStorage.getItem('factory-saved-apps');
+      return stored ? JSON.parse(stored) : [];
+    } catch { return []; }
+  });
   const [generationStep, setGenerationStep] = useState(0);
   const [agentStatus, setAgentStatus] = useState('');
   const [feedback, setFeedback] = useState('');
@@ -373,6 +378,15 @@ function Factory() {
   const addLog = (message) => {
     logsRef.current = [...logsRef.current, message];
   };
+
+  // Persist savedApps to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('factory-saved-apps', JSON.stringify(savedApps));
+    } catch (e) {
+      console.warn('Failed to save apps to localStorage:', e);
+    }
+  }, [savedApps]);
 
   useEffect(() => {
     if (bootedRef.current) return;
@@ -645,7 +659,7 @@ function Factory() {
         }
 
         setCurrentFiles(currentCode);
-        return { success: true, url: latestUrl };
+        return { success: true, url: latestUrl, files: currentCode };
       }
 
       lastError = compileResult.error;
@@ -667,7 +681,7 @@ function Factory() {
         setGenerationStep(5);
         setAgentStatus('');
         setGeneratedApp({ name: prompt.slice(0, 30), prompt, url: result.url });
-        setSavedApps(prev => [...prev, { id: Date.now(), name: prompt.slice(0, 30), prompt }]);
+        setSavedApps(prev => [...prev, { id: Date.now(), name: prompt.slice(0, 30), prompt, files: result.files }].slice(-10));
       } else {
         setAgentStatus(`${t('errorPrefix')}${result.error.slice(0, 200)}`);
       }
@@ -678,6 +692,26 @@ function Factory() {
       setIsLoading(false);
       setGenerationStep(0);
     }
+  };
+
+  const restoreApp = async (app) => {
+    if (!app.files || !webcontainerRef.current) return;
+    setIsLoading(true);
+    setAgentStatus(t('modifying'));
+    try {
+      const compileResult = await tryCompile(app.files);
+      if (compileResult.success) {
+        setCurrentFiles(app.files);
+        setPreviewUrl(compileResult.url);
+        setGeneratedApp({ name: app.name, prompt: app.prompt, url: compileResult.url });
+        setPrompt(app.prompt);
+        setGenerationStep(5);
+      }
+    } catch (error) {
+      addLog(`Restore failed: ${error.message}`);
+    }
+    setIsLoading(false);
+    setAgentStatus('');
   };
 
   const handleRefine = async () => {
@@ -716,7 +750,7 @@ function Factory() {
     if (!excelData && !dbData) return;
     setExportingFormat(format);
     try {
-      const data = excelData?.data || [];
+      const data = excelData?.fullData || [];
       const title = generatedApp?.name || 'Dashboard';
       const result = await exportApp(format, data, title);
       if (result.base64) {
@@ -734,6 +768,7 @@ function Factory() {
       }
     } catch (error) {
       addLog(`Export error: ${error.message}`);
+      setAgentStatus(`Export error: ${error.message}`);
     }
     setExportingFormat(null);
   };
@@ -916,10 +951,11 @@ function Factory() {
                 {savedApps.slice(-8).reverse().map((app, i) => (
                   <motion.div
                     key={app.id}
-                    style={styles.appItem}
+                    style={{...styles.appItem, cursor: app.files ? 'pointer' : 'default'}}
                     initial={{ opacity: 0, x: -12 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: i * 0.04, duration: 0.25 }}
+                    onClick={() => restoreApp(app)}
                   >
                     <span style={{ marginRight: '8px', opacity: 0.5 }}><Icons.app /></span>
                     <span style={styles.appItemText}>{app.name}</span>

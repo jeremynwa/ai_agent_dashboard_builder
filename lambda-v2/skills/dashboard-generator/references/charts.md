@@ -89,6 +89,22 @@ Props style inline (Recharts n'accepte pas className):
 - **Max categories**: 15 — au-dela, utiliser un tableau
 - **Exemples**: ventes par region, top 10 produits
 
+**Exemple complet OBLIGATOIRE** (sans `<Bar>`, aucune barre ne s'affiche!):
+```jsx
+<BarChart data={barData}>
+  <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" />
+  <XAxis dataKey="name" tick={{ fill:'#64748B', fontSize:11 }} axisLine={{ stroke:'#1E293B' }} />
+  <YAxis tick={{ fill:'#64748B', fontSize:11 }} axisLine={{ stroke:'#1E293B' }} tickFormatter={v => fmt(v)} />
+  <Tooltip contentStyle={{ background:'#1A2332', border:'1px solid #2A3A50', borderRadius:'8px', color:'#F1F5F9' }} />
+  <Bar dataKey="value" fill="#06B6D4" radius={[4,4,0,0]} />
+</BarChart>
+```
+
+**Checklist BarChart** (OBLIGATOIRE):
+1. `<Bar dataKey="value" fill="#06B6D4" />` — dataKey vers propriete NUMERIQUE + fill couleur
+2. `<XAxis dataKey="name">` — dataKey vers la colonne categorie/nom
+3. `<YAxis tickFormatter={v => fmt(v)}>` — formater les nombres
+
 ### PieChart
 - **Ideal pour**: repartition/proportion d'un total
 - **Max categories**: 6 — au-dela, utiliser BarChart

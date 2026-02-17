@@ -375,6 +375,19 @@ Config Recharts (props style inline car Recharts n'accepte pas de className):
 - <YAxis tick={{ fill:'#64748B', fontSize:11 }} axisLine={{ stroke:'#1E293B' }} tickFormatter={v => fmt(v)} />
 - <Tooltip contentStyle={{ background:'#1A2332', border:'1px solid #2A3A50', borderRadius:'8px', color:'#F1F5F9' }} />
 
+BARCHART — exemple complet OBLIGATOIRE:
+<BarChart data={barData}>
+  <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" />
+  <XAxis dataKey="name" tick={{ fill:'#64748B', fontSize:11 }} axisLine={{ stroke:'#1E293B' }} />
+  <YAxis tick={{ fill:'#64748B', fontSize:11 }} axisLine={{ stroke:'#1E293B' }} tickFormatter={v => fmt(v)} />
+  <Tooltip contentStyle={{ background:'#1A2332', border:'1px solid #2A3A50', borderRadius:'8px', color:'#F1F5F9' }} />
+  <Bar dataKey="value" fill="#06B6D4" radius={[4,4,0,0]} />
+</BarChart>
+IMPORTANT: <Bar> DOIT avoir dataKey pointant vers une propriete NUMERIQUE existante dans les donnees + fill avec une couleur. Sans <Bar>, aucune barre ne s'affiche!
+
+FILTRES SELECT — style OBLIGATOIRE (sinon invisible sur fond sombre):
+Chaque <select> DOIT avoir: style={{background:'#1A2332', border:'1px solid #1E293B', outline:'none'}}
+
 ===== TABLES =====
 <div className="card mb-6">
   <h3 className="section-title">Titre</h3>
@@ -396,6 +409,11 @@ Config Recharts (props style inline car Recharts n'accepte pas de className):
   </div>
 </div>
 REGLE TABLEAUX: Colonnes numeriques (montants, quantites, %) DOIVENT avoir style={{textAlign:'right'}} sur <th> ET <td>.
+TABLES — REGLES CRITIQUES:
+- JAMAIS de valeurs repetees/identiques sur plusieurs lignes — chaque ligne DOIT avoir des metriques DIFFERENTES calculees par aggregation
+- Utiliser DATA.reduce() avec groupBy pour agreger, puis .sort() pour trier par metrique decroissante, puis .slice(0, 10) pour Top 10
+- Si toutes les valeurs sont identiques dans le tableau, c'est un BUG d'aggregation — verifier la logique reduce/groupBy
+- Colonnes de tableaux: JAMAIS d'IDs bruts (order_id, client_id) — toujours des noms, categories, labels lisibles
 
 ===== FORMATAGE =====
 const fmt = (n, d=0) => { if(n==null) return '-'; if(Math.abs(n)>=1e6) return (n/1e6).toFixed(1)+'M'; if(Math.abs(n)>=1e3) return (n/1e3).toFixed(1)+'K'; return n.toFixed(d); };
