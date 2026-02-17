@@ -1,8 +1,8 @@
-// frontend/src/App.jsx — WebContainer API auth integration
-import { useState, useEffect, useRef, createContext, useContext } from 'react';
+// frontend/src/App.jsx — Sandpack-based preview (no WebContainers)
+import { useState, useEffect, useRef, createContext, useContext, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { WebContainer, configureAPIKey } from '@webcontainer/api';
-import { baseFiles } from './services/files-template';
+import { SandpackProvider, SandpackPreview, useSandpack, SandpackLayout } from '@codesandbox/sandpack-react';
+import { baseFiles, sandpackDependencies, toSandpackFiles, fromSandpackFiles } from './services/files-template';
 import { generateApp, visionAnalyze, publishApp, exportApp, API_BASE, DB_PROXY_URL } from './services/api';
 import { exportToZip } from './services/export';
 import FileUpload from './components/FileUpload';
@@ -244,18 +244,36 @@ function AuthGate() {
   return <Factory />;
 }
 
-// ============ HELPER: Flatten WebContainer file tree to flat map ============
-function flattenFiles(obj, path = '') {
-  const result = {};
-  for (const [name, value] of Object.entries(obj)) {
-    const fullPath = path ? `${path}/${name}` : name;
-    if (value.directory) {
-      Object.assign(result, flattenFiles(value.directory, fullPath));
-    } else if (value.file) {
-      result[fullPath] = value.file.contents;
-    }
-  }
-  return result;
+// ============ HELPER: Flatten Sandpack files to flat map ============
+function flattenFiles(sandpackFiles) {
+  return fromSandpackFiles(sandpackFiles);
+}
+
+// ============ SANDPACK STATUS LISTENER ============
+// This component sits inside SandpackProvider to detect compilation status
+function SandpackStatusBridge({ onStatusChange, iframeRef }) {
+  const { sandpack } = useSandpack();
+
+  useEffect(() => {
+    onStatusChange?.({
+      status: sandpack.status,
+      error: sandpack.error,
+    });
+  }, [sandpack.status, sandpack.error]);
+
+  // Capture iframe ref from Sandpack's preview
+  useEffect(() => {
+    // Sandpack preview creates an iframe — we find it in the DOM
+    const timer = setTimeout(() => {
+      const container = document.querySelector('.sp-preview-iframe');
+      if (container && iframeRef) {
+        iframeRef.current = container;
+      }
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [sandpack.status]);
+
+  return null;
 }
 
 // ============ SVG ICONS ============
@@ -338,11 +356,9 @@ function Factory() {
   const { user, logout } = useAuth();
   const { t } = useLang();
 
-  const [files, setFiles] = useState({});
-  const [previewUrl, setPreviewUrl] = useState(null);
+  const [sandpackFiles, setSandpackFiles] = useState(null);
+  const [previewReady, setPreviewReady] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [isReady, setIsReady] = useState(false);
-  const [bootError, setBootError] = useState(null);
   const [excelData, setExcelData] = useState(null);
   const [dbData, setDbData] = useState(null);
   const [prompt, setPrompt] = useState('');
@@ -355,12 +371,14 @@ function Factory() {
   const [showDataSource, setShowDataSource] = useState(false);
   const [selectedIndustry, setSelectedIndustry] = useState('');
   const [exportingFormat, setExportingFormat] = useState(null);
-  const webcontainerRef = useRef(null);
-  const bootedRef = useRef(false);
+
   const iframeRef = useRef(null);
-  const devProcessRef = useRef(null);
-  const serverReadyCleanupRef = useRef(null);
   const logsRef = useRef([]);
+  const compileResolverRef = useRef(null);
+  const sandpackStatusRef = useRef({ status: 'initial', error: null });
+
+  // Sandpack is always ready — no boot needed
+  const isReady = true;
 
   const generationSteps = [
     { label: t('stepGeneration'), done: generationStep > 0 },
@@ -373,41 +391,6 @@ function Factory() {
   const addLog = (message) => {
     logsRef.current = [...logsRef.current, message];
   };
-
-  useEffect(() => {
-    if (bootedRef.current) return;
-    bootedRef.current = true;
-
-    // Configure WebContainer API key for production (must be called before boot)
-    const clientId = import.meta.env.VITE_WEBCONTAINER_CLIENT_ID;
-    if (clientId) {
-      console.log('[Boot] Configuring WebContainer API key...');
-      configureAPIKey(clientId);
-    } else {
-      console.log('[Boot] No VITE_WEBCONTAINER_CLIENT_ID — running in localhost mode');
-    }
-
-    console.log('[Boot] crossOriginIsolated:', window.crossOriginIsolated);
-    console.log('[Boot] SharedArrayBuffer:', typeof SharedArrayBuffer !== 'undefined' ? 'available' : 'MISSING');
-
-    const bootTimeout = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('WebContainer boot timeout (30s)')), 30000)
-    );
-
-    Promise.race([
-      WebContainer.boot({ coep: 'credentialless' }),
-      bootTimeout,
-    ])
-      .then((wc) => {
-        webcontainerRef.current = wc;
-        setIsReady(true);
-      })
-      .catch((error) => {
-        console.error('WebContainer boot failed:', error);
-        addLog(`Error: ${error.message}`);
-        setBootError(error.message);
-      });
-  }, []);
 
   const handleDataLoaded = (data) => {
     setExcelData(data);
@@ -441,80 +424,69 @@ function Factory() {
     return injected;
   };
 
-  const injectCaptureScript = (appFiles) => {
-    if (appFiles['index.html'] && appFiles['index.html'].file) {
-      const html = appFiles['index.html'].file.contents;
-      appFiles['index.html'].file.contents = html.replace('</body>', CAPTURE_SCRIPT + '\n</body>');
+  const injectCaptureScript = (files) => {
+    // Inject html2canvas capture script into index.html
+    const htmlKey = '/index.html';
+    if (files[htmlKey]) {
+      const html = typeof files[htmlKey] === 'string' ? files[htmlKey] : files[htmlKey].code || '';
+      files[htmlKey] = html.replace('</body>', CAPTURE_SCRIPT + '\n</body>');
     }
-    return appFiles;
+    return files;
   };
 
+  // Handle Sandpack status changes — bridge reactive state to imperative promises
+  const handleSandpackStatus = useCallback(({ status, error }) => {
+    sandpackStatusRef.current = { status, error };
+
+    if (compileResolverRef.current) {
+      if (status === 'running' && !error) {
+        // Sandpack is running without errors — compilation succeeded
+        // Wait a moment for the preview to stabilize
+        setTimeout(() => {
+          if (compileResolverRef.current) {
+            compileResolverRef.current({ success: true });
+            compileResolverRef.current = null;
+          }
+        }, 2000);
+      }
+      if (error) {
+        compileResolverRef.current({ success: false, error: error.message || String(error) });
+        compileResolverRef.current = null;
+      }
+    }
+  }, []);
+
+  // tryCompile: set files in Sandpack and wait for compilation result
   const tryCompile = async (resultFiles) => {
     const injectedFiles = injectData(resultFiles);
-    let appFiles = JSON.parse(JSON.stringify(baseFiles));
+    let spFiles = toSandpackFiles(injectedFiles);
+    spFiles = injectCaptureScript(spFiles);
 
-    for (const [path, content] of Object.entries(injectedFiles)) {
-      const parts = path.split('/');
-      if (parts[0] === 'src' && parts.length === 2) {
-        appFiles.src.directory[parts[1]] = { file: { contents: content } };
-      }
-    }
-
-    appFiles = injectCaptureScript(appFiles);
-    setFiles(appFiles);
-    await webcontainerRef.current.mount(appFiles);
-
-    if (devProcessRef.current) {
-      try { devProcessRef.current.kill(); } catch (_) {}
-      devProcessRef.current = null;
-    }
-
-    const installProcess = await webcontainerRef.current.spawn('npm', ['install']);
-    let installOutput = '';
-    installProcess.output.pipeTo(new WritableStream({
-      write(data) { installOutput += data; addLog(data); }
-    }));
-    const installExit = await installProcess.exit;
-    if (installExit !== 0) {
-      return { success: false, error: `npm install failed:\n${installOutput.slice(-500)}` };
-    }
-
-    const devProcess = await webcontainerRef.current.spawn('npm', ['run', 'dev']);
-    devProcessRef.current = devProcess;
-    let devOutput = '';
-    devProcess.output.pipeTo(new WritableStream({
-      write(data) { devOutput += data; addLog(data); }
-    }));
+    // Reset state
+    compileResolverRef.current = null;
 
     return new Promise((resolve) => {
-      let resolved = false;
+      compileResolverRef.current = resolve;
 
-      if (serverReadyCleanupRef.current) {
-        serverReadyCleanupRef.current();
-        serverReadyCleanupRef.current = null;
-      }
+      // Update Sandpack files — triggers re-bundle
+      setSandpackFiles({ ...spFiles });
+      setPreviewReady(false);
 
-      const onServerReady = (port, url) => {
-        if (resolved) return;
-        resolved = true;
-        resolve({ success: true, url });
-      };
-
-      webcontainerRef.current.on('server-ready', onServerReady);
-      serverReadyCleanupRef.current = () => {
-        webcontainerRef.current.off('server-ready', onServerReady);
-      };
-
+      // Timeout fallback
       setTimeout(() => {
-        if (resolved) return;
-        resolved = true;
-        webcontainerRef.current.off('server-ready', onServerReady);
-        serverReadyCleanupRef.current = null;
-        const errorLines = devOutput.split('\n')
-          .filter(line => /error|failed|cannot|unexpected|not defined|not found/i.test(line))
-          .slice(-10)
-          .join('\n');
-        resolve({ success: false, error: errorLines || devOutput.slice(-500) || 'Timeout: server not started after 30s' });
+        if (compileResolverRef.current) {
+          // If Sandpack is running (no error), consider it success
+          const current = sandpackStatusRef.current;
+          if (current.status === 'running' && !current.error) {
+            compileResolverRef.current({ success: true });
+          } else {
+            compileResolverRef.current({
+              success: false,
+              error: current.error?.message || 'Compilation timeout (30s)',
+            });
+          }
+          compileResolverRef.current = null;
+        }
       }, 30000);
     });
   };
@@ -533,8 +505,10 @@ function Factory() {
       };
       window.addEventListener('message', handler);
       setTimeout(() => {
-        if (iframeRef.current && iframeRef.current.contentWindow) {
-          iframeRef.current.contentWindow.postMessage({ type: 'capture' }, '*');
+        // Try to find Sandpack's iframe and send capture message
+        const iframe = iframeRef.current || document.querySelector('.sp-preview-iframe');
+        if (iframe && iframe.contentWindow) {
+          iframe.contentWindow.postMessage({ type: 'capture' }, '*');
         }
       }, SCREENSHOT_DELAY);
       setTimeout(() => {
@@ -552,13 +526,12 @@ function Factory() {
     return stripped;
   };
 
-  // For review/vision: only send App.jsx (other files never change)
   const stripToAppOnly = (codeFiles) => {
     if (codeFiles['src/App.jsx']) return { 'src/App.jsx': codeFiles['src/App.jsx'] };
     return stripDataFiles(codeFiles);
   };
 
-  // Cache data analysis result to avoid re-analyzing same dataset
+  // Cache data analysis result
   const cachedAnalysisRef = useRef(null);
   const cachedDataHashRef = useRef(null);
 
@@ -567,9 +540,7 @@ function Factory() {
     const dbContext = dbData ? { type: dbData.type, schema: dbData.schema } : null;
     let currentCode = existingCode;
     let lastError = null;
-    let latestUrl = null;
 
-    // Compute a simple hash of current data to detect dataset changes
     const dataHash = excelData ? `${excelData.fileName}_${excelData.totalRows}` : dbContext ? JSON.stringify(dbContext.schema).slice(0, 100) : null;
     const hasCachedAnalysis = dataHash && dataHash === cachedDataHashRef.current && cachedAnalysisRef.current;
 
@@ -581,7 +552,6 @@ function Factory() {
           cachedAnalysis: hasCachedAnalysis ? cachedAnalysisRef.current : undefined,
         });
         currentCode = result.files;
-        // Cache analysis result for subsequent calls with same dataset
         if (result._analysisResult) {
           cachedAnalysisRef.current = result._analysisResult;
           cachedDataHashRef.current = dataHash;
@@ -599,10 +569,9 @@ function Factory() {
       const compileResult = await tryCompile(currentCode);
 
       if (compileResult.success) {
-        latestUrl = compileResult.url;
-        setPreviewUrl(compileResult.url);
+        setPreviewReady(true);
 
-        // Conditional review: NEVER skip when data is involved (anti-hallucination)
+        // Conditional review
         const hasData = !!(excelData || dbContext);
         const isSimple = !hasData && userPrompt.split(' ').length < 50;
         const shouldReview = !skipReview && !isSimple;
@@ -616,8 +585,6 @@ function Factory() {
             const reviewCompile = await tryCompile(reviewResult.files);
             if (reviewCompile.success) {
               currentCode = reviewResult.files;
-              latestUrl = reviewCompile.url;
-              setPreviewUrl(reviewCompile.url);
             }
           } catch (reviewError) {
             addLog(`Review failed: ${reviewError.message}`);
@@ -635,8 +602,6 @@ function Factory() {
               const visionCompile = await tryCompile(visionResult.files);
               if (visionCompile.success) {
                 currentCode = visionResult.files;
-                latestUrl = visionCompile.url;
-                setPreviewUrl(visionCompile.url);
               }
             } catch (visionError) {
               addLog(`Vision failed: ${visionError.message}`);
@@ -645,7 +610,7 @@ function Factory() {
         }
 
         setCurrentFiles(currentCode);
-        return { success: true, url: latestUrl };
+        return { success: true };
       }
 
       lastError = compileResult.error;
@@ -656,9 +621,10 @@ function Factory() {
   };
 
   const handleGenerate = async () => {
-    if (!prompt.trim() || !webcontainerRef.current) return;
+    if (!prompt.trim()) return;
     setIsLoading(true);
-    setPreviewUrl(null);
+    setSandpackFiles(null);
+    setPreviewReady(false);
     setGenerationStep(0);
     setAgentStatus(t('starting'));
     try {
@@ -666,7 +632,7 @@ function Factory() {
       if (result.success) {
         setGenerationStep(5);
         setAgentStatus('');
-        setGeneratedApp({ name: prompt.slice(0, 30), prompt, url: result.url });
+        setGeneratedApp({ name: prompt.slice(0, 30), prompt });
         setSavedApps(prev => [...prev, { id: Date.now(), name: prompt.slice(0, 30), prompt }]);
       } else {
         setAgentStatus(`${t('errorPrefix')}${result.error.slice(0, 200)}`);
@@ -681,7 +647,7 @@ function Factory() {
   };
 
   const handleRefine = async () => {
-    if (!feedback.trim() || !webcontainerRef.current) return;
+    if (!feedback.trim()) return;
     setIsLoading(true);
     setAgentStatus(t('modifying'));
     try {
@@ -692,7 +658,6 @@ function Factory() {
       const compileResult = await tryCompile(result.files);
       if (compileResult.success) {
         setCurrentFiles(result.files);
-        setPreviewUrl(compileResult.url);
       } else {
         const fixResult = await agentGenerate(feedback, result.files, true, true);
         if (!fixResult.success) addLog(`Fix failed: ${fixResult.error.slice(0, 100)}`);
@@ -708,8 +673,8 @@ function Factory() {
   };
 
   const handleExport = async () => {
-    if (Object.keys(files).length === 0) return;
-    await exportToZip(files);
+    if (!sandpackFiles) return;
+    await exportToZip(sandpackFiles);
   };
 
   const handleExportFormat = async (format) => {
@@ -738,87 +703,62 @@ function Factory() {
     setExportingFormat(null);
   };
 
-  // ============ PUBLISH (build first, then upload dist/) ============
+  // ============ PUBLISH (TODO: needs Lambda Docker build — for now, disabled) ============
   const handlePublish = async () => {
-    if (Object.keys(files).length === 0) return;
-    setIsLoading(true);
-    setAgentStatus('Build en cours...');
-    try {
-      const appName = window.prompt('Nom de l\'app:') || `app-${Date.now()}`;
-
-      // 1. Run build in WebContainer
-      addLog('Publish: build en cours...');
-      const buildProcess = await webcontainerRef.current.spawn('npm', ['run', 'build']);
-      let buildOutput = '';
-      await buildProcess.output.pipeTo(new WritableStream({
-        write(data) { buildOutput += data; }
-      }));
-      const buildExit = await buildProcess.exit;
-      if (buildExit !== 0) {
-        throw new Error(`Build failed:\n${buildOutput.slice(-500)}`);
-      }
-      addLog('Publish: build OK');
-
-      // 2. Read built files from dist/
-      setAgentStatus('Lecture des fichiers...');
-      const builtFiles = {};
-      
-      async function readDir(dirPath, prefix = '') {
-        const entries = await webcontainerRef.current.fs.readdir(dirPath, { withFileTypes: true });
-        for (const entry of entries) {
-          const fullPath = dirPath + '/' + entry.name;
-          const relativePath = prefix ? prefix + '/' + entry.name : entry.name;
-          if (entry.isDirectory()) {
-            await readDir(fullPath, relativePath);
-          } else {
-            const content = await webcontainerRef.current.fs.readFile(fullPath, 'utf-8');
-            builtFiles[relativePath] = content;
-          }
-        }
-      }
-
-      await readDir('dist');
-      addLog(`Publish: ${Object.keys(builtFiles).length} fichiers à publier`);
-
-      // 3. Upload to S3
-      setAgentStatus('Publication...');
-      const result = await publishApp(builtFiles, appName);
-      addLog(`Publié : ${result.url}`);
-      setAgentStatus('');
-      window.open(result.url, '_blank');
-    } catch (error) {
-      addLog(`Erreur publish: ${error.message}`);
-      setAgentStatus('');
-    }
-    setIsLoading(false);
+    if (!sandpackFiles) return;
+    alert('Publish requires server-side build (Lambda Docker). Coming soon.\n\nUse "Export" to download the source code.');
   };
 
   const handleBackToFactory = () => {
     setGeneratedApp(null);
-    setPreviewUrl(null);
+    setSandpackFiles(null);
+    setPreviewReady(false);
     setPrompt('');
     setFeedback('');
     setCurrentFiles({});
-    setFiles({});
     logsRef.current = [];
     setGenerationStep(0);
     setAgentStatus('');
-    if (devProcessRef.current) {
-      try { devProcessRef.current.kill(); } catch (_) {}
-      devProcessRef.current = null;
-    }
+  };
+
+  // ============ SANDPACK PREVIEW WRAPPER ============
+  const SandpackPreviewWrapper = ({ fullScreen = false }) => {
+    if (!sandpackFiles) return null;
+
+    return (
+      <SandpackProvider
+        template="vite-react"
+        files={sandpackFiles}
+        customSetup={{
+          dependencies: sandpackDependencies,
+        }}
+        options={{
+          externalResources: [
+            'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap',
+          ],
+        }}
+        theme="dark"
+      >
+        <SandpackStatusBridge
+          onStatusChange={handleSandpackStatus}
+          iframeRef={iframeRef}
+        />
+        <div style={fullScreen ? styles.sandpackFullScreen : styles.sandpackHidden}>
+          <SandpackPreview
+            style={{ height: '100%', width: '100%' }}
+            showNavigator={false}
+            showRefreshButton={false}
+          />
+        </div>
+      </SandpackProvider>
+    );
   };
 
   // ============ GENERATED APP VIEW (fullscreen) ============
-  if (generatedApp && previewUrl) {
+  if (generatedApp && previewReady) {
     return (
       <div style={styles.appFullScreen}>
-        <iframe
-          ref={iframeRef}
-          src={previewUrl}
-          style={styles.fullScreenPreview}
-          title="Generated App"
-        />
+        <SandpackPreviewWrapper fullScreen={true} />
         <motion.div
           style={styles.bottomBar}
           initial={{ y: 60 }}
@@ -888,8 +828,11 @@ function Factory() {
     >
       <div style={styles.gridPattern} />
 
-      {previewUrl && isLoading && (
-        <iframe ref={iframeRef} src={previewUrl} style={styles.hiddenIframe} title="Capture" />
+      {/* Hidden Sandpack for screenshots during generation */}
+      {sandpackFiles && isLoading && (
+        <div style={styles.hiddenIframe}>
+          <SandpackPreviewWrapper />
+        </div>
       )}
 
       {/* ---- SIDEBAR ---- */}
@@ -940,14 +883,8 @@ function Factory() {
           </div>
           <div style={styles.footerMeta}>
             <div style={styles.statusRow}>
-              <motion.span
-                style={{ ...styles.dot, background: isReady ? '#34D399' : bootError ? '#EF4444' : '#F59E0B' }}
-                animate={isReady || bootError ? {} : { opacity: [1, 0.3, 1] }}
-                transition={{ duration: 1.2, repeat: Infinity }}
-              />
-              <span style={styles.statusText}>
-                {isReady ? t('engineReady') : bootError ? 'Boot failed' : t('booting')}
-              </span>
+              <span style={{ ...styles.dot, background: '#34D399' }} />
+              <span style={styles.statusText}>{t('engineReady')}</span>
             </div>
             <LangToggle />
           </div>
@@ -1623,10 +1560,13 @@ const styles = {
     height: '100vh',
     background: '#09090B',
   },
-  fullScreenPreview: {
+  sandpackFullScreen: {
     width: '100%',
-    height: 'calc(100% - 56px)',
-    border: 'none',
+    height: 'calc(100vh - 56px)',
+  },
+  sandpackHidden: {
+    width: '100%',
+    height: '100%',
   },
   hiddenIframe: {
     position: 'fixed',

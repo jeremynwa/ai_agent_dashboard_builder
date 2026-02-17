@@ -1,65 +1,7 @@
-export const baseFiles = {
-  'package.json': {
-    file: {
-      contents: JSON.stringify({
-        name: "generated-app",
-        private: true,
-        version: "0.0.0",
-        type: "module",
-        scripts: {
-          dev: "vite",
-          build: "vite build",
-          preview: "vite preview"
-        },
-        dependencies: {
-          react: "^18.2.0",
-          "react-dom": "^18.2.0",
-          recharts: "^2.12.0"
-        },
-        devDependencies: {
-          "@vitejs/plugin-react": "^4.0.0",
-          vite: "^5.0.0"
-        }
-      }, null, 2)
-    }
-  },
-  'vite.config.js': {
-    file: {
-      contents: `import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+// files-template.js — Sandpack flat format
+// Keys are absolute paths (starting with /), values are code strings
 
-export default defineConfig({
-  plugins: [react()],
-  base: './',
-})
-`
-    }
-  },
-  'index.html': {
-    file: {
-      contents: `<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Generated App</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
-</html>
-`
-    }
-  },
-  'src': {
-    directory: {
-      'ds.css': {
-        file: {
-          contents: `/* ================================================
+const DS_CSS = `/* ================================================
    DESIGN SYSTEM — App Factory
    Utility-class CSS — no build step required
    ================================================ */
@@ -293,12 +235,9 @@ table { border-collapse: collapse; }
 /* Hover helpers (for table rows etc) */
 .hover-card { transition: border-color 0.2s; } .hover-card:hover { border-color: var(--border-active); }
 .hover-bg { transition: background 0.2s; } .hover-bg:hover { background: var(--card-hover); }
-`
-        }
-      },
-      'main.jsx': {
-        file: {
-          contents: `import React from 'react'
+`;
+
+const MAIN_JSX = `import React from 'react'
 import ReactDOM from 'react-dom/client'
 import './ds.css'
 import App from './App'
@@ -308,12 +247,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <App />
   </React.StrictMode>,
 )
-`
-        }
-      },
-      'App.jsx': {
-        file: {
-          contents: `function App() {
+`;
+
+const DEFAULT_APP_JSX = `function App() {
   return (
     <div className="min-h-screen bg-base p-6">
       <h1 className="text-2xl font-bold text-primary">Hello from Generated App!</h1>
@@ -322,9 +258,55 @@ ReactDOM.createRoot(document.getElementById('root')).render(
 }
 
 export default App
-`
-        }
-      }
-    }
-  }
+`;
+
+const INDEX_HTML = `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Generated App</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
+`;
+
+// Sandpack flat format: { '/path': code }
+export const baseFiles = {
+  '/index.html': INDEX_HTML,
+  '/src/ds.css': DS_CSS,
+  '/src/main.jsx': MAIN_JSX,
+  '/src/App.jsx': DEFAULT_APP_JSX,
 };
+
+// Sandpack custom setup — dependencies not included in the template
+export const sandpackDependencies = {
+  recharts: '^2.12.0',
+};
+
+// Convert generated files (path → code) to Sandpack format
+// Generated files use paths like 'src/App.jsx' — we prefix with '/'
+export function toSandpackFiles(generatedFiles) {
+  const files = { ...baseFiles };
+  for (const [path, code] of Object.entries(generatedFiles)) {
+    const key = path.startsWith('/') ? path : `/${path}`;
+    files[key] = code;
+  }
+  return files;
+}
+
+// Convert Sandpack files back to flat format for export/publish (strip leading /)
+export function fromSandpackFiles(sandpackFiles) {
+  const flat = {};
+  for (const [path, code] of Object.entries(sandpackFiles)) {
+    const key = path.startsWith('/') ? path.slice(1) : path;
+    flat[key] = typeof code === 'string' ? code : code.code || '';
+  }
+  return flat;
+}

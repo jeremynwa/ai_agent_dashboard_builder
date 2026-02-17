@@ -6,11 +6,5 @@ export default defineConfig({
   define: {
     global: 'globalThis',   // ← AJOUTER
   },
-  server: {
-    headers: {
-      'Cross-Origin-Opener-Policy': 'same-origin',
-      'Cross-Origin-Embedder-Policy': 'credentialless',
-    }
-  },
   base: './',
 })
