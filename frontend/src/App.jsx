@@ -688,9 +688,8 @@ function Factory() {
       setIsLoading(false);
     } catch (error) {
       addLog(`Error: ${error.message}`);
-      setAgentStatus('');
+      setAgentStatus(`Error: ${error.message}`);
       setIsLoading(false);
-      setGenerationStep(0);
     }
   };
 
