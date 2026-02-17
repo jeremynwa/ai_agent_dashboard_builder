@@ -97,6 +97,7 @@ $outputs = aws cloudformation describe-stacks `
 $API_URL = ($outputs | Where-Object { $_.OutputKey -eq "ApiUrl" }).OutputValue
 $GENERATE_URL = ($outputs | Where-Object { $_.OutputKey -eq "GenerateUrl" }).OutputValue
 $DB_PROXY_URL = ($outputs | Where-Object { $_.OutputKey -eq "DbProxyUrl" }).OutputValue
+$EXPORT_URL = ($outputs | Where-Object { $_.OutputKey -eq "ExportUrl" }).OutputValue
 $COGNITO_POOL_ID = ($outputs | Where-Object { $_.OutputKey -eq "CognitoUserPoolId" }).OutputValue
 $COGNITO_CLIENT_ID = ($outputs | Where-Object { $_.OutputKey -eq "CognitoClientId" }).OutputValue
 
@@ -106,6 +107,7 @@ $envContent = @"
 VITE_API_URL=$API_URL
 VITE_GENERATE_URL=$GENERATE_URL
 VITE_DB_PROXY_URL=$DB_PROXY_URL
+VITE_EXPORT_URL=$EXPORT_URL
 VITE_COGNITO_USER_POOL_ID=$COGNITO_POOL_ID
 VITE_COGNITO_CLIENT_ID=$COGNITO_CLIENT_ID
 "@

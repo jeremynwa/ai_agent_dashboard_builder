@@ -4,6 +4,7 @@ import { getIdToken } from './auth';
 export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 const GENERATE_URL = import.meta.env.VITE_GENERATE_URL || `${API_BASE}/generate`;
 export const DB_PROXY_URL = import.meta.env.VITE_DB_PROXY_URL || `${API_BASE}/db`;
+const EXPORT_URL = import.meta.env.VITE_EXPORT_URL || `${API_BASE}/export`;
 
 // ============ AUTH HEADERS ============
 async function authHeaders() {
@@ -140,7 +141,7 @@ export async function getDbSchema(credentials) {
 // ============ EXPORT (PPTX/XLSX/PDF) ============
 export async function exportApp(format, data, title, kpis = [], chartDescriptions = []) {
   const headers = await authHeaders();
-  const res = await fetch(`${API_BASE}/export`, {
+  const res = await fetch(EXPORT_URL, {
     method: 'POST',
     headers,
     body: JSON.stringify({ format, data, title, kpis, chartDescriptions }),
