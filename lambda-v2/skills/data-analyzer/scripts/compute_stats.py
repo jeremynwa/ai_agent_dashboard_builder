@@ -23,7 +23,15 @@ def clean_numeric(series):
     """Try to convert a series to numeric, stripping currency/percentage symbols."""
     if pd.api.types.is_numeric_dtype(series):
         return series.astype(float)
-    cleaned = series.astype(str).str.replace(r'[€$£%\s]', '', regex=True).str.replace(',', '.')
+    # Remove currency/percentage symbols and spaces
+    cleaned = series.astype(str).str.replace(r'[€$£%\s]', '', regex=True)
+    # Detect European format: 1.234,56 (dots as thousands, comma as decimal)
+    sample = cleaned.head(10)
+    has_european = sample.str.contains(r'\d\.\d{3},\d', regex=True).any()
+    if has_european:
+        cleaned = cleaned.str.replace('.', '', regex=False).str.replace(',', '.', regex=False)
+    else:
+        cleaned = cleaned.str.replace(',', '', regex=False)
     return pd.to_numeric(cleaned, errors='coerce')
 
 
@@ -32,6 +40,13 @@ def compute_numeric_stats(series, col_info, df, periods_info):
     numeric = clean_numeric(series).dropna()
     if len(numeric) == 0:
         return {"error": "no numeric values"}
+
+    q1 = float(numeric.quantile(0.25))
+    q3 = float(numeric.quantile(0.75))
+    iqr = q3 - q1
+    lower_bound = q1 - 1.5 * iqr
+    upper_bound = q3 + 1.5 * iqr
+    outlier_count = int(((numeric < lower_bound) | (numeric > upper_bound)).sum())
 
     stats = {
         "min": round(float(numeric.min()), 2),
@@ -42,9 +57,14 @@ def compute_numeric_stats(series, col_info, df, periods_info):
         "stddev": round(float(numeric.std()), 2) if len(numeric) > 1 else 0,
         "count": int(len(numeric)),
         "quartiles": {
-            "Q1": round(float(numeric.quantile(0.25)), 2),
+            "Q1": round(q1, 2),
             "Q2": round(float(numeric.quantile(0.50)), 2),
-            "Q3": round(float(numeric.quantile(0.75)), 2),
+            "Q3": round(q3, 2),
+        },
+        "outliers": {
+            "count": outlier_count,
+            "lowerBound": round(lower_bound, 2),
+            "upperBound": round(upper_bound, 2),
         }
     }
 
@@ -61,19 +81,31 @@ def compute_numeric_stats(series, col_info, df, periods_info):
 
             stats["periodValues"] = period_values
 
-            # Compute variation (last vs first period)
+            # Compute variation (last vs previous period) and trend direction
             if len(period_values) >= 2 and periods_info.get("canCompare"):
-                first_val = period_values[0]["value"]
+                prev_val = period_values[-2]["value"]
                 last_val = period_values[-1]["value"]
-                if first_val != 0:
-                    variation = round(((last_val - first_val) / abs(first_val)) * 100, 1)
+                if prev_val != 0:
+                    variation = round(((last_val - prev_val) / abs(prev_val)) * 100, 1)
                     stats["variation"] = {
-                        "firstPeriod": period_values[0]["period"],
+                        "firstPeriod": period_values[-2]["period"],
                         "lastPeriod": period_values[-1]["period"],
-                        "firstValue": first_val,
+                        "firstValue": prev_val,
                         "lastValue": last_val,
                         "changePercent": variation
                     }
+
+                # Trend direction over all periods
+                vals = [pv["value"] for pv in period_values if pv["value"] != 0]
+                if len(vals) >= 3:
+                    increases = sum(1 for i in range(1, len(vals)) if vals[i] > vals[i-1])
+                    decreases = sum(1 for i in range(1, len(vals)) if vals[i] < vals[i-1])
+                    if increases > decreases:
+                        stats["trend"] = "up"
+                    elif decreases > increases:
+                        stats["trend"] = "down"
+                    else:
+                        stats["trend"] = "stable"
 
     return stats
 

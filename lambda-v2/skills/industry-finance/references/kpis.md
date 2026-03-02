@@ -17,7 +17,7 @@
 
 ### EBITDA
 - **Definition** : Resultat avant interets, impots, depreciation et amortissement
-- **Formule** : Resultat d'exploitation + Dotations aux amortissements
+- **Formule** : Resultat d'exploitation + Dotations aux amortissements + Dotations aux provisions
 - **Format** : `fmtCur()`
 - **Badge** : up=vert, down=rouge
 
@@ -30,6 +30,7 @@
 - **Definition** : Entrees - Sorties de tresorerie
 - **Format** : `fmtCur()`
 - **Badge** : positif=vert, negatif=rouge
+- **Seuils** : negatif 3 mois consecutifs = alerte critique
 
 ### BFR (Besoin en Fonds de Roulement)
 - **Definition** : Stocks + Creances clients - Dettes fournisseurs
@@ -41,6 +42,7 @@
 ### ROE (Return on Equity)
 - **Formule** : Resultat net / Capitaux propres * 100
 - **Format** : `fmtPct()`
+- **Seuils** : < 5% = faible, 5-15% = moyen, > 15% = bon, > 25% = excellent
 
 ### ROA (Return on Assets)
 - **Formule** : Resultat net / Total actif * 100
@@ -50,11 +52,13 @@
 - **Formule** : Dettes totales / Capitaux propres
 - **Format** : nombre a 2 decimales (ex: 0,85)
 - **Badge** : hausse=rouge, baisse=vert
+- **Seuils** : > 2,0 = alerte (surendettement), 1,0-2,0 = attention, < 1,0 = sain, < 0,5 = tres sain
 
 ### Delai moyen de paiement clients (DSO)
 - **Formule** : (Creances clients / CA) * 365
 - **Format** : nombre + "jours" — ex: 45 jours
 - **Badge** : hausse=rouge, baisse=vert
+- **Seuils** : > 60 jours = alerte, 30-60 jours = attention, < 30 jours = bon
 
 ### Delai moyen de paiement fournisseurs (DPO)
 - **Formule** : (Dettes fournisseurs / Achats) * 365

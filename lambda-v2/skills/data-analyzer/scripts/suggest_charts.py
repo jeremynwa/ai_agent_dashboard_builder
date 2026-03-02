@@ -100,6 +100,11 @@ def suggest(columns_info, periods_info, stats_info):
             if unique_count <= 6:
                 main_numeric = max(numeric_cols,
                     key=lambda c: stats_info.get(c["name"], {}).get("sum", 0))
+                # Guard: PieChart requires non-negative values
+                main_stats = stats_info.get(main_numeric["name"], {})
+                min_val = main_stats.get("min", 0)
+                if min_val < 0:
+                    continue  # Negative values — skip PieChart
                 recommendations.append({
                     "chartType": "PieChart",
                     "xKey": cat_col["name"],
@@ -129,15 +134,18 @@ def suggest(columns_info, periods_info, stats_info):
                 "title": f"{main_numeric['name']} par {cat_col['name']} ({period_type})"
             })
 
-    # 5. No periods, multiple numerics — grouped bar
+    # 5. No periods, multiple numerics — grouped bar (cap at 20 rows)
     if not has_periods and len(numeric_cols) >= 2 and not categorical_cols:
-        recommendations.append({
-            "chartType": "BarChart",
-            "xKey": numeric_cols[0]["name"],
-            "yKeys": [c["name"] for c in numeric_cols[1:4]],
-            "reason": "Comparaison directe entre metriques numeriques",
-            "title": "Comparaison des indicateurs"
-        })
+        main_stats = stats_info.get(numeric_cols[0]["name"], {})
+        row_count = main_stats.get("count", 0)
+        if row_count <= 20:
+            recommendations.append({
+                "chartType": "BarChart",
+                "xKey": numeric_cols[0]["name"],
+                "yKeys": [c["name"] for c in numeric_cols[1:4]],
+                "reason": "Comparaison directe entre metriques numeriques",
+                "title": "Comparaison des indicateurs"
+            })
 
     # 6. Table recommendation — always suggest if there are enough columns
     if len(columns_info) >= 3:
@@ -157,7 +165,8 @@ def suggest(columns_info, periods_info, stats_info):
             seen.add(key)
             unique_recs.append(rec)
 
-    return unique_recs
+    # Cap total recommendations at 6 (too many charts = cluttered dashboard)
+    return unique_recs[:6]
 
 
 if __name__ == "__main__":

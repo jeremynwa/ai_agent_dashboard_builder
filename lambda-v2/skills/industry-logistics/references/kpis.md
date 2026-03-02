@@ -40,6 +40,7 @@
 - **Definition** : Stock actuel / Consommation moyenne quotidienne
 - **Format** : nombre + "jours" — ex: 15 jours
 - **Badge** : contextuel (trop bas = rouge, trop haut = orange, optimal = vert)
+- **Seuils** : < 7 jours = alerte (rouge), 7-14 jours = attention (orange), 15-30 jours = optimal (vert), > 45 jours = surstock (orange)
 
 ### Cout logistique / CA
 - **Formule** : Total couts logistiques / CA * 100
@@ -51,9 +52,10 @@
 - **Badge** : up=**rouge**, down=**vert**
 
 ### Precision des previsions
-- **Definition** : 1 - |Prevu - Reel| / Prevu * 100
+- **Definition** : (1 - (|Prevu - Reel| / Prevu)) * 100
 - **Format** : `fmtPct()`
 - **Badge** : up=vert
+- **Seuils** : < 70% = alerte, > 85% = bon, > 95% = excellent
 
 ### Taux de retour logistique
 - **Definition** : Retours / Expeditions * 100

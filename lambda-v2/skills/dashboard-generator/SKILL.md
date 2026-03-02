@@ -37,6 +37,8 @@ Tu es un expert React senior specialise en data analytics dashboards premium. Tu
 
 9. **Insights dynamiques obligatoires**: Les Points Cles (takeaways) DOIVENT utiliser `useMemo` + template literals avec des valeurs calculees depuis DATA. INTERDIT d'ecrire des nombres en dur dans les strings d'insights. Voir `references/insights.md` pour le pattern correct vs interdit.
 
+10. **Garde DATA vide**: Si `DATA.length === 0`, afficher un message "Aucune donnee disponible" au lieu de rendre des graphiques/KPIs vides. Pattern: `if (DATA.length === 0) return <div className="card" style={{padding:'2rem',textAlign:'center'}}><p className="text-secondary">Aucune donnee disponible</p></div>;`
+
 ## Design System CSS
 
 Un fichier `ds.css` est pre-charge avec des classes utilitaires. Utilise `className=""` avec ces classes.
@@ -65,7 +67,7 @@ Pour l'implementation des filtres (useState, useMemo, select), voir `references/
 
 ## KPIs
 
-3-5 KPIs avec sparklines, regles strictes de calcul.
+4 KPIs avec sparklines, regles strictes de calcul.
 
 Pour les regles KPI et la regle ZERO FABRICATION, voir `references/kpis.md`.
 

@@ -201,6 +201,65 @@ def check_code(code):
         f"Hardcoded numbers in KPI values: {len(kpi_hardcoded)} instances — KPI values must be computed expressions (e.g., {{fmtCur(total)}})",
     )
 
+    # 20. BarChart/AreaChart/LineChart without child data elements
+    for chart_type, child_tag in [("BarChart", "<Bar "), ("AreaChart", "<Area "), ("LineChart", "<Line ")]:
+        if f"<{chart_type}" in code and f"</{chart_type}>" in code:
+            check(
+                child_tag in code,
+                f"{chart_type} without {child_tag.strip()} child — chart will render empty!",
+            )
+
+    # 21. YAxis without tickFormatter
+    if "<YAxis" in code:
+        yaxis_count = code.count("<YAxis")
+        yaxis_with_formatter = len(re.findall(r"<YAxis[^>]*tickFormatter", code))
+        check(
+            yaxis_with_formatter >= yaxis_count,
+            f"{yaxis_count - yaxis_with_formatter} YAxis element(s) missing tickFormatter — numbers won't be formatted",
+            is_error=False,
+        )
+
+    # 22. Missing fmt/fmtCur/fmtPct function definitions when used
+    uses_fmt = re.search(r"\bfmt\(|\bfmtCur\(|\bfmtPct\(", code)
+    defines_fmt = re.search(r"(?:const|function|let)\s+fmt\b", code)
+    if uses_fmt:
+        check(
+            defines_fmt is not None,
+            "Code calls fmt/fmtCur/fmtPct but no formatting function is defined — will crash at runtime",
+        )
+
+    # 23. Raw ID columns in table headers
+    table_id_headers = re.findall(
+        r"""(?:th[^>]*>|table-header[^>]*>)\s*["']?(\w*(?:_id|_ID|Id)\w*)["']?""", code
+    )
+    if table_id_headers:
+        check(
+            False,
+            f"Raw ID columns in table headers: {table_id_headers[:3]} — use descriptive names instead",
+            is_error=False,
+        )
+    else:
+        checks_passed += 1
+
+    # 24. Recharts components used but not imported
+    recharts_used = set(re.findall(
+        r"<(BarChart|PieChart|AreaChart|LineChart|ResponsiveContainer|Tooltip|XAxis|YAxis|CartesianGrid|Bar|Pie|Area|Line|Cell|Legend)\b",
+        code,
+    ))
+    if recharts_used:
+        import_match = re.search(r"import\s*\{([^}]+)\}\s*from\s*['\"]recharts['\"]", code)
+        if import_match:
+            imported = {s.strip() for s in import_match.group(1).split(",")}
+            missing = recharts_used - imported
+            if missing:
+                check(
+                    False,
+                    f"Recharts components used but not imported: {', '.join(sorted(missing))}",
+                )
+            else:
+                checks_passed += 1
+        # else: already caught by check #2
+
     return {
         "errors": errors,
         "warnings": warnings,

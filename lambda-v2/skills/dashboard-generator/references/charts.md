@@ -115,6 +115,49 @@ Props style inline (Recharts n'accepte pas className):
 - **Ideal pour**: composition par categorie au fil du temps
 - **Max segments**: 8
 
+**Exemple complet OBLIGATOIRE**:
+```jsx
+<BarChart data={stackedData}>
+  <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" />
+  <XAxis dataKey="period" tick={{ fill:'#64748B', fontSize:11 }} axisLine={{ stroke:'#1E293B' }} />
+  <YAxis tick={{ fill:'#64748B', fontSize:11 }} axisLine={{ stroke:'#1E293B' }} tickFormatter={v => fmt(v)} />
+  <Tooltip contentStyle={{ background:'#1A2332', border:'1px solid #2A3A50', borderRadius:'8px', color:'#F1F5F9' }} />
+  <Legend wrapperStyle={{color:'#94A3B8', fontSize:'12px'}} />
+  {categories.map((cat, i) => (
+    <Bar key={cat} dataKey={cat} stackId="a" fill={COLORS[i % COLORS.length]} />
+  ))}
+</BarChart>
+```
+
+## Agregation des Donnees — OBLIGATOIRE
+
+Les graphiques n'affichent JAMAIS des lignes brutes. Toujours agreger les donnees avant de les passer au graphique.
+
+**Pattern d'agregation standard** (reduce → Object.entries → sort → slice):
+```jsx
+const barData = useMemo(() => {
+  const grouped = DATA.reduce((acc, r) => {
+    const key = r.category || 'Inconnu';
+    acc[key] = (acc[key] || 0) + (Number(r.amount) || 0);
+    return acc;
+  }, {});
+  return Object.entries(grouped)
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 10); // Top 10
+}, []);
+```
+
+## Tooltip Formatter
+
+Pour les valeurs monetaires ou pourcentages dans les tooltips, utiliser `formatter`:
+```jsx
+<Tooltip
+  contentStyle={{ background:'#1A2332', border:'1px solid #2A3A50', borderRadius:'8px', color:'#F1F5F9' }}
+  formatter={(value) => [fmtCur(value), 'Montant']}
+/>
+```
+
 ## Regles des Axes — OBLIGATOIRE
 
 - **INTERDIT** de mettre des IDs (order_id, product_id, transaction_id, customer_id, etc.) sur les axes X ou Y

@@ -25,7 +25,9 @@ MONTH_NAMES_FR = {
 
 MONTH_NAMES_EN = {
     'january': 1, 'february': 2, 'march': 3, 'april': 4, 'may': 5, 'june': 6,
-    'july': 7, 'august': 8, 'september': 9, 'october': 10, 'november': 11, 'december': 12
+    'july': 7, 'august': 8, 'september': 9, 'october': 10, 'november': 11, 'december': 12,
+    'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'jun': 6, 'jul': 7,
+    'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12
 }
 
 ALL_MONTHS = {**MONTH_NAMES_FR, **MONTH_NAMES_EN}
@@ -66,7 +68,7 @@ def detect_quarters(values):
 def detect_datetime_period(series):
     """Detect period type from a datetime series."""
     try:
-        dates = pd.to_datetime(series.dropna(), infer_datetime_format=True, dayfirst=True)
+        dates = pd.to_datetime(series.dropna(), dayfirst=True)
         if len(dates) < 2:
             return None
 

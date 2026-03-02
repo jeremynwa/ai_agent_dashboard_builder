@@ -120,3 +120,45 @@ style={{
 ```jsx
 <Tooltip contentStyle={{ background: '#1E293B', border: 'none', borderRadius: '8px' }} />
 ```
+
+## 13. Truncated/Overlapping Axis Labels
+
+**Symptom**: X-axis labels overlap each other or are cut off, especially with long category names or many data points.
+
+**Fix**:
+- Rotate labels: `<XAxis angle={-45} textAnchor="end" height={80} />`
+- Or truncate long names: `tickFormatter={(v) => v.length > 12 ? v.slice(0, 12) + '...' : v}`
+- Increase bottom margin: `margin={{ bottom: 40 }}`
+- For many data points (>15), use `interval={Math.ceil(data.length / 10)}` to skip labels
+
+## 14. Legend Overflow/Clipping
+
+**Symptom**: Chart legend extends beyond card boundaries, overlaps other content, or items are cut off.
+
+**Fix**:
+- Use vertical legend for many items: `<Legend layout="vertical" align="right" verticalAlign="middle" />`
+- Limit PieChart data to 6-8 slices max — group remaining into "Autres"
+- Add `wrapperStyle={{ paddingTop: '10px' }}` to prevent overlap with chart area
+- Ensure parent card has enough height to accommodate legend
+
+## 15. Badge Color Logic Error
+
+**Symptom**: Positive variations shown in red (badge-down) and negative variations in green (badge-up), or all badges same color regardless of value.
+
+**Fix**:
+- Standard metrics (CA, commandes): positive=green (`badge-up`), negative=red (`badge-down`)
+- Inverse metrics (churn, couts, retours): positive=red (`badge-up`), negative=green (`badge-down`)
+- Use conditional class: `className={variation >= 0 ? 'badge-up' : 'badge-down'}`
+- For inverse metrics: `className={variation >= 0 ? 'badge-down' : 'badge-up'}`
+- Always prefix with sign: `{variation >= 0 ? '+' : ''}{fmtPct(variation)}`
+
+## 16. Empty Chart State
+
+**Symptom**: Chart renders as blank rectangle — no bars, lines, or slices visible, even though the chart component is present.
+
+**Fix**:
+- Check if filtered data is empty — add guard: `if (filteredData.length === 0) return <p className="text-secondary">Aucune donnee pour ces filtres</p>`
+- Verify `dataKey` matches actual object keys (case-sensitive)
+- BarChart needs `<Bar dataKey="value" />` child, AreaChart needs `<Area>`, LineChart needs `<Line>`
+- PieChart: ensure `<Pie data={data}>` receives non-empty array with positive numeric values
+- Check that data values are numbers, not strings: `Number(r.amount) || 0`

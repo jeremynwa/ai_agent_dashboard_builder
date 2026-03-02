@@ -40,7 +40,7 @@
 - **Format** : `fmtPct()`
 - **Badge** : up=**rouge**, down=**vert**
 
-### Repeat purchase rate
+### Taux de reachat (Repeat Purchase Rate)
 - **Definition** : Clients avec 2+ achats / Total clients * 100
 - **Format** : `fmtPct()`
 - **Badge** : up=vert

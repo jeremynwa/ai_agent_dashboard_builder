@@ -25,9 +25,10 @@
 - **Badge** : up=vert, down=rouge
 
 ### LTV (Lifetime Value)
-- **Definition** : ARPU / Churn rate mensuel
+- **Definition** : (ARPU * Marge brute) / Churn rate mensuel
 - **Format** : `fmtCur()` — ex: 4 500 EUR
 - **Badge** : up=vert
+- **Note** : Si marge brute inconnue, utiliser ARPU / Churn rate comme approximation
 
 ### CAC (Customer Acquisition Cost)
 - **Definition** : Total depenses acquisition / Nouveaux clients
@@ -61,6 +62,12 @@
 - **Definition** : Utilisateurs actifs quotidiens / mensuels
 - **Format** : `fmtPct()` — ex: 32%
 - **Badge** : up=vert
+
+### NRR (Net Revenue Retention)
+- **Definition** : (MRR debut + Expansion - Contraction - Churn) / MRR debut * 100
+- **Format** : `fmtPct()` — ex: 112%
+- **Badge** : up=vert, down=rouge
+- **Seuils** : < 100% = alerte (perte nette de revenu), > 100% = croissance organique, > 120% = excellent
 
 ### Expansion MRR
 - **Definition** : Revenue supplementaire des clients existants (upsell, add-ons)

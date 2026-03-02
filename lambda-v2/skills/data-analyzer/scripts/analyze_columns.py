@@ -37,7 +37,18 @@ def detect_column_type(series, col_name):
 
     # Try to convert to numeric
     str_values = non_null.astype(str)
-    cleaned = str_values.str.replace(r'[€$£%\s,]', '', regex=True).str.replace(',', '.')
+    # Handle European format: 1.234,56 → 1234.56 (dots as thousands, comma as decimal)
+    # Step 1: Remove currency/percentage symbols and spaces
+    cleaned = str_values.str.replace(r'[€$£%\s]', '', regex=True)
+    # Step 2: Detect European format (contains both . and , where , is after .)
+    sample = cleaned.head(10)
+    has_european = sample.str.contains(r'\d\.\d{3},\d', regex=True).any()
+    if has_european:
+        # European: remove thousands dots, then convert decimal comma to dot
+        cleaned = cleaned.str.replace('.', '', regex=False).str.replace(',', '.', regex=False)
+    else:
+        # Standard: just remove commas (thousands separators) and keep dots
+        cleaned = cleaned.str.replace(',', '', regex=False)
     try:
         pd.to_numeric(cleaned, errors='raise')
         # Check for % or currency symbols in original values
@@ -51,7 +62,7 @@ def detect_column_type(series, col_name):
 
     # Try to parse as dates
     try:
-        pd.to_datetime(non_null, infer_datetime_format=True, dayfirst=True)
+        pd.to_datetime(non_null, dayfirst=True)
         return "date"
     except (ValueError, TypeError, pd.errors.ParserError):
         pass
@@ -61,7 +72,8 @@ def detect_column_type(series, col_name):
                       'juillet', 'aout', 'août', 'septembre', 'octobre', 'novembre', 'decembre', 'décembre',
                       'jan', 'fev', 'fév', 'mar', 'avr', 'mai', 'jun', 'jul', 'aou', 'sep', 'oct', 'nov', 'dec', 'déc'}
     month_names_en = {'january', 'february', 'march', 'april', 'may', 'june',
-                      'july', 'august', 'september', 'october', 'november', 'december'}
+                      'july', 'august', 'september', 'october', 'november', 'december',
+                      'jan', 'feb', 'mar', 'apr', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'}
     all_months = month_names_fr | month_names_en
 
     lower_values = set(str_values.str.lower().str.strip())

@@ -81,9 +81,42 @@ Chaque KPI utilise donnees et couleurs **DIFFERENTES**:
 
 Chaque gradient SVG = **ID UNIQUE**.
 
+### Derivation des donnees sparkline — OBLIGATOIRE
+
+Les sparklines doivent afficher des donnees REELLES, pas inventees. Deriver `sparklineData` a partir de DATA en groupant par periode:
+
+```jsx
+// Sparkline pour KPI 1 (revenue par periode)
+const sparkRevenue = useMemo(() => {
+  const grouped = DATA.reduce((acc, r) => {
+    const key = r.month || r.date || 'all';
+    acc[key] = (acc[key] || 0) + (Number(r.revenue) || 0);
+    return acc;
+  }, {});
+  return Object.entries(grouped).map(([name, value]) => ({ name, value }));
+}, []);
+
+// Sparkline pour KPI 2 (nombre de commandes par periode)
+const sparkOrders = useMemo(() => {
+  const grouped = DATA.reduce((acc, r) => {
+    const key = r.month || r.date || 'all';
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+  return Object.entries(grouped).map(([name, value]) => ({ name, value }));
+}, []);
+```
+
+Si aucune colonne temporelle n'existe, utiliser les 10-20 dernieres lignes de DATA comme sparkline simplifiee:
+```jsx
+const sparkFallback = useMemo(() => DATA.slice(-20).map((r, i) => ({ name: i, value: Number(r.revenue) || 0 })), []);
+```
+
+### Exemple JSX sparkline
+
 ```jsx
 <ResponsiveContainer width="100%" height={40}>
-  <AreaChart data={sparklineData}>
+  <AreaChart data={sparkRevenue}>
     <defs>
       <linearGradient id="sparkGrad1" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0%" stopColor="#06B6D4" stopOpacity={0.3} />
