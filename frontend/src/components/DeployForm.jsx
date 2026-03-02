@@ -12,7 +12,7 @@ const VM_SIZES = [
 
 const DURATIONS = ['1 month', '3 months', '6 months', '1 year', 'Indefinite'];
 
-export default function DeployForm({ files, appName, reviewScore = 0, stack = 'react', source = 'generated', onSuccess, onBack }) {
+export default function DeployForm({ files, appName, reviewScore = 0, stack = 'react', source = 'generated', skipVm = false, onSuccess, onBack }) {
   // GitLab fields
   const [projectName, setProjectName] = useState(appName || '');
   const [description, setDescription] = useState('');
@@ -40,19 +40,22 @@ export default function DeployForm({ files, appName, reviewScore = 0, stack = 'r
       setDeployStatus('Pushing to GitLab...');
       const gitResult = await pushToGitLab(files, projectName.trim(), description.trim(), generateCI);
 
-      // Step 2: Request VM
-      setDeployStatus('Submitting VM request...');
-      const vmResult = await requestVm({
-        appName: projectName.trim(),
-        repoUrl: gitResult.repoUrl,
-        stack,
-        estimatedUsers: parseInt(estimatedUsers) || 10,
-        justification: justification.trim(),
-        vmSize: vmSize || undefined,
-        duration,
-        reviewScore,
-        source,
-      });
+      let vmResult = { ticketId: null, vmSpec: null };
+      if (!skipVm) {
+        // Step 2: Request VM
+        setDeployStatus('Submitting VM request...');
+        vmResult = await requestVm({
+          appName: projectName.trim(),
+          repoUrl: gitResult.repoUrl,
+          stack,
+          estimatedUsers: parseInt(estimatedUsers) || 10,
+          justification: justification.trim(),
+          vmSize: vmSize || undefined,
+          duration,
+          reviewScore,
+          source,
+        });
+      }
 
       // Step 3: Save to My Apps
       setDeployStatus('Saving to your apps...');
@@ -106,7 +109,7 @@ export default function DeployForm({ files, appName, reviewScore = 0, stack = 'r
             <path d="M14 24l7 7 13-13" stroke="#10B981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </div>
-        <h3 style={styles.successTitle}>Deployed successfully</h3>
+        <h3 style={styles.successTitle}>{skipVm ? 'Pushed to GitLab' : 'Deployed successfully'}</h3>
 
         <div style={styles.resultCards}>
           {gitResult.repoUrl && (
@@ -197,7 +200,7 @@ export default function DeployForm({ files, appName, reviewScore = 0, stack = 'r
     >
       <div style={styles.header}>
         <button style={styles.backBtn} onClick={onBack}>Back</button>
-        <h2 style={styles.title}>Deploy to GitLab + Request VM</h2>
+        <h2 style={styles.title}>{skipVm ? 'Deploy to GitLab' : 'Deploy to GitLab + Request VM'}</h2>
       </div>
 
       {/* GitLab Section */}
@@ -244,7 +247,7 @@ export default function DeployForm({ files, appName, reviewScore = 0, stack = 'r
       </div>
 
       {/* VM Section */}
-      <div style={styles.section}>
+      {!skipVm && <div style={styles.section}>
         <div style={styles.sectionTitle}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ marginRight: '6px' }}>
             <rect x="1" y="3" width="14" height="10" rx="2" stroke="#8B5CF6" strokeWidth="1.2"/>
@@ -290,7 +293,7 @@ export default function DeployForm({ files, appName, reviewScore = 0, stack = 'r
             rows={3}
           />
         </div>
-      </div>
+      </div>}
 
       {/* Summary */}
       <div style={styles.summaryRow}>
@@ -310,7 +313,7 @@ export default function DeployForm({ files, appName, reviewScore = 0, stack = 'r
         whileHover={projectName.trim() ? { scale: 1.015 } : {}}
         whileTap={projectName.trim() ? { scale: 0.985 } : {}}
       >
-        Deploy to GitLab + Request VM
+        {skipVm ? 'Deploy to GitLab' : 'Deploy to GitLab + Request VM'}
       </motion.button>
     </motion.div>
   );

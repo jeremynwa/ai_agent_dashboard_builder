@@ -9,9 +9,9 @@ const SEVERITY_COLORS = {
   low: { bg: 'rgba(161, 161, 170, 0.1)', border: 'rgba(161, 161, 170, 0.2)', text: '#A1A1AA', label: 'Low' },
 };
 
-function ScoreBadge({ score }) {
+function ScoreBadge({ score, t = (k) => k }) {
   const color = score >= 70 ? '#10B981' : score >= 50 ? '#F59E0B' : '#EF4444';
-  const label = score >= 70 ? 'Approved' : score >= 50 ? 'Needs work' : 'Blocked';
+  const label = score >= 70 ? t('scoreApproved') : score >= 50 ? t('scoreNeedsWork') : t('scoreBlocked');
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -36,13 +36,13 @@ function ScoreBadge({ score }) {
       </div>
       <div>
         <div style={{ color, fontWeight: 700, fontSize: '16px' }}>{label}</div>
-        <div style={{ color: '#71717A', fontSize: '12px', marginTop: '2px' }}>Quality score</div>
+        <div style={{ color: '#71717A', fontSize: '12px', marginTop: '2px' }}>{t('qualityScore')}</div>
       </div>
     </div>
   );
 }
 
-function IssueItem({ issue }) {
+function IssueItem({ issue, t = (k) => k }) {
   const sev = SEVERITY_COLORS[issue.severity] || SEVERITY_COLORS.low;
   return (
     <div style={{ ...styles.issueCard, background: sev.bg, border: `1px solid ${sev.border}` }}>
@@ -52,12 +52,12 @@ function IssueItem({ issue }) {
         {issue.file && <span style={styles.issueFile}>{issue.file}{issue.line ? `:${issue.line}` : ''}</span>}
       </div>
       <div style={styles.issueMessage}>{issue.message}</div>
-      {issue.fix && <div style={styles.issueFix}>Fix: {issue.fix}</div>}
+      {issue.fix && <div style={styles.issueFix}>{t('fixPrefix')} {issue.fix}</div>}
     </div>
   );
 }
 
-export default function ReviewResults({ score, issues = [], summary, approved, fixedFiles, originalFiles, onApplyFixes, onProceedToDeploy, onBack }) {
+export default function ReviewResults({ score, issues = [], summary, approved, fixedFiles, originalFiles, onApplyFixes, onProceedToDeploy, onBack, t = (k) => k }) {
   const [fixesApplied, setFixesApplied] = useState(false);
   const [showAllIssues, setShowAllIssues] = useState(false);
 
@@ -84,26 +84,26 @@ export default function ReviewResults({ score, issues = [], summary, approved, f
     >
       {/* Header */}
       <div style={styles.header}>
-        <button style={styles.backBtn} onClick={onBack}>Back</button>
-        <h2 style={styles.title}>Review Results</h2>
+        <button style={styles.backBtn} onClick={onBack}>{t('back')}</button>
+        <h2 style={styles.title}>{t('reviewResultsTitle')}</h2>
       </div>
 
       {/* Score */}
       <div style={styles.scoreSection}>
-        <ScoreBadge score={score} />
+        <ScoreBadge score={score} t={t} />
         <div style={styles.issueSummary}>
           {critical.length > 0 && <span style={styles.issueCount} data-sev="critical">{critical.length} Critical</span>}
           {high.length > 0 && <span style={styles.issueCount} data-sev="high">{high.length} High</span>}
           {medium.length > 0 && <span style={styles.issueCount} data-sev="medium">{medium.length} Medium</span>}
           {low.length > 0 && <span style={styles.issueCount} data-sev="low">{low.length} Low</span>}
-          {issues.length === 0 && <span style={{ color: '#10B981', fontSize: '13px' }}>No issues found</span>}
+          {issues.length === 0 && <span style={{ color: '#10B981', fontSize: '13px' }}>{t('noIssues')}</span>}
         </div>
       </div>
 
       {/* Summary */}
       {summary && (
         <div style={styles.summaryBox}>
-          <div style={styles.summaryLabel}>Assessment</div>
+          <div style={styles.summaryLabel}>{t('assessment')}</div>
           <p style={styles.summaryText}>{summary}</p>
         </div>
       )}
@@ -111,15 +111,15 @@ export default function ReviewResults({ score, issues = [], summary, approved, f
       {/* Issues */}
       {issues.length > 0 && (
         <div style={styles.issuesSection}>
-          <div style={styles.issuesSectionLabel}>Issues ({issues.length})</div>
+          <div style={styles.issuesSectionLabel}>{t('issuesLabel')} ({issues.length})</div>
           <div style={styles.issuesList}>
             {displayedIssues.map((issue, i) => (
-              <IssueItem key={i} issue={issue} />
+              <IssueItem key={i} issue={issue} t={t} />
             ))}
           </div>
           {issues.length > 5 && (
             <button style={styles.showMoreBtn} onClick={() => setShowAllIssues(!showAllIssues)}>
-              {showAllIssues ? 'Show less' : `Show all ${issues.length} issues`}
+              {showAllIssues ? t('showLess') : t('showAllIssues').replace('{n}', issues.length)}
             </button>
           )}
         </div>
@@ -134,12 +134,12 @@ export default function ReviewResults({ score, issues = [], summary, approved, f
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
           >
-            Apply AI Fixes ({Object.keys(fixedFiles).length} files)
+            {t('applyFixes').replace('{n}', Object.keys(fixedFiles).length)}
           </motion.button>
         )}
 
         {fixesApplied && (
-          <div style={styles.fixesAppliedBadge}>Fixes applied</div>
+          <div style={styles.fixesAppliedBadge}>{t('fixesApplied')}</div>
         )}
 
         <motion.button
@@ -148,9 +148,9 @@ export default function ReviewResults({ score, issues = [], summary, approved, f
           disabled={!approved}
           whileHover={approved ? { scale: 1.02 } : {}}
           whileTap={approved ? { scale: 0.98 } : {}}
-          title={!approved ? `Score must be ${70}+ to deploy (current: ${score})` : ''}
+          title={!approved ? t('deployScoreRequired').replace('{score}', score) : ''}
         >
-          {approved ? 'Proceed to Deploy' : `Deploy locked (score ${score}/100 < 70)`}
+          {approved ? t('proceedDeploy') : t('deployLocked').replace('{score}', score)}
         </motion.button>
       </div>
     </motion.div>

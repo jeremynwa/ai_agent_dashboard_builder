@@ -123,6 +123,44 @@ const translations = {
     landingBuildDesc: 'Describe your dashboard — AI generates it in seconds.',
     landingSubmit: 'I have an app to submit',
     landingSubmitDesc: 'Upload your app for AI-powered code review and deployment.',
+    // Upload & Review page
+    uploadReview: 'Upload & Review',
+    uploadReviewTitle: 'Upload & Review App',
+    uploadReviewDesc: 'Drop your app ZIP — agents will review security, code quality, and performance, then fix issues.',
+    reviewingCode: 'Reviewing code with agents...',
+    reviewFailed: 'Review failed:',
+    // UploadCode component
+    dropZoneTitle: 'Drop your app ZIP here',
+    dropZoneHint: 'Any web app — React, Vue, Angular, vanilla JS',
+    dropZoneSub: 'Click to browse or drag & drop a .zip file',
+    parsingZip: 'Parsing ZIP...',
+    noFilesFound: 'No readable source files found in the ZIP.',
+    filesDetected: 'files detected',
+    change: 'Change',
+    appNameLabel: 'App name',
+    moreFiles: 'more files',
+    reviewWithAgents: 'Review with Agents',
+    failedParseZip: 'Failed to parse ZIP:',
+    pleaseDropZip: 'Please drop a .zip file.',
+    // ReviewResults component
+    back: 'Back',
+    reviewResultsTitle: 'Review Results',
+    scoreApproved: 'Approved',
+    scoreNeedsWork: 'Needs work',
+    scoreBlocked: 'Blocked',
+    qualityScore: 'Quality score',
+    noIssues: 'No issues found',
+    assessment: 'Assessment',
+    issuesLabel: 'Issues',
+    showLess: 'Show less',
+    showAllIssues: 'Show all {n} issues',
+    applyFixes: 'Apply AI Fixes ({n} files)',
+    fixesApplied: 'Fixes applied',
+    deploy: 'Deploy',
+    proceedDeploy: 'Proceed to Deploy',
+    deployLocked: 'Deploy locked (score {score}/100 < 70)',
+    deployScoreRequired: 'Score must be 70+ to deploy (current: {score})',
+    fixPrefix: 'Fix:',
   },
   fr: {
     title: 'Que voulez-vous construire ?',
@@ -188,6 +226,44 @@ const translations = {
     landingBuildDesc: "Décrivez votre dashboard — l'IA le génère en quelques secondes.",
     landingSubmit: "J'ai une app à soumettre",
     landingSubmitDesc: "Uploadez votre app pour une review de code par IA et un déploiement.",
+    // Upload & Review page
+    uploadReview: 'Uploader & Réviser',
+    uploadReviewTitle: 'Uploader & Réviser une App',
+    uploadReviewDesc: "Déposez votre ZIP — les agents vérifieront la sécurité, la qualité du code et les performances, puis corrigeront les problèmes.",
+    reviewingCode: 'Révision du code par les agents...',
+    reviewFailed: 'Échec de la révision :',
+    // UploadCode component
+    dropZoneTitle: 'Déposez votre ZIP ici',
+    dropZoneHint: "N'importe quelle web app — React, Vue, Angular, vanilla JS",
+    dropZoneSub: 'Cliquez pour parcourir ou glissez-déposez un fichier .zip',
+    parsingZip: 'Analyse du ZIP...',
+    noFilesFound: 'Aucun fichier source lisible trouvé dans le ZIP.',
+    filesDetected: 'fichiers détectés',
+    change: 'Changer',
+    appNameLabel: "Nom de l'app",
+    moreFiles: 'fichiers de plus',
+    reviewWithAgents: 'Réviser avec les Agents',
+    failedParseZip: "Échec de l'analyse du ZIP :",
+    pleaseDropZip: 'Veuillez déposer un fichier .zip.',
+    // ReviewResults component
+    back: 'Retour',
+    reviewResultsTitle: 'Résultats de la Révision',
+    scoreApproved: 'Approuvé',
+    scoreNeedsWork: 'À améliorer',
+    scoreBlocked: 'Bloqué',
+    qualityScore: 'Score qualité',
+    noIssues: 'Aucun problème trouvé',
+    assessment: 'Évaluation',
+    issuesLabel: 'Problèmes',
+    showLess: 'Voir moins',
+    showAllIssues: 'Voir les {n} problèmes',
+    applyFixes: 'Appliquer les corrections IA ({n} fichiers)',
+    fixesApplied: 'Corrections appliquées',
+    deploy: 'Déployer',
+    proceedDeploy: 'Procéder au Déploiement',
+    deployLocked: 'Déploiement verrouillé (score {score}/100 < 70)',
+    deployScoreRequired: 'Le score doit être 70+ pour déployer (actuel : {score})',
+    fixPrefix: 'Correction :',
   },
 };
 
@@ -940,9 +1016,9 @@ function Factory() {
             <button
               onClick={() => setShowDeployForm(true)}
               style={{ ...styles.floatingButtonPrimary, background: 'linear-gradient(135deg, #06B6D4 0%, #8B5CF6 100%)' }}
-              title="Push to GitLab + Request VM"
+              title={t('deploy')}
             >
-              Deploy
+              {t('deploy')}
             </button>
           </div>
           <div style={styles.feedbackContainer}>
@@ -963,6 +1039,24 @@ function Factory() {
             </button>
           </div>
         </motion.div>
+
+        {/* Deploy form overlay (inside fullscreen preview) */}
+        {showDeployForm && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(11,17,32,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '20px' }}>
+            <div style={{ width: '100%', maxWidth: '560px', maxHeight: '90vh', overflowY: 'auto' }}>
+              <DeployForm
+                files={currentFiles}
+                appName={generatedApp.name || 'generated-app'}
+                reviewScore={100}
+                stack="react"
+                source="generated"
+                skipVm
+                onSuccess={() => { setShowDeployForm(false); setAppView('my-apps'); }}
+                onBack={() => setShowDeployForm(false)}
+              />
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -1006,7 +1100,7 @@ function Factory() {
           style={{ ...styles.newAppButton, background: 'rgba(139, 92, 246, 0.1)', border: '1px solid rgba(139, 92, 246, 0.25)', color: '#A78BFA', marginTop: '6px' }}
           onClick={() => { setAppView('upload-review'); setUploadedCode(null); setReviewResult(null); setShowDeployForm(false); setSidebarOpen(false); }}
         >
-          <span style={{ marginRight: '6px', fontSize: '14px' }}>Upload & Review</span>
+          <span style={{ marginRight: '6px', fontSize: '14px' }}>{t('uploadReview')}</span>
         </button>
 
         <button
@@ -1144,10 +1238,10 @@ function Factory() {
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                 >
-                  <h2 style={{ color: '#E4E4E7', fontSize: '20px', fontWeight: 700, margin: '0 0 6px' }}>Upload & Review App</h2>
-                  <p style={{ color: '#71717A', fontSize: '13px', margin: 0 }}>Drop your app ZIP — agents will review security, code quality, and performance, then fix issues.</p>
+                  <h2 style={{ color: '#E4E4E7', fontSize: '20px', fontWeight: 700, margin: '0 0 6px' }}>{t('uploadReviewTitle')}</h2>
+                  <p style={{ color: '#71717A', fontSize: '13px', margin: 0 }}>{t('uploadReviewDesc')}</p>
                 </motion.div>
-                <UploadCode onCodeLoaded={async (codeData) => {
+                <UploadCode t={t} onCodeLoaded={async (codeData) => {
                   setUploadedCode(codeData);
                   setReviewLoading(true);
                   setReviewError('');
@@ -1170,12 +1264,12 @@ function Factory() {
                       animate={{ rotate: 360 }}
                       transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}
                     />
-                    Reviewing code with agents...
+                    {t('reviewingCode')}
                   </motion.div>
                 )}
                 {reviewError && (
                   <div style={{ color: '#EF4444', fontSize: '13px', marginTop: '12px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '8px', padding: '10px 14px' }}>
-                    Review failed: {reviewError}
+                    {t('reviewFailed')} {reviewError}
                   </div>
                 )}
               </>
@@ -1190,6 +1284,7 @@ function Factory() {
                 onApplyFixes={(fixed) => setDeployFilesOverride(fixed)}
                 onProceedToDeploy={() => setShowDeployForm(true)}
                 onBack={() => setReviewResult(null)}
+                t={t}
               />
             )}
           </div>
@@ -1204,6 +1299,7 @@ function Factory() {
               reviewScore={reviewResult?.score || 0}
               stack={uploadedCode.stack}
               source="uploaded"
+              skipVm
               onSuccess={() => { setShowDeployForm(false); setAppView('my-apps'); }}
               onBack={() => setShowDeployForm(false)}
             />
@@ -1220,6 +1316,7 @@ function Factory() {
                 reviewScore={100}
                 stack="react"
                 source="generated"
+                skipVm
                 onSuccess={() => { setShowDeployForm(false); setAppView('my-apps'); }}
                 onBack={() => setShowDeployForm(false)}
               />

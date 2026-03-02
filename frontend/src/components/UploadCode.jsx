@@ -43,7 +43,7 @@ function detectStack(files) {
   return 'javascript';
 }
 
-export default function UploadCode({ onCodeLoaded }) {
+export default function UploadCode({ onCodeLoaded, t = (k) => k }) {
   const [isDragging, setIsDragging] = useState(false);
   const [parsing, setParsing] = useState(false);
   const [error, setError] = useState('');
@@ -83,7 +83,7 @@ export default function UploadCode({ onCodeLoaded }) {
       }
 
       if (Object.keys(files).length === 0) {
-        setError('No readable source files found in the ZIP.');
+        setError(t('noFilesFound'));
         setParsing(false);
         return;
       }
@@ -93,7 +93,7 @@ export default function UploadCode({ onCodeLoaded }) {
       setFileTree(tree.sort());
       setParsedFiles(files);
     } catch (err) {
-      setError(`Failed to parse ZIP: ${err.message}`);
+      setError(`${t('failedParseZip')} ${err.message}`);
     }
     setParsing(false);
   };
@@ -105,7 +105,7 @@ export default function UploadCode({ onCodeLoaded }) {
     if (file && file.name.endsWith('.zip')) {
       parseZip(file);
     } else {
-      setError('Please drop a .zip file.');
+      setError(t('pleaseDropZip'));
     }
   };
 
@@ -132,15 +132,15 @@ export default function UploadCode({ onCodeLoaded }) {
         <div style={styles.parsedHeader}>
           <div>
             <div style={styles.parsedTitle}>{appName}</div>
-            <div style={styles.parsedMeta}>{fileTree.length} files detected · Stack: <span style={{ color: '#06B6D4' }}>{stack}</span></div>
+            <div style={styles.parsedMeta}>{fileTree.length} {t('filesDetected')} · Stack: <span style={{ color: '#06B6D4' }}>{stack}</span></div>
           </div>
           <button style={styles.clearBtn} onClick={() => { setParsedFiles(null); setFileTree(null); setAppName(''); }}>
-            Change
+            {t('change')}
           </button>
         </div>
 
         <div style={styles.appNameRow}>
-          <label style={styles.label}>App name</label>
+          <label style={styles.label}>{t('appNameLabel')}</label>
           <input
             style={styles.nameInput}
             value={appName}
@@ -159,7 +159,7 @@ export default function UploadCode({ onCodeLoaded }) {
             </div>
           ))}
           {fileTree.length > 20 && (
-            <div style={styles.moreFiles}>+{fileTree.length - 20} more files</div>
+            <div style={styles.moreFiles}>+{fileTree.length - 20} {t('moreFiles')}</div>
           )}
         </div>
 
@@ -169,7 +169,7 @@ export default function UploadCode({ onCodeLoaded }) {
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
         >
-          Review with Agents
+          {t('reviewWithAgents')}
         </motion.button>
       </motion.div>
     );
@@ -198,7 +198,7 @@ export default function UploadCode({ onCodeLoaded }) {
               animate={{ rotate: 360 }}
               transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}
             />
-            <span style={styles.dropHint}>Parsing ZIP...</span>
+            <span style={styles.dropHint}>{t('parsingZip')}</span>
           </div>
         ) : (
           <div style={styles.dropContent}>
@@ -208,9 +208,9 @@ export default function UploadCode({ onCodeLoaded }) {
                 <path d="M16 8v12M10 14l6-6 6 6M8 22v2h16v-2" stroke="#06B6D4" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             </div>
-            <div style={styles.dropTitle}>Drop your app ZIP here</div>
-            <div style={styles.dropHint}>Any web app — React, Vue, Angular, vanilla JS</div>
-            <div style={styles.dropSub}>Click to browse or drag & drop a .zip file</div>
+            <div style={styles.dropTitle}>{t('dropZoneTitle')}</div>
+            <div style={styles.dropHint}>{t('dropZoneHint')}</div>
+            <div style={styles.dropSub}>{t('dropZoneSub')}</div>
           </div>
         )}
       </div>
