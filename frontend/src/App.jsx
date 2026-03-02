@@ -1,5 +1,5 @@
 // frontend/src/App.jsx — WebContainer API auth integration
-import { useState, useEffect, useRef, createContext, useContext } from 'react';
+import React, { useState, useEffect, useRef, createContext, useContext } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { WebContainer, configureAPIKey } from '@webcontainer/api';
 import { baseFiles } from './services/files-template';
@@ -230,6 +230,32 @@ function useLang() {
   return useContext(LangContext);
 }
 
+// ============ ERROR BOUNDARY ============
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, info) {
+    console.error('[ErrorBoundary]', error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ minHeight: '100vh', background: '#09090B', color: '#FAFAFA', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: 'system-ui, sans-serif', padding: '24px' }}>
+          <h2 style={{ color: '#EF4444', marginBottom: '12px' }}>Something went wrong</h2>
+          <pre style={{ color: '#A1A1AA', fontSize: '13px', maxWidth: '600px', overflow: 'auto', whiteSpace: 'pre-wrap' }}>{this.state.error?.message}</pre>
+          <button onClick={() => window.location.reload()} style={{ marginTop: '20px', padding: '10px 24px', background: '#06B6D4', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>Reload</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // ============ AUTH GATE ============
 function App() {
   return (
@@ -257,7 +283,11 @@ function AuthGate() {
   }
 
   if (!user) return <Login key="login" />;
-  return <Factory key="factory" />;
+  return (
+    <ErrorBoundary>
+      <Factory key="factory" />
+    </ErrorBoundary>
+  );
 }
 
 // ============ HELPER: Flatten WebContainer file tree to flat map ============
@@ -1049,11 +1079,8 @@ function Factory() {
 
         {/* ---- LANDING VIEW ---- */}
         {appView === 'landing' && (
-          <motion.div
+          <div
             style={styles.landingContainer}
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
           >
             <div style={styles.heroSection}>
               <h1 style={styles.title}>{t('landingTitle')}</h1>
@@ -1099,7 +1126,7 @@ function Factory() {
                 <p style={styles.landingCardDesc}>{t('landingSubmitDesc')}</p>
               </motion.div>
             </div>
-          </motion.div>
+          </div>
         )}
 
         {/* ---- MY APPS VIEW ---- */}
@@ -1476,7 +1503,6 @@ const styles = {
     fontFamily: "'DM Sans', 'Inter', system-ui, -apple-system, sans-serif",
     color: '#FAFAFA',
     position: 'relative',
-    overflow: 'hidden',
   },
   gridPattern: {
     position: 'fixed',
