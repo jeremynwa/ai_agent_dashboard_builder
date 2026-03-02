@@ -946,12 +946,7 @@ function Factory() {
 
   // ============ FACTORY HOME / GENERATION ============
   return (
-    <motion.div
-      style={styles.container}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.4 }}
-    >
+    <div style={styles.container}>
       <div style={styles.gridPattern} />
 
       {previewUrl && isLoading && (
@@ -1453,7 +1448,7 @@ function Factory() {
           )}
         </AnimatePresence>}
       </main>
-    </motion.div>
+    </div>
   );
 }
 
