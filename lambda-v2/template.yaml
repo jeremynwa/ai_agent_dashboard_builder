@@ -106,14 +106,14 @@ Resources:
         Variables:
           ANTHROPIC_API_KEY: !Ref AnthropicApiKey
           USE_BETA_API: "true"
-          DASHBOARD_SKILL_ID: "skill_01GMx6ta9DNWD6wDmX4S6PhN"
-          DATA_ANALYZER_SKILL_ID: "skill_01DAnrjyQM5eAJYiCvhMK7Du"
-          INDUSTRY_FINANCE_SKILL_ID: "skill_013h9deHQb7CaA47xd59Uytd"
-          INDUSTRY_ECOMMERCE_SKILL_ID: "skill_014PUPgrYoGE8BRDwiDhZDMP"
-          INDUSTRY_SAAS_SKILL_ID: "skill_01Ekuh6H7ZKBkA2qzdXYzr1y"
-          INDUSTRY_LOGISTICS_SKILL_ID: "skill_011zy4TbPD7jcWEfiMKfi4jN"
-          REVIEWER_SKILL_ID: "skill_01G3LJaHUFQn9WTbcrmTFCrB"
-          VISION_SKILL_ID: "skill_016hJRgXdpBiDrcbknvQYQLW"
+          DASHBOARD_SKILL_ID: "skill_01RPpTMLicWFr96R3kLV3YDW"
+          DATA_ANALYZER_SKILL_ID: "skill_01TJ4sKM6v5aWiBfUCpE7aaM"
+          INDUSTRY_FINANCE_SKILL_ID: "skill_01XhrMpqBzw5CoeqGp9dLYTy"
+          INDUSTRY_ECOMMERCE_SKILL_ID: "skill_01BdUH8nfrq5o3PhtL4jmrXv"
+          INDUSTRY_SAAS_SKILL_ID: "skill_01KSiWWfDMqT619dvHe9bwLR"
+          INDUSTRY_LOGISTICS_SKILL_ID: "skill_01J4e3c46T3wrdtuRBRcRyGU"
+          REVIEWER_SKILL_ID: "skill_01ABSnPFjpR2wUZuoKobc5vs"
+          VISION_SKILL_ID: "skill_0167k41XCVLbcSksQvPsqTfi"
           REVIEW_MODEL: "claude-haiku-4-5-20251001"
           VISION_MODEL: "claude-haiku-4-5-20251001"
       FunctionUrlConfig:
