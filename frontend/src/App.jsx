@@ -117,6 +117,12 @@ const translations = {
     exportPptx: 'Export PPTX',
     exportPdf: 'Export PDF',
     exporting: 'Exporting...',
+    landingTitle: 'Welcome to Factory',
+    landingSubtitle: 'What would you like to do?',
+    landingBuild: 'I want to build an app',
+    landingBuildDesc: 'Describe your dashboard — AI generates it in seconds.',
+    landingSubmit: 'I have an app to submit',
+    landingSubmitDesc: 'Upload your app for AI-powered code review and deployment.',
   },
   fr: {
     title: 'Que voulez-vous construire ?',
@@ -176,6 +182,12 @@ const translations = {
     exportPptx: 'Export PPTX',
     exportPdf: 'Export PDF',
     exporting: 'Export en cours...',
+    landingTitle: 'Bienvenue sur Factory',
+    landingSubtitle: 'Que souhaitez-vous faire ?',
+    landingBuild: 'Je veux construire une app',
+    landingBuildDesc: "Décrivez votre dashboard — l'IA le génère en quelques secondes.",
+    landingSubmit: "J'ai une app à soumettre",
+    landingSubmitDesc: "Uploadez votre app pour une review de code par IA et un déploiement.",
   },
 };
 
@@ -365,7 +377,7 @@ function Factory() {
   const [selectedIndustry, setSelectedIndustry] = useState('');
   const [exportingFormat, setExportingFormat] = useState(null);
   // ---- New: Upload & Review + Deploy flow ----
-  const [appView, setAppView] = useState('factory'); // 'factory' | 'upload-review' | 'my-apps'
+  const [appView, setAppView] = useState('landing'); // 'landing' | 'factory' | 'upload-review' | 'my-apps'
   const [uploadedCode, setUploadedCode] = useState(null); // { files, appName, stack }
   const [reviewResult, setReviewResult] = useState(null); // { score, issues, fixedFiles, approved }
   const [reviewLoading, setReviewLoading] = useState(false);
@@ -947,7 +959,7 @@ function Factory() {
 
       {/* ---- SIDEBAR ---- */}
       <aside style={styles.sidebar}>
-        <div style={styles.logoRow}>
+        <div style={{ ...styles.logoRow, cursor: 'pointer' }} onClick={() => setAppView('landing')}>
           <Icons.logo />
           <span style={styles.logoText}>Factory</span>
           <span style={styles.versionBadge}>beta</span>
@@ -1024,6 +1036,61 @@ function Factory() {
 
       {/* ---- MAIN CONTENT ---- */}
       <main style={styles.main}>
+
+        {/* ---- LANDING VIEW ---- */}
+        {appView === 'landing' && (
+          <motion.div
+            style={styles.landingContainer}
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+          >
+            <div style={styles.heroSection}>
+              <h1 style={styles.title}>{t('landingTitle')}</h1>
+              <p style={styles.subtitle}>{t('landingSubtitle')}</p>
+            </div>
+
+            <div style={styles.landingCards}>
+              <motion.div
+                style={styles.landingCard}
+                whileHover={{ borderColor: 'rgba(6, 182, 212, 0.5)', boxShadow: '0 0 24px rgba(6, 182, 212, 0.1)' }}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.15 }}
+                onClick={() => { setPrompt(''); setGenerationStep(0); setIsLoading(false); setAgentStatus(''); setAppView('factory'); }}
+              >
+                <div style={styles.landingCardIcon}>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#06B6D4" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                    <path d="M3 9h18" />
+                    <path d="M9 21V9" />
+                  </svg>
+                </div>
+                <h2 style={styles.landingCardTitle}>{t('landingBuild')}</h2>
+                <p style={styles.landingCardDesc}>{t('landingBuildDesc')}</p>
+              </motion.div>
+
+              <motion.div
+                style={{ ...styles.landingCard, borderColor: 'rgba(139, 92, 246, 0.2)' }}
+                whileHover={{ borderColor: 'rgba(139, 92, 246, 0.5)', boxShadow: '0 0 24px rgba(139, 92, 246, 0.1)' }}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.25 }}
+                onClick={() => { setAppView('upload-review'); setUploadedCode(null); setReviewResult(null); setShowDeployForm(false); }}
+              >
+                <div style={{ ...styles.landingCardIcon, background: 'rgba(139, 92, 246, 0.1)' }}>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#A78BFA" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="17 8 12 3 7 8" />
+                    <line x1="12" y1="3" x2="12" y2="15" />
+                  </svg>
+                </div>
+                <h2 style={{ ...styles.landingCardTitle, color: '#A78BFA' }}>{t('landingSubmit')}</h2>
+                <p style={styles.landingCardDesc}>{t('landingSubmitDesc')}</p>
+              </motion.div>
+            </div>
+          </motion.div>
+        )}
 
         {/* ---- MY APPS VIEW ---- */}
         {appView === 'my-apps' && (
@@ -1582,6 +1649,52 @@ const styles = {
     position: 'relative',
   },
   centerContent: { maxWidth: '580px', width: '100%' },
+  landingContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    maxWidth: '700px',
+    width: '100%',
+  },
+  landingCards: {
+    display: 'flex',
+    gap: '20px',
+    width: '100%',
+  },
+  landingCard: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '14px',
+    padding: '32px',
+    background: '#0F0F12',
+    border: '1px solid rgba(6, 182, 212, 0.2)',
+    borderRadius: '14px',
+    cursor: 'pointer',
+    transition: 'border-color 0.25s, box-shadow 0.25s',
+  },
+  landingCardIcon: {
+    width: '48px',
+    height: '48px',
+    borderRadius: '12px',
+    background: 'rgba(6, 182, 212, 0.1)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  landingCardTitle: {
+    fontSize: '18px',
+    fontWeight: '600',
+    color: '#06B6D4',
+    margin: 0,
+  },
+  landingCardDesc: {
+    fontSize: '13px',
+    color: '#71717A',
+    lineHeight: '1.5',
+    margin: 0,
+  },
   heroSection: { textAlign: 'center', marginBottom: '36px' },
   title: {
     fontSize: '28px',
