@@ -378,6 +378,7 @@ function Factory() {
   const [exportingFormat, setExportingFormat] = useState(null);
   // ---- New: Upload & Review + Deploy flow ----
   const [appView, setAppView] = useState('landing'); // 'landing' | 'factory' | 'upload-review' | 'my-apps'
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [uploadedCode, setUploadedCode] = useState(null); // { files, appName, stack }
   const [reviewResult, setReviewResult] = useState(null); // { score, issues, fixedFiles, approved }
   const [reviewLoading, setReviewLoading] = useState(false);
@@ -957,9 +958,12 @@ function Factory() {
         <iframe ref={iframeRef} src={previewUrl} style={styles.hiddenIframe} title="Capture" />
       )}
 
+      {/* ---- SIDEBAR BACKDROP ---- */}
+      {sidebarOpen && <div style={styles.backdrop} onClick={() => setSidebarOpen(false)} />}
+
       {/* ---- SIDEBAR ---- */}
-      <aside style={styles.sidebar}>
-        <div style={{ ...styles.logoRow, cursor: 'pointer' }} onClick={() => setAppView('landing')}>
+      <aside style={{ ...styles.sidebar, transform: sidebarOpen ? 'translateX(0)' : 'translateX(-100%)' }}>
+        <div style={{ ...styles.logoRow, cursor: 'pointer' }} onClick={() => { setAppView('landing'); setSidebarOpen(false); }}>
           <Icons.logo />
           <span style={styles.logoText}>Factory</span>
           <span style={styles.versionBadge}>beta</span>
@@ -967,7 +971,7 @@ function Factory() {
 
         <button
           style={styles.newAppButton}
-          onClick={() => { setPrompt(''); setGenerationStep(0); setIsLoading(false); setAgentStatus(''); setAppView('factory'); }}
+          onClick={() => { setPrompt(''); setGenerationStep(0); setIsLoading(false); setAgentStatus(''); setAppView('factory'); setSidebarOpen(false); }}
         >
           <span style={{ marginRight: '6px', fontSize: '16px' }}>+</span>
           {t('newApp')}
@@ -975,14 +979,14 @@ function Factory() {
 
         <button
           style={{ ...styles.newAppButton, background: 'rgba(139, 92, 246, 0.1)', border: '1px solid rgba(139, 92, 246, 0.25)', color: '#A78BFA', marginTop: '6px' }}
-          onClick={() => { setAppView('upload-review'); setUploadedCode(null); setReviewResult(null); setShowDeployForm(false); }}
+          onClick={() => { setAppView('upload-review'); setUploadedCode(null); setReviewResult(null); setShowDeployForm(false); setSidebarOpen(false); }}
         >
           <span style={{ marginRight: '6px', fontSize: '14px' }}>Upload & Review</span>
         </button>
 
         <button
           style={{ ...styles.newAppButton, background: 'rgba(6, 182, 212, 0.05)', border: '1px solid rgba(6, 182, 212, 0.2)', color: '#71717A', marginTop: '4px' }}
-          onClick={() => setAppView('my-apps')}
+          onClick={() => { setAppView('my-apps'); setSidebarOpen(false); }}
         >
           <span style={{ marginRight: '6px', fontSize: '14px' }}>My Apps</span>
         </button>
@@ -999,7 +1003,7 @@ function Factory() {
                     initial={{ opacity: 0, x: -12 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: i * 0.04, duration: 0.25 }}
-                    onClick={() => restoreApp(app)}
+                    onClick={() => { restoreApp(app); setSidebarOpen(false); }}
                   >
                     <span style={{ marginRight: '8px', opacity: 0.5 }}><Icons.app /></span>
                     <span style={styles.appItemText}>{app.name}</span>
@@ -1011,28 +1015,39 @@ function Factory() {
         </AnimatePresence>
 
         <div style={styles.sidebarFooter}>
-          <div style={styles.userRow}>
-            <div style={styles.userAvatar}>
-              {(user?.email || '?')[0].toUpperCase()}
-            </div>
-            <span style={styles.userEmail}>{user?.email}</span>
-            <button onClick={logout} style={styles.logoutButton} title={t('logout')}>↗</button>
-          </div>
-          <div style={styles.footerMeta}>
-            <div style={styles.statusRow}>
-              <motion.span
-                style={{ ...styles.dot, background: isReady ? '#34D399' : bootError ? '#EF4444' : '#F59E0B' }}
-                animate={isReady || bootError ? {} : { opacity: [1, 0.3, 1] }}
-                transition={{ duration: 1.2, repeat: Infinity }}
-              />
-              <span style={styles.statusText}>
-                {isReady ? t('engineReady') : bootError ? 'Boot failed' : t('booting')}
-              </span>
-            </div>
-            <LangToggle />
+          <div style={styles.statusRow}>
+            <motion.span
+              style={{ ...styles.dot, background: isReady ? '#34D399' : bootError ? '#EF4444' : '#F59E0B' }}
+              animate={isReady || bootError ? {} : { opacity: [1, 0.3, 1] }}
+              transition={{ duration: 1.2, repeat: Infinity }}
+            />
+            <span style={styles.statusText}>
+              {isReady ? t('engineReady') : bootError ? 'Boot failed' : t('booting')}
+            </span>
           </div>
         </div>
       </aside>
+
+      {/* ---- TOP BAR ---- */}
+      <header style={styles.topBar}>
+        <button style={styles.menuButton} onClick={() => setSidebarOpen(o => !o)} title="Menu">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <line x1="3" y1="12" x2="21" y2="12" />
+            <line x1="3" y1="18" x2="21" y2="18" />
+          </svg>
+        </button>
+        <div style={styles.topBarRight}>
+          <LangToggle />
+          <div style={styles.topBarUser}>
+            <div style={styles.userAvatar}>
+              {(user?.email || '?')[0].toUpperCase()}
+            </div>
+            <span style={styles.topBarEmail}>{user?.email}</span>
+            <button onClick={logout} style={styles.logoutButton} title={t('logout')}>↗</button>
+          </div>
+        </div>
+      </header>
 
       {/* ---- MAIN CONTENT ---- */}
       <main style={styles.main}>
@@ -1459,8 +1474,8 @@ const styles = {
     borderRadius: '50%',
   },
   container: {
-    display: 'grid',
-    gridTemplateColumns: '260px 1fr',
+    display: 'flex',
+    flexDirection: 'column',
     minHeight: '100vh',
     background: '#09090B',
     fontFamily: "'DM Sans', 'Inter', system-ui, -apple-system, sans-serif",
@@ -1478,12 +1493,27 @@ const styles = {
     zIndex: 0,
   },
   sidebar: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    bottom: 0,
+    width: '260px',
     background: '#0F0F12',
     borderRight: '1px solid rgba(63, 63, 70, 0.4)',
     padding: '20px 14px',
     display: 'flex',
     flexDirection: 'column',
-    zIndex: 1,
+    zIndex: 30,
+    transition: 'transform 0.25s ease',
+  },
+  backdrop: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: 'rgba(0, 0, 0, 0.5)',
+    zIndex: 20,
   },
   logoRow: {
     display: 'flex',
@@ -1640,11 +1670,51 @@ const styles = {
     background: 'rgba(6, 182, 212, 0.12)',
     color: '#06B6D4',
   },
-  main: {
+  topBar: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '12px 24px',
+    zIndex: 10,
+    position: 'relative',
+  },
+  menuButton: {
+    background: 'none',
+    border: 'none',
+    color: '#A1A1AA',
+    cursor: 'pointer',
+    padding: '6px',
+    borderRadius: '6px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: '40px 24px',
+    transition: 'color 0.15s',
+    fontFamily: 'inherit',
+  },
+  topBarRight: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '16px',
+  },
+  topBarUser: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  topBarEmail: {
+    fontSize: '12px',
+    color: '#71717A',
+    maxWidth: '160px',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  main: {
+    display: 'flex',
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '0 24px 40px',
     zIndex: 1,
     position: 'relative',
   },
