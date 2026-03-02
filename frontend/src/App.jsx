@@ -256,8 +256,8 @@ function AuthGate() {
     );
   }
 
-  if (!user) return <Login />;
-  return <Factory />;
+  if (!user) return <Login key="login" />;
+  return <Factory key="factory" />;
 }
 
 // ============ HELPER: Flatten WebContainer file tree to flat map ============
