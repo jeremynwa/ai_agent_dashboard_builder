@@ -12,6 +12,14 @@ Parameters:
   MyRegion:
     Type: String
     Default: eu-north-1
+  GitLabToken:
+    Type: String
+    NoEcho: true
+    Default: "qT87KLEICAGVoPiiD-XLNm86MQp1Omd5CA.01.0y00pjblf"
+  ServiceDeskToken:
+    Type: String
+    NoEcho: true
+    Default: ""
 
 Globals:
   Function:
@@ -285,9 +293,221 @@ Resources:
         Banner:
           - js=import { createRequire } from 'module'; const require = createRequire(import.meta.url);
 
+  # ============ DYNAMODB — App Registry ============
+  AppRegistryTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: AppRegistry
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: appId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: appId
+          KeyType: RANGE
+
+  # ============ INTAKE (AI routing) ============
+  IntakeFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: app-factory-intake
+      Handler: index.handler
+      CodeUri: intake/
+      Timeout: 15
+      MemorySize: 256
+      Environment:
+        Variables:
+          ANTHROPIC_API_KEY: !Ref AnthropicApiKey
+      Events:
+        Post:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref AppFactoryApi
+            Path: /intake
+            Method: POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: false
+        Target: es2022
+        Format: esm
+        OutExtension:
+          - .js=.mjs
+        EntryPoints:
+          - index.mjs
+        External:
+          - '@aws-sdk/*'
+        Banner:
+          - js=import { createRequire } from 'module'; const require = createRequire(import.meta.url);
+
+  # ============ REVIEW CODE (web-app-reviewer skill) ============
+  ReviewCodeFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: app-factory-review-code
+      Handler: index.handler
+      CodeUri: review-code/
+      Timeout: 120
+      MemorySize: 512
+      Environment:
+        Variables:
+          ANTHROPIC_API_KEY: !Ref AnthropicApiKey
+          USE_BETA_API: "true"
+          WEB_APP_REVIEWER_SKILL_ID: ""
+          REVIEW_PASS_THRESHOLD: "70"
+          REVIEW_MODEL: "claude-sonnet-4-20250514"
+      FunctionUrlConfig:
+        AuthType: NONE
+        Cors:
+          AllowOrigins:
+            - '*'
+          AllowHeaders:
+            - Content-Type
+            - Authorization
+          AllowMethods:
+            - POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: false
+        Target: es2022
+        Format: esm
+        OutExtension:
+          - .js=.mjs
+        EntryPoints:
+          - index.mjs
+        External:
+          - '@aws-sdk/*'
+        Banner:
+          - js=import { createRequire } from 'module'; const require = createRequire(import.meta.url);
+
+  # ============ GIT PUSH (GitLab API) ============
+  GitPushFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: app-factory-git-push
+      Handler: index.handler
+      CodeUri: git-push/
+      Timeout: 30
+      MemorySize: 256
+      Environment:
+        Variables:
+          GITLAB_URL: "https://git.simon-kucher.com"
+          GITLAB_TOKEN: !Ref GitLabToken
+          GITLAB_GROUP_ID: "1658"
+          GITLAB_TEAM_MEMBERS: "antoinesauauvageSKE2, marwanlenenE2, jeremygarneauSKE2, victoradrienguillermSKE2"
+      FunctionUrlConfig:
+        AuthType: NONE
+        Cors:
+          AllowOrigins:
+            - '*'
+          AllowHeaders:
+            - Content-Type
+            - Authorization
+          AllowMethods:
+            - POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: false
+        Target: es2022
+        Format: esm
+        OutExtension:
+          - .js=.mjs
+        EntryPoints:
+          - index.mjs
+        External:
+          - '@aws-sdk/*'
+        Banner:
+          - js=import { createRequire } from 'module'; const require = createRequire(import.meta.url);
+
+  # ============ VM REQUEST (Service Desk + Teams) ============
+  VmRequestFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: app-factory-vm-request
+      Handler: index.handler
+      CodeUri: vm-request/
+      Timeout: 60
+      MemorySize: 256
+      Environment:
+        Variables:
+          ANTHROPIC_API_KEY: !Ref AnthropicApiKey
+          TEAMS_WEBHOOK_URL: ""
+          SERVICEDESK_URL: ""
+          SERVICEDESK_TOKEN: !Ref ServiceDeskToken
+      Events:
+        Post:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref AppFactoryApi
+            Path: /vm-request
+            Method: POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: false
+        Target: es2022
+        Format: esm
+        OutExtension:
+          - .js=.mjs
+        EntryPoints:
+          - index.mjs
+        External:
+          - '@aws-sdk/*'
+        Banner:
+          - js=import { createRequire } from 'module'; const require = createRequire(import.meta.url);
+
+  # ============ APPS (My Apps CRUD — DynamoDB) ============
+  AppsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: app-factory-apps
+      Handler: index.handler
+      CodeUri: apps/
+      Timeout: 15
+      MemorySize: 256
+      Environment:
+        Variables:
+          APP_REGISTRY_TABLE: AppRegistry
+      Events:
+        Get:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref AppFactoryApi
+            Path: /apps
+            Method: GET
+        Post:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref AppFactoryApi
+            Path: /apps
+            Method: POST
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AppRegistryTable
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: false
+        Target: es2022
+        Format: esm
+        OutExtension:
+          - .js=.mjs
+        EntryPoints:
+          - index.mjs
+        External:
+          - '@aws-sdk/*'
+        Banner:
+          - js=import { createRequire } from 'module'; const require = createRequire(import.meta.url);
+
 Outputs:
   ApiUrl:
-    Description: API Gateway URL (rules + publish + db)
+    Description: API Gateway URL (rules + publish + db + intake + vm-request + apps)
     Value: !Sub 'https://${AppFactoryApi}.execute-api.${AWS::Region}.amazonaws.com/prod'
   GenerateUrl:
     Description: Generate Function URL (no 30s timeout)
@@ -298,6 +518,12 @@ Outputs:
   ExportUrl:
     Description: Export Function URL (no 30s timeout)
     Value: !GetAtt ExportFunctionUrl.FunctionUrl
+  ReviewCodeUrl:
+    Description: Review Code Function URL
+    Value: !GetAtt ReviewCodeFunctionUrl.FunctionUrl
+  GitPushUrl:
+    Description: Git Push Function URL
+    Value: !GetAtt GitPushFunctionUrl.FunctionUrl
   CognitoUserPoolId:
     Description: Cognito User Pool ID (for frontend .env)
     Value: !Ref CognitoUserPool

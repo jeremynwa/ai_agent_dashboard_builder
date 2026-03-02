@@ -3,13 +3,17 @@ import { useState, useEffect, useRef, createContext, useContext } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { WebContainer, configureAPIKey } from '@webcontainer/api';
 import { baseFiles } from './services/files-template';
-import { generateApp, visionAnalyze, publishApp, exportApp, API_BASE, DB_PROXY_URL } from './services/api';
+import { generateApp, visionAnalyze, publishApp, exportApp, reviewCode, API_BASE, DB_PROXY_URL } from './services/api';
 import { exportToZip } from './services/export';
 import FileUpload from './components/FileUpload';
 import DbConnect from './components/DbConnect';
 import AuthProvider, { useAuth } from './components/AuthProvider';
 import Login from './components/Login';
 import MatrixRain from './components/MatrixRain';
+import UploadCode from './components/UploadCode';
+import ReviewResults from './components/ReviewResults';
+import DeployForm from './components/DeployForm';
+import MyApps from './components/MyApps';
 
 const MAX_FIX_ATTEMPTS = 3;
 const SCREENSHOT_DELAY = 4000;
@@ -360,6 +364,14 @@ function Factory() {
   const [showDataSource, setShowDataSource] = useState(false);
   const [selectedIndustry, setSelectedIndustry] = useState('');
   const [exportingFormat, setExportingFormat] = useState(null);
+  // ---- New: Upload & Review + Deploy flow ----
+  const [appView, setAppView] = useState('factory'); // 'factory' | 'upload-review' | 'my-apps'
+  const [uploadedCode, setUploadedCode] = useState(null); // { files, appName, stack }
+  const [reviewResult, setReviewResult] = useState(null); // { score, issues, fixedFiles, approved }
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewError, setReviewError] = useState('');
+  const [showDeployForm, setShowDeployForm] = useState(false);
+  const [deployFilesOverride, setDeployFilesOverride] = useState(null); // fixed files after apply
   const webcontainerRef = useRef(null);
   const bootedRef = useRef(false);
   const iframeRef = useRef(null);
@@ -882,6 +894,13 @@ function Factory() {
             <button onClick={handlePublish} style={styles.floatingButtonPrimary}>
               {t('publish')}
             </button>
+            <button
+              onClick={() => setShowDeployForm(true)}
+              style={{ ...styles.floatingButtonPrimary, background: 'linear-gradient(135deg, #06B6D4 0%, #8B5CF6 100%)' }}
+              title="Push to GitLab + Request VM"
+            >
+              Deploy
+            </button>
           </div>
           <div style={styles.feedbackContainer}>
             <input
@@ -936,10 +955,24 @@ function Factory() {
 
         <button
           style={styles.newAppButton}
-          onClick={() => { setPrompt(''); setGenerationStep(0); setIsLoading(false); setAgentStatus(''); }}
+          onClick={() => { setPrompt(''); setGenerationStep(0); setIsLoading(false); setAgentStatus(''); setAppView('factory'); }}
         >
           <span style={{ marginRight: '6px', fontSize: '16px' }}>+</span>
           {t('newApp')}
+        </button>
+
+        <button
+          style={{ ...styles.newAppButton, background: 'rgba(139, 92, 246, 0.1)', border: '1px solid rgba(139, 92, 246, 0.25)', color: '#A78BFA', marginTop: '6px' }}
+          onClick={() => { setAppView('upload-review'); setUploadedCode(null); setReviewResult(null); setShowDeployForm(false); }}
+        >
+          <span style={{ marginRight: '6px', fontSize: '14px' }}>Upload & Review</span>
+        </button>
+
+        <button
+          style={{ ...styles.newAppButton, background: 'rgba(6, 182, 212, 0.05)', border: '1px solid rgba(6, 182, 212, 0.2)', color: '#71717A', marginTop: '4px' }}
+          onClick={() => setAppView('my-apps')}
+        >
+          <span style={{ marginRight: '6px', fontSize: '14px' }}>My Apps</span>
         </button>
 
         <AnimatePresence>
@@ -991,7 +1024,106 @@ function Factory() {
 
       {/* ---- MAIN CONTENT ---- */}
       <main style={styles.main}>
-        <AnimatePresence mode="wait">
+
+        {/* ---- MY APPS VIEW ---- */}
+        {appView === 'my-apps' && (
+          <MyApps onBack={() => setAppView('factory')} />
+        )}
+
+        {/* ---- UPLOAD & REVIEW VIEW ---- */}
+        {appView === 'upload-review' && !showDeployForm && (
+          <div style={{ maxWidth: '640px', width: '100%', margin: '0 auto', padding: '20px 0' }}>
+            {!reviewResult ? (
+              <>
+                <motion.div
+                  style={{ marginBottom: '20px' }}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                >
+                  <h2 style={{ color: '#E4E4E7', fontSize: '20px', fontWeight: 700, margin: '0 0 6px' }}>Upload & Review App</h2>
+                  <p style={{ color: '#71717A', fontSize: '13px', margin: 0 }}>Drop your app ZIP — agents will review security, code quality, and performance, then fix issues.</p>
+                </motion.div>
+                <UploadCode onCodeLoaded={async (codeData) => {
+                  setUploadedCode(codeData);
+                  setReviewLoading(true);
+                  setReviewError('');
+                  try {
+                    const result = await reviewCode(codeData.files, codeData.appName, codeData.stack);
+                    setReviewResult(result);
+                  } catch (err) {
+                    setReviewError(err.message);
+                  }
+                  setReviewLoading(false);
+                }} />
+                {reviewLoading && (
+                  <motion.div
+                    style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '16px', color: '#A1A1AA', fontSize: '14px' }}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                  >
+                    <motion.div
+                      style={{ width: '20px', height: '20px', border: '2px solid rgba(6,182,212,0.2)', borderTop: '2px solid #06B6D4', borderRadius: '50%' }}
+                      animate={{ rotate: 360 }}
+                      transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}
+                    />
+                    Reviewing code with agents...
+                  </motion.div>
+                )}
+                {reviewError && (
+                  <div style={{ color: '#EF4444', fontSize: '13px', marginTop: '12px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '8px', padding: '10px 14px' }}>
+                    Review failed: {reviewError}
+                  </div>
+                )}
+              </>
+            ) : (
+              <ReviewResults
+                score={reviewResult.score}
+                issues={reviewResult.issues}
+                summary={reviewResult.summary}
+                approved={reviewResult.approved}
+                fixedFiles={reviewResult.fixedFiles}
+                originalFiles={uploadedCode?.files}
+                onApplyFixes={(fixed) => setDeployFilesOverride(fixed)}
+                onProceedToDeploy={() => setShowDeployForm(true)}
+                onBack={() => setReviewResult(null)}
+              />
+            )}
+          </div>
+        )}
+
+        {/* ---- DEPLOY FORM (upload flow) ---- */}
+        {appView === 'upload-review' && showDeployForm && uploadedCode && (
+          <div style={{ maxWidth: '560px', width: '100%', margin: '0 auto', padding: '20px 0' }}>
+            <DeployForm
+              files={deployFilesOverride || uploadedCode.files}
+              appName={uploadedCode.appName}
+              reviewScore={reviewResult?.score || 0}
+              stack={uploadedCode.stack}
+              source="uploaded"
+              onSuccess={() => { setShowDeployForm(false); setAppView('my-apps'); }}
+              onBack={() => setShowDeployForm(false)}
+            />
+          </div>
+        )}
+
+        {/* ---- DEPLOY FORM (generated app) ---- */}
+        {showDeployForm && generatedApp && appView === 'factory' && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(11,17,32,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '20px' }}>
+            <div style={{ width: '100%', maxWidth: '560px', maxHeight: '90vh', overflowY: 'auto' }}>
+              <DeployForm
+                files={currentFiles}
+                appName={generatedApp.name || 'generated-app'}
+                reviewScore={100}
+                stack="react"
+                source="generated"
+                onSuccess={() => { setShowDeployForm(false); setAppView('my-apps'); }}
+                onBack={() => setShowDeployForm(false)}
+              />
+            </div>
+          </div>
+        )}
+
+        {appView === 'factory' && <AnimatePresence mode="wait">
           {isLoading ? (
             /* ---- GENERATION STATE ---- */
             <motion.div
@@ -1237,7 +1369,7 @@ function Factory() {
               </motion.div>
             </motion.div>
           )}
-        </AnimatePresence>
+        </AnimatePresence>}
       </main>
     </motion.div>
   );

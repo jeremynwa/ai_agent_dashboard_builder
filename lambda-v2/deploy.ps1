@@ -40,6 +40,10 @@ Write-Host "Building..." -ForegroundColor Yellow
 sam build
 
 Write-Host "Deploying..." -ForegroundColor Yellow
+# ─── Load GitLab token (optional) ──────────────────────
+if (-not $env:GITLAB_TOKEN) { $env:GITLAB_TOKEN = "" }
+if (-not $env:SERVICEDESK_TOKEN) { $env:SERVICEDESK_TOKEN = "" }
+
 sam deploy `
     --stack-name $STACK_NAME `
     --region $REGION `
@@ -49,6 +53,8 @@ sam deploy `
         "AnthropicApiKey=$($env:ANTHROPIC_API_KEY)" `
         "PublishBucket=$PUBLISH_BUCKET" `
         "MyRegion=$REGION" `
+        "GitLabToken=$($env:GITLAB_TOKEN)" `
+        "ServiceDeskToken=$($env:SERVICEDESK_TOKEN)" `
     --no-confirm-changeset `
     --no-fail-on-empty-changeset
 
@@ -65,7 +71,8 @@ if ($skillsUpload -eq "y") {
         "skills/industry-finance",
         "skills/industry-ecommerce",
         "skills/industry-saas",
-        "skills/industry-logistics"
+        "skills/industry-logistics",
+        "skills/web-app-reviewer"
     )
 
     foreach ($dir in $skillDirs) {
@@ -98,6 +105,8 @@ $API_URL = ($outputs | Where-Object { $_.OutputKey -eq "ApiUrl" }).OutputValue
 $GENERATE_URL = ($outputs | Where-Object { $_.OutputKey -eq "GenerateUrl" }).OutputValue
 $DB_PROXY_URL = ($outputs | Where-Object { $_.OutputKey -eq "DbProxyUrl" }).OutputValue
 $EXPORT_URL = ($outputs | Where-Object { $_.OutputKey -eq "ExportUrl" }).OutputValue
+$REVIEW_CODE_URL = ($outputs | Where-Object { $_.OutputKey -eq "ReviewCodeUrl" }).OutputValue
+$GIT_PUSH_URL = ($outputs | Where-Object { $_.OutputKey -eq "GitPushUrl" }).OutputValue
 $COGNITO_POOL_ID = ($outputs | Where-Object { $_.OutputKey -eq "CognitoUserPoolId" }).OutputValue
 $COGNITO_CLIENT_ID = ($outputs | Where-Object { $_.OutputKey -eq "CognitoClientId" }).OutputValue
 
@@ -108,6 +117,8 @@ VITE_API_URL=$API_URL
 VITE_GENERATE_URL=$GENERATE_URL
 VITE_DB_PROXY_URL=$DB_PROXY_URL
 VITE_EXPORT_URL=$EXPORT_URL
+VITE_REVIEW_CODE_URL=$REVIEW_CODE_URL
+VITE_GIT_PUSH_URL=$GIT_PUSH_URL
 VITE_COGNITO_USER_POOL_ID=$COGNITO_POOL_ID
 VITE_COGNITO_CLIENT_ID=$COGNITO_CLIENT_ID
 "@
@@ -135,9 +146,15 @@ Write-Host ""
 Write-Host "=== DONE ===" -ForegroundColor Green
 Write-Host ""
 Write-Host "Endpoints:" -ForegroundColor Cyan
-Write-Host "  API:      $API_URL"
-Write-Host "  Generate: $GENERATE_URL"
-Write-Host "  DB Proxy: $DB_PROXY_URL"
+Write-Host "  API:         $API_URL"
+Write-Host "  Generate:    $GENERATE_URL"
+Write-Host "  DB Proxy:    $DB_PROXY_URL"
+Write-Host "  Review Code: $REVIEW_CODE_URL"
+Write-Host "  Git Push:    $GIT_PUSH_URL"
+Write-Host ""
+Write-Host "Next steps for GitLab integration:" -ForegroundColor Yellow
+Write-Host "  Set GITLAB_URL, GITLAB_GROUP_ID, GITLAB_TEAM_MEMBERS in Lambda env vars"
+Write-Host "  Set TEAMS_WEBHOOK_URL, SERVICEDESK_URL in Lambda env vars"
 Write-Host ""
 Write-Host "Cognito:" -ForegroundColor Cyan
 Write-Host "  Pool ID:  $COGNITO_POOL_ID"

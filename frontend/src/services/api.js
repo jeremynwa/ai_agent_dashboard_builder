@@ -5,6 +5,8 @@ export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 const GENERATE_URL = import.meta.env.VITE_GENERATE_URL || `${API_BASE}/generate`;
 export const DB_PROXY_URL = import.meta.env.VITE_DB_PROXY_URL || `${API_BASE}/db`;
 const EXPORT_URL = import.meta.env.VITE_EXPORT_URL || `${API_BASE}/export`;
+const REVIEW_CODE_URL = import.meta.env.VITE_REVIEW_CODE_URL || `${API_BASE}/review-code`;
+const GIT_PUSH_URL = import.meta.env.VITE_GIT_PUSH_URL || `${API_BASE}/git-push`;
 
 // ============ AUTH HEADERS ============
 async function authHeaders() {
@@ -159,5 +161,93 @@ export async function getRules() {
   const headers = await authHeaders();
   const res = await fetch(`${API_BASE}/rules`, { headers });
   if (!res.ok) throw new Error('Failed to load rules');
+  return res.json();
+}
+
+// ============ INTAKE (AI routing) ============
+export async function routeIntake(message, history = []) {
+  const headers = await authHeaders();
+  const res = await fetch(`${API_BASE}/intake`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ message, history }),
+  });
+  if (!res.ok) {
+    // Graceful fallback — always return a route
+    return { route: 'generate', summary: message };
+  }
+  return res.json();
+}
+
+// ============ REVIEW CODE (web-app-reviewer skill) ============
+export async function reviewCode(files, appName, stackHint) {
+  const headers = await authHeaders();
+  const res = await fetch(REVIEW_CODE_URL, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ files, appName, stackHint }),
+  });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    if (res.status === 401) throw new Error('Session expirée. Reconnectez-vous.');
+    throw new Error(errBody.error || 'Code review failed');
+  }
+  return res.json();
+}
+
+// ============ GIT PUSH (GitLab) ============
+export async function pushToGitLab(files, projectName, description = '', generateCI = false) {
+  const headers = await authHeaders();
+  const res = await fetch(GIT_PUSH_URL, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ files, projectName, description, generateCI }),
+  });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    if (res.status === 401) throw new Error('Session expirée. Reconnectez-vous.');
+    throw new Error(errBody.error || 'GitLab push failed');
+  }
+  return res.json();
+}
+
+// ============ VM REQUEST ============
+export async function requestVm(payload) {
+  const headers = await authHeaders();
+  const res = await fetch(`${API_BASE}/vm-request`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    if (res.status === 401) throw new Error('Session expirée. Reconnectez-vous.');
+    throw new Error(errBody.error || 'VM request failed');
+  }
+  return res.json();
+}
+
+// ============ MY APPS (DynamoDB CRUD) ============
+export async function getMyApps() {
+  const headers = await authHeaders();
+  const res = await fetch(`${API_BASE}/apps`, { headers });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    throw new Error(errBody.error || 'Failed to load apps');
+  }
+  return res.json();
+}
+
+export async function saveApp(payload) {
+  const headers = await authHeaders();
+  const res = await fetch(`${API_BASE}/apps`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    throw new Error(errBody.error || 'Failed to save app');
+  }
   return res.json();
 }
