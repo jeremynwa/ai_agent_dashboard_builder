@@ -477,6 +477,7 @@ function Factory() {
   });
   const [generationStep, setGenerationStep] = useState(0);
   const [agentStatus, setAgentStatus] = useState('');
+  const [lastGenerateError, setLastGenerateError] = useState('');
   const [feedback, setFeedback] = useState('');
   const [currentFiles, setCurrentFiles] = useState({});
   const [showDataSource, setShowDataSource] = useState(false);
@@ -803,6 +804,7 @@ function Factory() {
   const handleGenerate = async () => {
     if (!prompt.trim() || !webcontainerRef.current) return;
     setIsLoading(true);
+    setLastGenerateError('');
     setPreviewUrl(null);
     setGenerationStep(0);
     setAgentStatus(t('starting'));
@@ -815,11 +817,13 @@ function Factory() {
         setSavedApps(prev => [...prev, { id: Date.now(), name: prompt.slice(0, 30), prompt, files: result.files }].slice(-10));
       } else {
         setAgentStatus(`${t('errorPrefix')}${result.error.slice(0, 200)}`);
+        setLastGenerateError(result.error.slice(0, 200));
       }
       setIsLoading(false);
     } catch (error) {
       addLog(`Error: ${error.message}`);
       setAgentStatus(`Error: ${error.message}`);
+      setLastGenerateError(error.message);
       setIsLoading(false);
     }
   };
@@ -1525,6 +1529,11 @@ function Factory() {
                   <Icons.sparkle />
                   {t('generateApp')}
                 </motion.button>
+                {lastGenerateError && (
+                  <div style={{ marginTop: '10px', color: '#EF4444', fontSize: '12px', textAlign: 'center', maxWidth: '480px', wordBreak: 'break-word' }}>
+                    Error: {lastGenerateError}
+                  </div>
+                )}
               </motion.div>
 
               {/* Suggestions */}
