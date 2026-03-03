@@ -27,7 +27,7 @@ Key files:
 
 ### 2.2 Backend (AWS Lambda + SAM)
 
-Five Lambda functions deployed via SAM (Serverless Application Model):
+Ten Lambda functions deployed via SAM (Serverless Application Model):
 
 | Function         | Trigger                          | Timeout | Purpose                              |
 | ---------------- | -------------------------------- | ------- | ------------------------------------ |
@@ -36,6 +36,11 @@ Five Lambda functions deployed via SAM (Serverless Application Model):
 | RulesFunction    | API Gateway                      | 30s     | Load business rules from S3          |
 | DbFunction       | Function URL                     | 60s     | Database proxy (PostgreSQL/MySQL)    |
 | ExportFunction   | API Gateway                      | 120s    | Export dashboard data as XLSX/PPTX/PDF |
+| IntakeFunction   | API Gateway POST /intake         | 15s     | AI routing chat (upload vs generate) |
+| ReviewCodeFunction | Function URL                   | 120s    | Web app quality review (web-app-reviewer skill) |
+| GitPushFunction  | Function URL                     | 30s     | Create GitLab repo + push files + add members |
+| VmRequestFunction | API Gateway POST /vm-request    | 60s     | Generate VM spec + Teams notification |
+| AppsFunction     | API Gateway GET+POST /apps       | 15s     | DynamoDB app registry per user        |
 
 ### 2.3 Authentication (AWS Cognito)
 
@@ -420,7 +425,90 @@ skills/vision-analyzer/
 - **Fallback**: Empty skill ID → graceful degradation to previous behavior
 - **Test**: `REVIEWER_SKILL_ID=... VISION_SKILL_ID=... node test-review-vision.mjs`
 
-### 3.8 Multi-Format Export (XLSX, PPTX, PDF)
+### 3.8 GitLab + VM Deployment Flow
+
+Three user workflows converge into a common deploy flow:
+
+#### Workflow 1 — Generate & Deploy
+```
+Prompt + Data → Generate Dashboard → (optional Review) → Deploy button → GitLab + VM
+```
+
+#### Workflow 2 — Upload & Review
+```
+Drop ZIP → Parse files → web-app-reviewer skill → Score ≥ 70? → Deploy → GitLab + VM
+```
+
+#### Workflow 3 — My Apps
+```
+GET /apps → DynamoDB AppRegistry → list per user
+```
+
+#### AI Intake Routing (`intake` Lambda)
+
+Claude Haiku receives the user's first message and returns routing:
+```json
+{ "route": "upload|generate|clarify", "question": "...", "summary": "..." }
+```
+- `generate` → existing factory (prompt + data)
+- `upload` → Upload & Review flow
+- `clarify` → follow-up question (max 2-3 turns)
+
+#### Web App Reviewer Skill (`web-app-reviewer`)
+
+General-purpose code reviewer for any uploaded web app (not dashboard-specific):
+
+```
+skills/web-app-reviewer/
+├── SKILL.md                         ← Instructions + output format
+├── scripts/
+│   └── check_web_app.py             ← 15 static checks
+└── references/
+    └── web-quality-checklist.md     ← Manual review checklist
+```
+
+**check_web_app.py** checks: hardcoded secrets, eval(), innerHTML, dangerouslySetInnerHTML, document.write, console.log, debugger, alert, TODO comments, files >500KB, missing React key props.
+
+**Output**: `{ score: 0-100, issues: [{severity, rule, file, line, message}], fixedFiles: {}, summary }`. Score ≥ 70 = approved for deployment.
+
+#### GitLab Push (`git-push` Lambda)
+
+Uses GitLab API v4 with a service account token (scope: `api`):
+
+1. `POST /api/v4/projects` — create repo under group `elevate-paris-apps` (ID 1658)
+2. `POST /api/v4/projects/:id/repository/commits` — push all files in one commit
+3. `POST /api/v4/projects/:id/members` — add `GITLAB_TEAM_MEMBERS` as Developers
+4. If `generateCI: true` — injects `.gitlab-ci.yml` + `azure-pipelines.yml` before commit
+
+**CI/CD YAML** is stack-aware (detected from `package.json` deps):
+- `.gitlab-ci.yml` → builds with `npm ci + npm run build`, deploys to GitLab Pages
+- `azure-pipelines.yml` → deploys to Azure Static Web Apps via `AzureStaticWebApp@0` task
+- Dist dirs: `next→out/`, `nuxt→.output/public`, `sveltekit→build/`, others→`dist/`
+
+#### VM Request (`vm-request` Lambda)
+
+1. Claude Haiku generates a structured VM spec (Azure size, estimated monthly cost)
+2. Teams webhook → `TEAMS_WEBHOOK_URL` (best-effort, non-fatal if missing)
+3. Service Desk API → `SERVICEDESK_URL` (best-effort, deferred — returns payload for manual submit if not configured)
+
+#### App Registry (`apps` Lambda + DynamoDB)
+
+Table `AppRegistry` (PK: `userId` Cognito sub, SK: `appId` UUID):
+```json
+{ "userId", "appId", "appName", "createdAt", "source", "reviewScore", "repoUrl", "webUrl", "ticketId", "stack", "status", "vmSpec" }
+```
+
+#### New Frontend Components
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| IntakeChat | `IntakeChat.jsx` | AI routing chat (upload vs generate) |
+| UploadCode | `UploadCode.jsx` | ZIP drop + file tree + Review button |
+| ReviewResults | `ReviewResults.jsx` | Score circle + issues list + Apply fixes |
+| DeployForm | `DeployForm.jsx` | GitLab project name + CI/CD toggle + VM form |
+| MyApps | `MyApps.jsx` | App history grid per user |
+
+### 3.9 Multi-Format Export (XLSX, PPTX, PDF)
 
 The export feature generates professional XLSX, PPTX, or PDF files from dashboard data using **Anthropic pre-built skills** (no custom skills needed).
 
@@ -500,7 +588,7 @@ const fileContent = await anthropic.beta.files.download(fileId, {
 - **Timeout**: 120s (file generation typically takes 30-60s)
 - **Payload limit**: API Gateway 10MB — sufficient for most exports
 
-### 3.9 Cost Optimization
+### 3.10 Cost Optimization
 
 Several optimizations reduce API costs without impacting output quality:
 
@@ -550,7 +638,7 @@ The frontend caches the `_analysisResult` returned by the first generation call.
 | Conditional review | -$0.145 (simple prompts) | Low |
 | stripToAppOnly | -$0.01 (-2%) | None |
 
-### 3.10 Monitoring
+### 3.11 Monitoring
 
 All `callClaude()` calls log structured JSON to CloudWatch:
 
@@ -577,7 +665,7 @@ filter event = "claude_call"
 | stats avg(elapsed_ms) as avg_latency, sum(input_tokens) as total_input, sum(output_tokens) as total_output by label
 ```
 
-### 3.11 Data Injection
+### 3.12 Data Injection
 
 Two modes for data:
 
@@ -715,6 +803,24 @@ VISION_SKILL_ID="skill_016hJRgXdpBiDrcbknvQYQLW"       ← Vision skill (empty =
 REVIEW_MODEL="claude-haiku-4-5-20251001"     ← TEST: Haiku for review (PROD: remove or set claude-sonnet-4-20250514)
 VISION_MODEL="claude-haiku-4-5-20251001"     ← TEST: Haiku for vision (PROD: remove or set claude-sonnet-4-20250514)
 EXPORT_MODEL="claude-haiku-4-5-20251001"     ← TEST: Haiku for export (PROD: remove or set claude-sonnet-4-20250514)
+
+# GitLab + VM deployment
+GITLAB_URL="https://git.simon-kucher.com"             ← GitLab root URL (NOT a repo path)
+GITLAB_TOKEN (parameter, scope: api)                   ← Service account token
+GITLAB_GROUP_ID="1658"                                 ← elevate-paris-apps group ID
+GITLAB_TEAM_MEMBERS="user1, user2, user3"              ← Auto-added as Developer on each new repo
+TEAMS_WEBHOOK_URL=""                                   ← Teams incoming webhook (optional)
+SERVICEDESK_URL=""                                     ← Service Desk API endpoint (deferred)
+SERVICEDESK_TOKEN (parameter)                          ← Service Desk auth token
+WEB_APP_REVIEWER_SKILL_ID=""                           ← Fill after: node manage-skills.mjs upload skills/web-app-reviewer
+REVIEW_PASS_THRESHOLD="70"                             ← Min score to enable Deploy button
+APP_REGISTRY_TABLE="AppRegistry"                       ← DynamoDB table name
+```
+
+**Frontend (.env) — additional vars auto-written by deploy.ps1:**
+```
+VITE_REVIEW_CODE_URL=https://xxx.lambda-url.eu-north-1.on.aws/
+VITE_GIT_PUSH_URL=https://xxx.lambda-url.eu-north-1.on.aws/
 ```
 
 ## 7. Known Issues & Solutions
@@ -848,7 +954,95 @@ Response: { "rows": [...] }
 
 ⚠️ The proxy currently accepts arbitrary SQL with no filtering. See Security section for planned improvements.
 
-### 8.5 Export (XLSX/PPTX/PDF)
+### 8.5 Intake Routing
+
+```
+POST {API_URL}/prod/intake
+Authorization: Bearer {JWT}
+Content-Type: application/json
+
+{ "message": "J'ai une app React que je veux déployer", "history": [] }
+
+Response: { "route": "upload|generate|clarify", "question": "...", "summary": "..." }
+```
+
+### 8.6 Review Code
+
+```
+POST {REVIEW_CODE_URL}          ← Function URL (VITE_REVIEW_CODE_URL)
+Authorization: Bearer {JWT}
+Content-Type: application/json
+
+{ "files": { "src/App.jsx": "...", "package.json": "..." }, "appName": "my-app", "stackHint": "react" }
+
+Response: { "score": 82, "issues": [...], "fixedFiles": { "src/App.jsx": "..." }, "approved": true, "stack": "react" }
+```
+
+### 8.7 Push to GitLab
+
+```
+POST {GIT_PUSH_URL}             ← Function URL (VITE_GIT_PUSH_URL)
+Authorization: Bearer {JWT}
+Content-Type: application/json
+
+{
+  "files": { "src/App.jsx": "...", "package.json": "..." },
+  "projectName": "dashboard-sales-q1",
+  "description": "Analytics dashboard for finance team",
+  "generateCI": true
+}
+
+Response: {
+  "success": true,
+  "repoUrl": "https://git.simon-kucher.com/elevate-paris-apps/dashboard-sales-q1.git",
+  "webUrl": "https://git.simon-kucher.com/elevate-paris-apps/dashboard-sales-q1",
+  "projectId": 456,
+  "filesCommitted": 8,
+  "collaboratorsAdded": ["user1", "user2"],
+  "pendingCollaborators": [],
+  "ciFilesAdded": [".gitlab-ci.yml", "azure-pipelines.yml"]
+}
+```
+
+### 8.8 Request VM
+
+```
+POST {API_URL}/prod/vm-request
+Authorization: Bearer {JWT}
+Content-Type: application/json
+
+{
+  "appName": "dashboard-sales-q1",
+  "repoUrl": "https://git.simon-kucher.com/...",
+  "stack": "react",
+  "estimatedUsers": 20,
+  "justification": "Finance team analytics dashboard",
+  "vmSize": "Standard_B2s",
+  "duration": "3 months",
+  "reviewScore": 82
+}
+
+Response: { "ticketId": "INC0012345", "vmSpec": { "vmSize": "Standard_B2s", "estimatedMonthlyCost": "~$60/mo" }, "teamsMessageSent": true }
+```
+
+### 8.9 My Apps
+
+```
+GET {API_URL}/prod/apps
+Authorization: Bearer {JWT}
+
+Response: { "apps": [{ "appId", "appName", "createdAt", "source", "reviewScore", "repoUrl", "status", ... }] }
+
+POST {API_URL}/prod/apps
+Authorization: Bearer {JWT}
+Content-Type: application/json
+
+{ "appName": "...", "source": "generated|uploaded", "reviewScore": 82, "repoUrl": "...", "ticketId": "...", "stack": "react", "status": "deployed" }
+
+Response: { "appId": "uuid", "saved": true }
+```
+
+### 8.10 Export (XLSX/PPTX/PDF)
 
 ```
 POST {API_URL}/prod/export
