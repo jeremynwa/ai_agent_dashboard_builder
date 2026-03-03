@@ -3,8 +3,8 @@
 ## Résumé du Projet
 
 **Nom** : `ai_agent_dashboard_builder`
-**Objectif** : L'utilisateur upload ses données (CSV/Excel) ou connecte une BDD, écrit un prompt, et un agent IA génère un dashboard React complet en live avec preview.
-**Contexte** : Outil interne SK pour générer des dashboards d'analyse professionnels.
+**Objectif** : Outil interne SK avec 3 flows : (1) générer un dashboard React depuis données/prompt, (2) uploader une app existante → review agents → déploiement GitLab, (3) voir "Mes Apps".
+**Contexte** : Consultants SK uploadent données ou code, un agent IA génère/review, puis déploie automatiquement sur GitLab + demande une VM Azure.
 
 ## État Actuel
 
@@ -78,17 +78,36 @@
 - [x] Monitoring structuré : logs JSON dans `callClaude()` (tokens, latence, skill, modèle)
 - [x] Skill upload automation dans `deploy.ps1` (prompt optionnel post-deploy)
 - [x] Integration test: `test-review-vision.mjs` (review bad/good code + vision)
+- [x] **GitLab + VM flow** — 3 nouveaux workflows : generate→deploy, upload→review→deploy, My Apps
+- [x] AI Intake Chat (`IntakeChat.jsx`) — Claude route l'utilisateur : upload ou generate
+- [x] Upload & Review flow (`UploadCode.jsx` + `ReviewResults.jsx`) — ZIP drop, parse, web-app-reviewer agents, score gate ≥ 70
+- [x] `web-app-reviewer` skill — 15 checks statiques Python (XSS, secrets, eval, console.log...) + review qualité IA
+- [x] Lambda `intake` — POST /intake, routing IA, 15s
+- [x] Lambda `review-code` — Function URL, 120s, web-app-reviewer skill
+- [x] Lambda `git-push` — Function URL, 30s, GitLab API v4 (create repo + commit + add members + CI/CD YAML)
+- [x] Lambda `vm-request` — POST /vm-request, 60s, Claude génère VM spec + Teams webhook (best-effort)
+- [x] Lambda `apps` — GET+POST /apps, 15s, DynamoDB AppRegistry par user
+- [x] `DeployForm.jsx` — GitLab project name + CI/CD toggle + VM request form
+- [x] `MyApps.jsx` — historique apps par user (DynamoDB)
+- [x] DynamoDB `AppRegistry` (PK: userId, SK: appId, PAY_PER_REQUEST)
+- [x] CI/CD YAML generation dans `git-push` — `.gitlab-ci.yml` + `azure-pipelines.yml` auto selon stack détectée
+- [x] `detectStack()` dans git-push — package.json deps → next/nuxt/svelte/angular/vue/react/vite
+- [x] 6 nouvelles fonctions API dans `api.js` — routeIntake, reviewCode, pushToGitLab, requestVm, getMyApps, saveApp
+- [x] `deploy.ps1` mis à jour — GitLabToken param, REVIEW_CODE_URL + GIT_PUSH_URL dans frontend/.env
 
 ### En cours / À faire
 
-- [ ] Deploy tout (`cd lambda-v2 && .\deploy.ps1`)
+- [ ] Deploy tout (`cd lambda-v2 && .\deploy.ps1` ou AWS CloudShell si SAM pas installé localement)
+- [ ] Corriger `GITLAB_URL` dans template.yaml → doit être `https://git.simon-kucher.com` (pas le chemin complet)
+- [ ] Uploader `web-app-reviewer` skill → récupérer skill ID → mettre dans `WEB_APP_REVIEWER_SKILL_ID`
+- [ ] Tester flow GitLab push (create repo + commit + collaborators)
+- [ ] Configurer `TEAMS_WEBHOOK_URL` pour notifications data team
 - [ ] Tester industry selector avec chaque secteur
 - [ ] Tester export buttons (XLSX, PPTX, PDF)
 - [ ] Tester flow publish avec auth (build → S3)
-- [ ] Tester flow DB Connect avec auth
 - [ ] CloudFront pour le frontend (production)
-- [ ] **Sécurité publish mode DB** — Les credentials DB sont dans le JS bundlé → risque si URL partagée (voir section Sécurité)
-- [ ] Polling auto pour mode DB (refresh données toutes les 30s)
+- [ ] **Sécurité publish mode DB** — credentials dans JS bundlé → risque si URL partagée
+- [ ] Service Desk integration (`SERVICEDESK_URL`) — déféré
 
 ## Architecture
 
@@ -114,18 +133,36 @@ BROWSER DU CLIENT
 │  └─────────────┘  └──────────────────┘   │
 │                                          │
 │  ┌─────────────────────────────────────┐ │
-│  │ Lambda Functions                    │ │
+│  │ Lambda Functions (10 total)         │ │
 │  │ • generate (Function URL, 600s)     │ │
 │  │ • publish (API Gateway)             │ │
 │  │ • rules (API Gateway)               │ │
 │  │ • db proxy (Function URL)           │ │
 │  │ • export (API Gateway, 120s)        │ │
+│  │ • intake (API Gateway, 15s)         │ │
+│  │ • review-code (Function URL, 120s)  │ │
+│  │ • git-push (Function URL, 30s)      │ │
+│  │ • vm-request (API Gateway, 60s)     │ │
+│  │ • apps (API Gateway, 15s)           │ │
+│  └─────────────────────────────────────┘ │
+│                                          │
+│  ┌─────────────────────────────────────┐ │
+│  │ DynamoDB                            │ │
+│  │ • AppRegistry (userId + appId)      │ │
 │  └─────────────────────────────────────┘ │
 │                                          │
 │  ┌─────────────────────────────────────┐ │
 │  │ API Gateway (HTTP)                  │ │
 │  │ /prod/rules, /prod/publish,         │ │
-│  │ /prod/db-schema, /prod/export       │ │
+│  │ /prod/db-schema, /prod/export,      │ │
+│  │ /prod/intake, /prod/vm-request,     │ │
+│  │ /prod/apps                          │ │
+│  └─────────────────────────────────────┘ │
+│                                          │
+│  ┌─────────────────────────────────────┐ │
+│  │ GitLab (git.simon-kucher.com)       │ │
+│  │ • group elevate-paris-apps (ID 1658)│ │
+│  │ • auto-create repos per app         │ │
 │  └─────────────────────────────────────┘ │
 └──────────────────────────────────────────┘
 ```
@@ -164,7 +201,12 @@ ai_agent_dashboard_builder/
 │           ├── Login.jsx
 │           ├── MatrixRain.jsx
 │           ├── FileUpload.jsx
-│           └── DbConnect.jsx
+│           ├── DbConnect.jsx
+│           ├── IntakeChat.jsx    ← AI routing chat (upload vs generate)
+│           ├── UploadCode.jsx    ← ZIP drop + file tree + review button
+│           ├── ReviewResults.jsx ← score badge + issues + apply fixes
+│           ├── DeployForm.jsx    ← GitLab repo + VM request form
+│           └── MyApps.jsx        ← historique apps par user (DynamoDB)
 │
 └── lambda-v2/
     ├── deploy.ps1
@@ -182,6 +224,11 @@ ai_agent_dashboard_builder/
     ├── publish/index.mjs
     ├── rules/index.mjs
     ├── db/index.mjs
+    ├── intake/index.mjs          ← AI routing (upload vs generate), Haiku, 15s
+    ├── review-code/index.mjs     ← web-app-reviewer skill, score gate ≥ 70, 120s
+    ├── git-push/index.mjs        ← GitLab API v4, CI/CD YAML gen, add members, 30s
+    ├── vm-request/index.mjs      ← Claude VM spec + Teams webhook (best-effort), 60s
+    ├── apps/index.mjs            ← DynamoDB AppRegistry CRUD, 15s
     ├── export/                   ← Export Lambda (XLSX, PPTX, PDF)
     │   ├── index.mjs             ← Anthropic pre-built skills + Files API
     │   ├── package.json          ← SDK 0.74.0
@@ -216,9 +263,15 @@ ai_agent_dashboard_builder/
         │   ├── SKILL.md
         │   └── references/
         │       └── common-issues.md ← 12 patterns bugs visuels + fixes
-        └── industry-logistics/   ← Secteur Logistique/Supply Chain
+        ├── industry-logistics/   ← Secteur Logistique/Supply Chain
+        │   ├── SKILL.md
+        │   └── references/
+        └── web-app-reviewer/     ← Review qualité généraliste (toute app web)
             ├── SKILL.md
+            ├── scripts/
+            │   └── check_web_app.py  ← 15 checks (XSS, secrets, eval, console.log...)
             └── references/
+                └── web-quality-checklist.md
 ```
 
 ## Design System — ds.css
@@ -281,6 +334,7 @@ Le mode est contrôlé par `USE_BETA_API` + `DASHBOARD_SKILL_ID` + `DATA_ANALYZE
 |-------|----------|------|
 | Dashboard Reviewer | `skill_01G3LJaHUFQn9WTbcrmTFCrB` | Vérifications statiques (check_code.py) + review qualité IA |
 | Vision Analyzer | `skill_016hJRgXdpBiDrcbknvQYQLW` | Analyse screenshots, détecte problèmes visuels, corrige code |
+| Web App Reviewer | `WEB_APP_REVIEWER_SKILL_ID` (à configurer) | Review généraliste toute app web (XSS, secrets, perf, a11y) |
 
 - **Review** : `check_code.py` (15 checks : imports, PieChart+Cell, COLORS, emojis, gradient IDs, insights, filtres, IDs bruts)
 - **Vision** : `common-issues.md` (12 patterns : overlaps, espaces vides, texte illisible, PieChart gris, filtres cassés)
@@ -297,6 +351,59 @@ Le mode est contrôlé par `USE_BETA_API` + `DASHBOARD_SKILL_ID` + `DATA_ANALYZE
 - **Frontend** : 3 boutons export (XLSX, PPTX, PDF) → base64 → Blob → download automatique
 - **Timeout** : 120s
 - **Coût** : ~$0.10-0.15 par export
+
+## GitLab + VM Deployment Flow
+
+### 3 Workflows
+
+1. **Generate & Deploy** : prompt + data → generate dashboard → (optionnel) review → Deploy button → GitLab repo + VM request
+2. **Upload & Review** : drop ZIP → parse → web-app-reviewer agents → score ≥ 70 → Deploy → GitLab repo + VM request
+3. **My Apps** : liste des apps déployées par user (DynamoDB AppRegistry)
+
+### Routing — IntakeChat
+
+Claude Haiku reçoit le message de l'utilisateur → retourne `{ route: "upload|generate|clarify" }`.
+- `upload` → flow Upload & Review
+- `generate` → factory existante (prompt + données)
+- `clarify` → question de suivi
+
+### GitLab — git-push Lambda
+
+- **URL base** : `https://git.simon-kucher.com` (`GITLAB_URL`)
+- **Groupe** : `elevate-paris-apps` (ID `1658`, `GITLAB_GROUP_ID`)
+- **Token** : service account, scope `api` (`GITLAB_TOKEN` via deploy.ps1)
+- **Membres auto** : `GITLAB_TEAM_MEMBERS` — ajoutés comme Developer à chaque nouveau repo
+- **CI/CD** : checkbox dans DeployForm → génère `.gitlab-ci.yml` + `azure-pipelines.yml` selon stack détectée
+- **Stack detection** : package.json deps → next/nuxt/sveltekit/angular/vue/react/vite
+- **Dist dirs** : next→`out/`, nuxt→`.output/public`, sveltekit→`build/`, angular→`dist/`, autres→`dist/`
+
+### VM Request — vm-request Lambda
+
+- Claude Haiku génère un VM spec structuré (size, cost estimate)
+- Teams webhook (best-effort) → `TEAMS_WEBHOOK_URL`
+- Service Desk (best-effort) → `SERVICEDESK_URL` (déféré)
+- Si `SERVICEDESK_URL` vide → retourne le payload pour soumission manuelle
+
+### Env Vars GitLab/VM (template.yaml)
+
+```
+GITLAB_URL            = "https://git.simon-kucher.com"
+GITLAB_TOKEN          = !Ref GitLabToken (param deploy.ps1)
+GITLAB_GROUP_ID       = "1658"
+GITLAB_TEAM_MEMBERS   = "user1, user2, user3"
+TEAMS_WEBHOOK_URL     = "" (à configurer)
+SERVICEDESK_URL       = "" (déféré)
+SERVICEDESK_TOKEN     = !Ref ServiceDeskToken
+WEB_APP_REVIEWER_SKILL_ID = "" (à remplir après upload du skill)
+REVIEW_PASS_THRESHOLD = "70"
+APP_REGISTRY_TABLE    = "AppRegistry"
+```
+
+Frontend `.env` (auto-écrit par deploy.ps1) :
+```
+VITE_REVIEW_CODE_URL  = <ReviewCodeFunction URL>
+VITE_GIT_PUSH_URL     = <GitPushFunction URL>
+```
 
 ## Publish & Export
 
@@ -330,6 +437,7 @@ node manage-skills.mjs upload skills/industry-saas
 node manage-skills.mjs upload skills/industry-logistics
 node manage-skills.mjs upload skills/dashboard-reviewer    # Upload reviewer skill
 node manage-skills.mjs upload skills/vision-analyzer       # Upload vision skill
+node manage-skills.mjs upload skills/web-app-reviewer      # Upload web app reviewer skill
 node manage-skills.mjs get <skill-id>                     # Get skill details
 
 # Tests
@@ -367,4 +475,11 @@ REVIEWER_SKILL_ID=skill_01... VISION_SKILL_ID=skill_01... node test-review-visio
 - Review skill-based : `check_code.py` vérifie 15 points (imports, PieChart+Cell, COLORS, emojis, gradient IDs, insights, filtres, IDs bruts) → Claude corrige
 - Vision skill-based : utilise `callClaude()` avec `common-issues.md` comme référence, fallback vers API directe si skill non configuré
 - Monitoring : `callClaude()` log JSON structuré (event, label, model, skills, tokens, elapsed_ms, stop_reason) → CloudWatch Logs Insights
-- `deploy.ps1` : prompt optionnel "Upload/update Agent Skills?" après SAM deploy, boucle sur les 8 dossiers skills
+- `deploy.ps1` : prompt optionnel "Upload/update Agent Skills?" après SAM deploy, boucle sur les 9 dossiers skills (+ web-app-reviewer)
+- GitLab token : scope `api` uniquement (couvre create project, push commit, add members)
+- `git-push` Lambda : slug collision → fallback avec suffix timestamp (ex: `mon-app-k3f2a`)
+- `git-push` Lambda : `generateCI: true` → injecte `.gitlab-ci.yml` + `azure-pipelines.yml` dans le commit
+- `review-code` Lambda : fallback system prompt si `WEB_APP_REVIEWER_SKILL_ID` vide (graceful degradation)
+- `vm-request` Lambda : Teams + ServiceDesk tous deux best-effort (non-fatal si échoue)
+- `apps` Lambda : DynamoDB QueryCommand par userId, triés par createdAt DESC
+- AWS CloudShell : alternative à SAM CLI local (SAM pré-installé, accessible depuis la console AWS)
