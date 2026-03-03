@@ -97,8 +97,12 @@
 
 ### En cours / À faire
 
-- [ ] Deploy tout (`cd lambda-v2 && .\deploy.ps1` ou AWS CloudShell si SAM pas installé localement)
-- [ ] Corriger `GITLAB_URL` dans template.yaml → doit être `https://git.simon-kucher.com` (pas le chemin complet)
+- [x] Deploy backend (SAM via AWS CloudShell) — fait
+- [x] Corriger `GITLAB_URL` dans template.yaml → `https://git.simon-kucher.com` — corrigé
+- [ ] **🔴 BUG EN COURS — Generate silencieux** : generate échoue après ~15s et revient sans message d'erreur
+  - Cause probable : `VITE_GENERATE_URL` (et autres `VITE_*`) non configurés dans Azure Static Web Apps Application Settings → fallback sur `http://localhost:3001/generate` qui timeout
+  - Fix code déjà appliqué : `lastGenerateError` state dans `App.jsx` — l'erreur sera maintenant visible en rouge sous le bouton Generate après l'échec
+  - Fix Azure nécessaire : Azure Portal → Static Web App → Configuration → Application Settings → ajouter `VITE_API_URL`, `VITE_GENERATE_URL`, `VITE_DB_PROXY_URL`, `VITE_REVIEW_CODE_URL`, `VITE_GIT_PUSH_URL`, `VITE_COGNITO_USER_POOL_ID`, `VITE_COGNITO_CLIENT_ID` (valeurs depuis CloudFormation Outputs → stack `app-factory`)
 - [ ] Uploader `web-app-reviewer` skill → récupérer skill ID → mettre dans `WEB_APP_REVIEWER_SKILL_ID`
 - [ ] Tester flow GitLab push (create repo + commit + collaborators)
 - [ ] Configurer `TEAMS_WEBHOOK_URL` pour notifications data team
