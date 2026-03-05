@@ -462,6 +462,35 @@ Resources:
         Banner:
           - js=import { createRequire } from 'module'; const require = createRequire(import.meta.url);
 
+  # ============ ESTIMATE COST ============
+  EstimateCostFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: app-factory-estimate-cost
+      Handler: index.handler
+      CodeUri: estimate-cost/
+      Timeout: 5
+      MemorySize: 128
+      Events:
+        Post:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref AppFactoryApi
+            Path: /estimate-cost
+            Method: POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: false
+        Target: es2022
+        Format: esm
+        OutExtension:
+          - .js=.mjs
+        EntryPoints:
+          - index.mjs
+        Banner:
+          - js=import { createRequire } from 'module'; const require = createRequire(import.meta.url);
+
   # ============ APPS (My Apps CRUD — DynamoDB) ============
   AppsFunction:
     Type: AWS::Serverless::Function

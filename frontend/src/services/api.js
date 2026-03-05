@@ -241,6 +241,36 @@ export async function requestVm(payload) {
   return res.json();
 }
 
+// ============ ESTIMATE COST ============
+export async function estimateCost({ prompt, rowCount = 0, hasData = false, industry = null, dbMode = false }) {
+  const headers = await authHeaders();
+  const res = await fetch(`${API_BASE}/estimate-cost`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      prompt: typeof prompt === 'string' ? prompt.length : 0,
+      rowCount,
+      hasData,
+      industry,
+      dbMode,
+    }),
+  });
+  if (!res.ok) return null; // graceful fallback
+  return res.json();
+}
+
+// ============ CLARIFY PROMPT ============
+export async function clarifyPrompt(message, industry = null, hasData = false, dbMode = false) {
+  const headers = await authHeaders();
+  const res = await fetch(`${API_BASE}/intake`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ message, mode: 'clarify', industry, hasData, dbMode }),
+  });
+  if (!res.ok) return { questions: [] }; // graceful fallback
+  return res.json();
+}
+
 // ============ MY APPS (DynamoDB CRUD) ============
 export async function getMyApps() {
   const headers = await authHeaders();

@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, createContext, useContext } from 'r
 import { motion, AnimatePresence } from 'motion/react';
 import { WebContainer, configureAPIKey } from '@webcontainer/api';
 import { baseFiles } from './services/files-template';
-import { generateApp, visionAnalyze, publishApp, exportApp, reviewCode, API_BASE, DB_PROXY_URL } from './services/api';
+import { generateApp, visionAnalyze, publishApp, exportApp, reviewCode, estimateCost, clarifyPrompt, API_BASE, DB_PROXY_URL } from './services/api';
 import { exportToZip } from './services/export';
 import { SK } from './services/sk-theme';
 import FileUpload from './components/FileUpload';
@@ -16,6 +16,7 @@ import UploadCode from './components/UploadCode';
 import ReviewResults from './components/ReviewResults';
 import DeployForm from './components/DeployForm';
 import MyApps from './components/MyApps';
+import ClarificationChat from './components/ClarificationChat';
 
 // Configure WebContainer API key at module level (MUST be before any .boot() call)
 const _wcClientId = import.meta.env.VITE_WEBCONTAINER_CLIENT_ID;
@@ -169,6 +170,12 @@ const translations = {
     deployLocked: 'Deploy locked (score {score}/100 < 70)',
     deployScoreRequired: 'Score must be 70+ to deploy (current: {score})',
     fixPrefix: 'Fix:',
+    estimatedCost: 'Est. ~${cost} USD',
+    clarifyTitle: 'A few quick questions',
+    clarifyYourPrompt: 'Your prompt',
+    clarifyPlaceholder: 'Type your answer...',
+    clarifySkip: 'Skip & generate now',
+    clarifyLoading: 'Preparing questions...',
   },
   fr: {
     title: 'Que voulez-vous construire ?',
@@ -272,6 +279,12 @@ const translations = {
     deployLocked: 'Déploiement verrouillé (score {score}/100 < 70)',
     deployScoreRequired: 'Le score doit être 70+ pour déployer (actuel : {score})',
     fixPrefix: 'Correction :',
+    estimatedCost: 'Est. ~${cost} USD',
+    clarifyTitle: 'Quelques questions rapides',
+    clarifyYourPrompt: 'Votre prompt',
+    clarifyPlaceholder: 'Tapez votre réponse...',
+    clarifySkip: 'Passer & générer maintenant',
+    clarifyLoading: 'Préparation des questions...',
   },
 };
 
@@ -500,6 +513,8 @@ function Factory() {
   const [reviewError, setReviewError] = useState('');
   const [showDeployForm, setShowDeployForm] = useState(false);
   const [deployFilesOverride, setDeployFilesOverride] = useState(null); // fixed files after apply
+  const [costEstimate, setCostEstimate] = useState(null); // { total, breakdown, currency }
+  const [clarifyState, setClarifyState] = useState(null); // null | 'loading' | { questions: [...] }
   const webcontainerRef = useRef(null);
   const bootedRef = useRef(false);
   const iframeRef = useRef(null);
@@ -559,6 +574,31 @@ function Factory() {
         setBootError(error.message);
       });
   }, []);
+
+  // ---- Debounced cost estimate ----
+  useEffect(() => {
+    if (!prompt.trim() || prompt.trim().length < 10) {
+      setCostEstimate(null);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const hasData = !!(excelData || dbData);
+        const rowCount = excelData?.totalRows || 0;
+        const result = await estimateCost({
+          prompt,
+          rowCount,
+          hasData,
+          industry: selectedIndustry || null,
+          dbMode: !!dbData,
+        });
+        if (result) setCostEstimate(result);
+      } catch {
+        // silent — cost estimate is non-critical
+      }
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [prompt, excelData, dbData, selectedIndustry]);
 
   const handleDataLoaded = (data) => {
     setExcelData(data);
@@ -806,20 +846,20 @@ function Factory() {
     }
   };
 
-  const handleGenerate = async () => {
-    if (!prompt.trim() || !webcontainerRef.current) return;
+  const startGeneration = async (finalPrompt) => {
     setIsLoading(true);
+    setClarifyState(null);
     setLastGenerateError('');
     setPreviewUrl(null);
     setGenerationStep(0);
     setAgentStatus(t('starting'));
     try {
-      const result = await agentGenerate(prompt);
+      const result = await agentGenerate(finalPrompt);
       if (result.success) {
         setGenerationStep(5);
         setAgentStatus('');
-        setGeneratedApp({ name: prompt.slice(0, 30), prompt, url: result.url });
-        setSavedApps(prev => [...prev, { id: Date.now(), name: prompt.slice(0, 30), prompt, files: result.files }].slice(-10));
+        setGeneratedApp({ name: finalPrompt.slice(0, 30), prompt: finalPrompt, url: result.url });
+        setSavedApps(prev => [...prev, { id: Date.now(), name: finalPrompt.slice(0, 30), prompt: finalPrompt, files: result.files }].slice(-10));
       } else {
         setAgentStatus(`${t('errorPrefix')}${result.error.slice(0, 200)}`);
         setLastGenerateError(result.error.slice(0, 200));
@@ -831,6 +871,24 @@ function Factory() {
       setLastGenerateError(error.message);
       setIsLoading(false);
     }
+  };
+
+  const handleGenerate = async () => {
+    if (!prompt.trim() || !webcontainerRef.current) return;
+    // Start clarification flow
+    setClarifyState('loading');
+    try {
+      const hasData = !!(excelData || dbData);
+      const result = await clarifyPrompt(prompt, selectedIndustry || null, hasData, !!dbData);
+      if (result.questions && result.questions.length > 0) {
+        setClarifyState({ questions: result.questions });
+        return; // wait for user to answer questions
+      }
+    } catch {
+      // clarify failed — proceed directly
+    }
+    setClarifyState(null);
+    startGeneration(prompt);
   };
 
   const restoreApp = async (app) => {
@@ -1523,26 +1581,63 @@ function Factory() {
                   )}
                 </AnimatePresence>
 
-                <motion.button
-                  style={{
-                    ...styles.generateButton,
-                    opacity: (!prompt.trim() || !isReady) ? 0.4 : 1,
-                    cursor: (!prompt.trim() || !isReady) ? 'default' : 'pointer',
-                  }}
-                  onClick={handleGenerate}
-                  disabled={!prompt.trim() || !isReady}
-                  whileHover={prompt.trim() && isReady ? { scale: 1.015 } : {}}
-                  whileTap={prompt.trim() && isReady ? { scale: 0.985 } : {}}
-                >
-                  <Icons.sparkle />
-                  {t('generateApp')}
-                </motion.button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <motion.button
+                    style={{
+                      ...styles.generateButton,
+                      flex: 1,
+                      opacity: (!prompt.trim() || !isReady || clarifyState === 'loading') ? 0.4 : 1,
+                      cursor: (!prompt.trim() || !isReady || clarifyState === 'loading') ? 'default' : 'pointer',
+                    }}
+                    onClick={handleGenerate}
+                    disabled={!prompt.trim() || !isReady || clarifyState === 'loading'}
+                    whileHover={prompt.trim() && isReady && clarifyState !== 'loading' ? { scale: 1.015 } : {}}
+                    whileTap={prompt.trim() && isReady && clarifyState !== 'loading' ? { scale: 0.985 } : {}}
+                  >
+                    <Icons.sparkle />
+                    {clarifyState === 'loading' ? t('clarifyLoading') : t('generateApp')}
+                  </motion.button>
+                  <AnimatePresence>
+                    {costEstimate && !clarifyState && (
+                      <motion.span
+                        style={styles.costBadge}
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.9 }}
+                        transition={{ duration: 0.25 }}
+                      >
+                        {t('estimatedCost').replace('${cost}', costEstimate.total.toFixed(2))}
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                </div>
                 {lastGenerateError && (
                   <div style={{ marginTop: '10px', color: SK.signalRed, fontSize: '12px', textAlign: 'center', maxWidth: '480px', wordBreak: 'break-word' }}>
                     Error: {lastGenerateError}
                   </div>
                 )}
               </motion.div>
+
+              {/* Clarification Chat */}
+              <AnimatePresence>
+                {clarifyState && clarifyState !== 'loading' && clarifyState.questions && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.3 }}
+                    style={{ marginBottom: '32px', display: 'flex', justifyContent: 'center' }}
+                  >
+                    <ClarificationChat
+                      questions={clarifyState.questions}
+                      originalPrompt={prompt}
+                      onComplete={(enrichedPrompt) => startGeneration(enrichedPrompt)}
+                      onSkip={() => { setClarifyState(null); startGeneration(prompt); }}
+                      t={t}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               {/* Suggestions */}
               <motion.div
@@ -2013,8 +2108,19 @@ const styles = {
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
   },
+  costBadge: {
+    fontSize: '12px',
+    color: SK.aqua,
+    border: `1px solid rgba(109, 177, 199, 0.25)`,
+    background: 'rgba(109, 177, 199, 0.08)',
+    borderRadius: '6px',
+    padding: '8px 12px',
+    whiteSpace: 'nowrap',
+    fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+    letterSpacing: '0.02em',
+    flexShrink: 0,
+  },
   generateButton: {
-    width: '100%',
     background: SK.ruby,
     color: SK.textInverse,
     border: 'none',

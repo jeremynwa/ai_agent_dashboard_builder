@@ -25,6 +25,25 @@ Respond ONLY with a JSON object — no extra text:
 - "summary" is always included
 - Be decisive — the vast majority of messages should resolve to upload or generate without clarifying`;
 
+const CLARIFY_SYSTEM = `You are an AI assistant that helps users refine their app requirements.
+Given the user's prompt, generate 2-3 targeted clarifying questions that will produce a MUCH better app.
+
+Focus on the MOST impactful questions:
+- What specific KPIs/metrics matter most?
+- What visual layout or style do they prefer? (dark theme, minimal, corporate, etc.)
+- What actions should be possible? (filter, export, drill-down)
+- What time period or data granularity?
+- Any specific charts they want? (bar, line, pie, heatmap, etc.)
+
+Context about data/industry is provided when available — tailor questions accordingly.
+Do NOT ask about things already specified in the prompt.
+Keep questions concise (one sentence each).
+
+Respond ONLY with a JSON object:
+{ "questions": ["question1", "question2", "question3"] }
+
+Return 2-3 questions maximum. Each question should be specific and actionable.`;
+
 const HEADERS = {
   'Content-Type': 'application/json',
   'Access-Control-Allow-Origin': '*',
@@ -43,7 +62,40 @@ export const handler = async (event) => {
   if (authError) return reply(statusCode, { error: authError });
 
   try {
-    const { message, history = [] } = JSON.parse(event.body || '{}');
+    const body = JSON.parse(event.body || '{}');
+    const { message, history = [], mode } = body;
+
+    // ---- CLARIFY MODE ----
+    if (mode === 'clarify') {
+      if (!message?.trim()) return reply(400, { error: 'message is required' });
+
+      const contextParts = [`User prompt: "${message}"`];
+      if (body.industry) contextParts.push(`Industry: ${body.industry}`);
+      if (body.hasData) contextParts.push('User has uploaded data (Excel/CSV)');
+      if (body.dbMode) contextParts.push('User is connected to a database');
+
+      const response = await anthropic.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 512,
+        temperature: 0.3,
+        system: CLARIFY_SYSTEM,
+        messages: [{ role: 'user', content: contextParts.join('\n') }],
+      });
+
+      const text = response.content[0]?.text || '{}';
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+
+      if (!jsonMatch) {
+        return reply(200, { questions: [] });
+      }
+
+      const result = JSON.parse(jsonMatch[0]);
+      return reply(200, {
+        questions: Array.isArray(result.questions) ? result.questions.slice(0, 3) : [],
+      });
+    }
+
+    // ---- ROUTING MODE (default) ----
     if (!message?.trim()) return reply(400, { error: 'message is required' });
 
     const messages = [
@@ -63,7 +115,6 @@ export const handler = async (event) => {
     const jsonMatch = text.match(/\{[\s\S]*\}/);
 
     if (!jsonMatch) {
-      // Fallback: default to generate if parsing fails
       return reply(200, { route: 'generate', summary: message });
     }
 
@@ -76,7 +127,6 @@ export const handler = async (event) => {
 
   } catch (error) {
     console.error('Intake error:', error);
-    // Graceful fallback — always route rather than blocking the user
     return reply(200, { route: 'generate', summary: 'Default routing' });
   }
 };
