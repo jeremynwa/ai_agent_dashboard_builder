@@ -114,7 +114,7 @@ Resources:
           INDUSTRY_LOGISTICS_SKILL_ID: "skill_01J4e3c46T3wrdtuRBRcRyGU"
           REVIEWER_SKILL_ID: "skill_01ABSnPFjpR2wUZuoKobc5vs"
           VISION_SKILL_ID: "skill_0167k41XCVLbcSksQvPsqTfi"
-          SCRAPER_SKILL_ID: ""
+          SCRAPER_SKILL_ID: "skill_015tnYwBrkp8e4sYevkvqsWX"
           REVIEW_MODEL: "claude-haiku-4-5-20251001"
           VISION_MODEL: "claude-haiku-4-5-20251001"
       FunctionUrlConfig:

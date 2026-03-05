@@ -53,21 +53,21 @@ Write-Host "Building..." -ForegroundColor Yellow
 sam build
 
 Write-Host "Deploying..." -ForegroundColor Yellow
-# ─── Load GitLab token (optional) ──────────────────────
-if (-not $env:GITLAB_TOKEN) { $env:GITLAB_TOKEN = "" }
-if (-not $env:SERVICEDESK_TOKEN) { $env:SERVICEDESK_TOKEN = "" }
+# ─── Build parameter overrides (skip empty optional tokens) ───
+$paramOverrides = @(
+    "AnthropicApiKey=$($env:ANTHROPIC_API_KEY)",
+    "PublishBucket=$PUBLISH_BUCKET",
+    "MyRegion=$REGION"
+)
+if ($env:GITLAB_TOKEN)      { $paramOverrides += "GitLabToken=$($env:GITLAB_TOKEN)" }
+if ($env:SERVICEDESK_TOKEN) { $paramOverrides += "ServiceDeskToken=$($env:SERVICEDESK_TOKEN)" }
 
 sam deploy `
     --stack-name $STACK_NAME `
     --region $REGION `
     --s3-bucket $S3_DEPLOY_BUCKET `
     --capabilities CAPABILITY_IAM `
-    --parameter-overrides `
-        "AnthropicApiKey=$($env:ANTHROPIC_API_KEY)" `
-        "PublishBucket=$PUBLISH_BUCKET" `
-        "MyRegion=$REGION" `
-        "GitLabToken=$($env:GITLAB_TOKEN)" `
-        "ServiceDeskToken=$($env:SERVICEDESK_TOKEN)" `
+    --parameter-overrides ($paramOverrides -join ' ') `
     --no-confirm-changeset `
     --no-fail-on-empty-changeset
 
@@ -85,7 +85,8 @@ if ($skillsUpload -eq "y") {
         "skills/industry-ecommerce",
         "skills/industry-saas",
         "skills/industry-logistics",
-        "skills/web-app-reviewer"
+        "skills/web-app-reviewer",
+        "skills/scraper-generator"
     )
 
     foreach ($dir in $skillDirs) {
