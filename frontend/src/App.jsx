@@ -1183,6 +1183,7 @@ function Factory() {
             style={styles.landingContainer}
           >
             <div style={styles.heroSection}>
+              <img src={logoSK} alt="SK Logo" style={{ width: 56, height: 56, borderRadius: 8, objectFit: 'contain', marginBottom: 12 }} />
               <h1 style={styles.title}>{t('landingTitle')}</h1>
               <div style={{ width: '52px', height: '3px', background: SK.ruby, margin: '12px auto 0' }} />
               <p style={{ ...styles.subtitle, marginTop: '16px' }}>{t('landingSubtitle')}</p>
