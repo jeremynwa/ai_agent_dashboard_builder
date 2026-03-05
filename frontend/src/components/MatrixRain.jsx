@@ -78,12 +78,12 @@ export default function MatrixRain({ step = 0 }) {
                   color: cell.brightness > 0.9
                     ? '#FFFFFF'
                     : cell.brightness > 0.5
-                      ? '#00A382'
+                      ? '#C80041'
                       : cell.brightness > 0
-                        ? '#00765F'
+                        ? '#9E1649'
                         : '#1a1a22',
                   textShadow: cell.brightness > 0.8
-                    ? '0 0 8px rgba(0, 163, 130, 0.8)'
+                    ? '0 0 8px rgba(200, 0, 65, 0.6)'
                     : 'none',
                   opacity: Math.max(0.15, cell.brightness),
                 }}
@@ -107,6 +107,8 @@ const styles = {
     alignItems: 'center',
     padding: '8px 0',
     overflow: 'hidden',
+    background: 'rgba(50, 63, 72, 0.04)',
+    borderRadius: '8px',
   },
   grid: {
     fontFamily: "'JetBrains Mono', 'Fira Code', monospace",

@@ -56,9 +56,9 @@ function DbConnect({ onSchemaLoaded, apiBase }) {
 
   const inputStyle = {
     width: '100%',
-    background: SK.bgPrimary,
+    background: SK.bgSecondary,
     border: `1px solid ${SK.borderStrong}`,
-    borderRadius: '4px',
+    borderRadius: '8px',
     padding: '10px 12px',
     color: SK.textPrimary,
     fontSize: '13px',
@@ -83,7 +83,7 @@ function DbConnect({ onSchemaLoaded, apiBase }) {
     padding: '8px',
     background: active ? 'rgba(200,0,65,0.08)' : SK.bgPrimary,
     border: active ? `1px solid rgba(200,0,65,0.3)` : `1px solid ${SK.border}`,
-    borderRadius: '4px',
+    borderRadius: '8px',
     color: active ? SK.ruby : SK.textSecondary,
     fontSize: '13px',
     fontWeight: active ? '600' : '400',
@@ -101,7 +101,7 @@ function DbConnect({ onSchemaLoaded, apiBase }) {
         padding: '10px 12px',
         background: 'rgba(47, 167, 77, 0.06)',
         border: `1px solid rgba(47, 167, 77, 0.25)`,
-        borderRadius: '8px',
+        borderRadius: '10px',
         fontSize: '13px',
         color: SK.signalGreen,
       }}>
@@ -129,7 +129,7 @@ function DbConnect({ onSchemaLoaded, apiBase }) {
           padding: '10px 12px',
           background: SK.bgPrimary,
           border: `1px solid ${SK.border}`,
-          borderRadius: '4px',
+          borderRadius: '8px',
           color: SK.textSecondary,
           fontSize: '13px',
           cursor: 'pointer',
@@ -145,7 +145,7 @@ function DbConnect({ onSchemaLoaded, apiBase }) {
           padding: '16px',
           background: SK.bgPrimary,
           border: `1px solid ${SK.border}`,
-          borderRadius: '8px',
+          borderRadius: '10px',
           boxShadow: SK.shadowSm,
         }}>
           {/* DB type selector */}
@@ -212,7 +212,7 @@ function DbConnect({ onSchemaLoaded, apiBase }) {
           </div>
 
           {error && (
-            <div style={{
+            <div role="alert" style={{
               padding: '8px 12px',
               background: 'rgba(228, 84, 68, 0.06)',
               border: '1px solid rgba(228, 84, 68, 0.2)',
@@ -234,7 +234,7 @@ function DbConnect({ onSchemaLoaded, apiBase }) {
               background: SK.ruby,
               color: SK.textInverse,
               border: 'none',
-              borderRadius: '4px',
+              borderRadius: '8px',
               fontSize: '13px',
               fontWeight: '500',
               cursor: 'pointer',

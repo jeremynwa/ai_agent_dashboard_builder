@@ -175,9 +175,9 @@ const styles = {
   backBtn: {
     background: 'transparent',
     border: `1px solid ${SK.border}`,
-    borderRadius: '4px',
+    borderRadius: '6px',
     color: SK.textSecondary,
-    padding: '5px 12px',
+    padding: '6px 14px',
     fontSize: '13px',
     cursor: 'pointer',
     fontFamily: 'inherit',
@@ -191,13 +191,13 @@ const styles = {
   scoreSection: {
     background: SK.bgPrimary,
     border: `1px solid ${SK.border}`,
-    borderRadius: '8px',
-    padding: '20px',
+    borderRadius: '12px',
+    padding: '24px',
     display: 'flex',
     alignItems: 'center',
     gap: '24px',
     flexWrap: 'wrap',
-    boxShadow: SK.shadowSm,
+    boxShadow: SK.shadowMd,
   },
   issueSummary: {
     display: 'flex',
@@ -215,8 +215,8 @@ const styles = {
   summaryBox: {
     background: SK.bgPrimary,
     border: `1px solid ${SK.border}`,
-    borderRadius: '8px',
-    padding: '14px 16px',
+    borderRadius: '12px',
+    padding: '16px 20px',
     boxShadow: SK.shadowSm,
   },
   summaryLabel: { color: SK.textSecondary, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' },
@@ -225,8 +225,8 @@ const styles = {
   issuesSectionLabel: { color: SK.textSecondary, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' },
   issuesList: { display: 'flex', flexDirection: 'column', gap: '6px' },
   issueCard: {
-    borderRadius: '8px',
-    padding: '10px 14px',
+    borderRadius: '10px',
+    padding: '12px 16px',
     display: 'flex',
     flexDirection: 'column',
     gap: '4px',
@@ -247,7 +247,7 @@ const styles = {
   showMoreBtn: {
     background: 'transparent',
     border: `1px solid ${SK.border}`,
-    borderRadius: '4px',
+    borderRadius: '8px',
     color: SK.textSecondary,
     padding: '6px 14px',
     fontSize: '12px',
@@ -263,7 +263,7 @@ const styles = {
   fixBtn: {
     background: 'rgba(109, 177, 199, 0.1)',
     border: `1px solid rgba(109, 177, 199, 0.3)`,
-    borderRadius: '4px',
+    borderRadius: '8px',
     color: SK.aqua,
     padding: '11px 20px',
     fontSize: '14px',
@@ -285,7 +285,7 @@ const styles = {
   deployBtn: {
     background: SK.ruby,
     border: 'none',
-    borderRadius: '4px',
+    borderRadius: '8px',
     color: SK.textInverse,
     padding: '12px 20px',
     fontSize: '14px',
@@ -294,5 +294,6 @@ const styles = {
     width: '100%',
     boxSizing: 'border-box',
     transition: 'opacity 0.2s',
+    boxShadow: '0 2px 8px rgba(200, 0, 65, 0.2)',
   },
 };

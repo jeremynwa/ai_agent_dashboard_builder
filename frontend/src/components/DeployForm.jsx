@@ -333,7 +333,7 @@ const styles = {
   backBtn: {
     background: 'transparent',
     border: `1px solid ${SK.border}`,
-    borderRadius: '4px',
+    borderRadius: '6px',
     color: SK.textSecondary,
     padding: '5px 12px',
     fontSize: '13px',
@@ -344,8 +344,8 @@ const styles = {
   section: {
     background: SK.bgPrimary,
     border: `1px solid ${SK.border}`,
-    borderRadius: '8px',
-    padding: '16px',
+    borderRadius: '12px',
+    padding: '20px',
     display: 'flex',
     flexDirection: 'column',
     gap: '12px',
@@ -365,9 +365,9 @@ const styles = {
   formRow: { display: 'flex', gap: '12px' },
   label: { color: SK.textSecondary, fontSize: '12px' },
   input: {
-    background: SK.bgPrimary,
+    background: SK.bgSecondary,
     border: `1px solid ${SK.borderStrong}`,
-    borderRadius: '4px',
+    borderRadius: '8px',
     padding: '9px 12px',
     color: SK.textPrimary,
     fontSize: '13px',
@@ -377,9 +377,9 @@ const styles = {
     boxSizing: 'border-box',
   },
   select: {
-    background: SK.bgPrimary,
+    background: SK.bgSecondary,
     border: `1px solid ${SK.borderStrong}`,
-    borderRadius: '4px',
+    borderRadius: '8px',
     padding: '9px 12px',
     color: SK.textPrimary,
     fontSize: '13px',
@@ -390,9 +390,9 @@ const styles = {
     cursor: 'pointer',
   },
   textarea: {
-    background: SK.bgPrimary,
+    background: SK.bgSecondary,
     border: `1px solid ${SK.borderStrong}`,
-    borderRadius: '4px',
+    borderRadius: '8px',
     padding: '9px 12px',
     color: SK.textPrimary,
     fontSize: '13px',
@@ -423,7 +423,7 @@ const styles = {
   deployBtn: {
     background: SK.ruby,
     border: 'none',
-    borderRadius: '4px',
+    borderRadius: '8px',
     color: SK.textInverse,
     padding: '13px 20px',
     fontSize: '15px',
@@ -432,6 +432,7 @@ const styles = {
     fontFamily: 'inherit',
     width: '100%',
     boxSizing: 'border-box',
+    boxShadow: '0 2px 8px rgba(200, 0, 65, 0.25)',
   },
   // Center states
   centerState: {
@@ -440,10 +441,11 @@ const styles = {
     alignItems: 'center',
     gap: '16px',
     padding: '40px 20px',
+    backdropFilter: 'blur(8px)',
   },
   spinner: {
-    width: '36px',
-    height: '36px',
+    width: '40px',
+    height: '40px',
     border: `3px solid rgba(200,0,65,0.2)`,
     borderTop: `3px solid ${SK.ruby}`,
     borderRadius: '50%',
@@ -454,8 +456,8 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    gap: '20px',
-    padding: '24px',
+    gap: '24px',
+    padding: '32px',
     maxWidth: '520px',
     margin: '0 auto',
     width: '100%',
@@ -466,7 +468,7 @@ const styles = {
   resultCard: {
     background: SK.bgPrimary,
     border: `1px solid ${SK.border}`,
-    borderRadius: '8px',
+    borderRadius: '10px',
     padding: '14px 16px',
     textDecoration: 'none',
     display: 'block',
@@ -505,7 +507,7 @@ const styles = {
   doneBtn: {
     background: 'rgba(200,0,65,0.08)',
     border: `1px solid rgba(200,0,65,0.25)`,
-    borderRadius: '4px',
+    borderRadius: '8px',
     color: SK.ruby,
     padding: '10px 28px',
     fontSize: '14px',
@@ -530,7 +532,7 @@ const styles = {
   retryBtn: {
     background: 'rgba(200,0,65,0.08)',
     border: `1px solid rgba(200,0,65,0.25)`,
-    borderRadius: '4px',
+    borderRadius: '8px',
     color: SK.ruby,
     padding: '8px 18px',
     fontSize: '13px',
@@ -540,7 +542,7 @@ const styles = {
   cancelBtn: {
     background: 'transparent',
     border: `1px solid ${SK.border}`,
-    borderRadius: '4px',
+    borderRadius: '8px',
     color: SK.textSecondary,
     padding: '8px 18px',
     fontSize: '13px',

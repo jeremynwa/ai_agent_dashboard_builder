@@ -46,7 +46,18 @@ export const SK = {
   shadowSm: '0 1px 2px rgba(50, 63, 72, 0.06)',
   shadowMd: '0 4px 12px rgba(50, 63, 72, 0.08)',
   shadowLg: '0 8px 24px rgba(50, 63, 72, 0.12)',
+  shadowXl: '0 12px 40px rgba(50, 63, 72, 0.16)',
   shadowFocus: '0 0 0 3px rgba(200, 0, 65, 0.2)',
+
+  // Glass
+  glassBgDark: 'rgba(50, 63, 72, 0.92)',
+  glassBorderDark: 'rgba(74, 95, 107, 0.5)',
+
+  // Radius
+  radiusSm: '6px',
+  radiusMd: '8px',
+  radiusLg: '12px',
+  radiusXl: '16px',
 
   // Font
   fontFamily: "'Inter', 'Helvetica Neue', Arial, sans-serif",

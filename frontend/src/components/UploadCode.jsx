@@ -224,8 +224,8 @@ const styles = {
   container: { width: '100%' },
   dropZone: {
     border: `2px dashed ${SK.borderStrong}`,
-    borderRadius: '8px',
-    padding: '36px 24px',
+    borderRadius: '12px',
+    padding: '40px 24px',
     cursor: 'pointer',
     transition: 'all 0.2s ease',
     background: SK.bgPrimary,
@@ -234,6 +234,7 @@ const styles = {
   dropZoneActive: {
     border: `2px dashed ${SK.ruby}`,
     background: 'rgba(200, 0, 65, 0.04)',
+    boxShadow: '0 0 0 4px rgba(200, 0, 65, 0.08)',
   },
   dropContent: {
     display: 'flex',
@@ -264,8 +265,8 @@ const styles = {
   parsedContainer: {
     background: SK.bgPrimary,
     border: `1px solid ${SK.border}`,
-    borderRadius: '8px',
-    padding: '16px',
+    borderRadius: '12px',
+    padding: '20px',
     display: 'flex',
     flexDirection: 'column',
     gap: '12px',
@@ -282,7 +283,7 @@ const styles = {
   clearBtn: {
     background: 'transparent',
     border: `1px solid ${SK.border}`,
-    borderRadius: '4px',
+    borderRadius: '8px',
     color: SK.textSecondary,
     padding: '4px 10px',
     fontSize: '12px',
@@ -292,9 +293,9 @@ const styles = {
   appNameRow: { display: 'flex', flexDirection: 'column', gap: '6px' },
   label: { color: SK.textSecondary, fontSize: '12px' },
   nameInput: {
-    background: SK.bgPrimary,
+    background: SK.bgSecondary,
     border: `1px solid ${SK.borderStrong}`,
-    borderRadius: '4px',
+    borderRadius: '8px',
     padding: '8px 12px',
     color: SK.textPrimary,
     fontSize: '13px',
@@ -305,7 +306,7 @@ const styles = {
   },
   fileTree: {
     background: SK.bgSecondary,
-    borderRadius: '8px',
+    borderRadius: '10px',
     padding: '10px',
     maxHeight: '160px',
     overflowY: 'auto',
@@ -320,7 +321,7 @@ const styles = {
   reviewBtn: {
     background: SK.ruby,
     border: 'none',
-    borderRadius: '4px',
+    borderRadius: '8px',
     padding: '11px 20px',
     color: SK.textInverse,
     fontWeight: 600,
@@ -329,5 +330,6 @@ const styles = {
     fontFamily: 'inherit',
     width: '100%',
     boxSizing: 'border-box',
+    boxShadow: '0 2px 8px rgba(200, 0, 65, 0.2)',
   },
 };

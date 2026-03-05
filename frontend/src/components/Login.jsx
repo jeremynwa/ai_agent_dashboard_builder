@@ -58,7 +58,7 @@ export default function Login() {
           <img src={logoSK} alt="SK Logo" style={{ height: 32, objectFit: 'contain' }} />
           <span style={styles.logo}>FACTORY</span>
         </div>
-        <div style={{ width: '52px', height: '3px', background: SK.ruby, marginBottom: '24px' }} />
+        <div style={{ width: '52px', height: '2px', background: SK.ruby, borderRadius: '1px', marginBottom: '24px' }} />
 
         <h1 style={styles.title}>
           {newPasswordMode ? 'Nouveau mot de passe' : 'Connexion'}
@@ -70,7 +70,7 @@ export default function Login() {
         </p>
 
         {error && (
-          <div style={styles.errorBox}>{error}</div>
+          <div style={styles.errorBox} role="alert">{error}</div>
         )}
 
         {newPasswordMode ? (
@@ -141,7 +141,7 @@ export default function Login() {
 const styles = {
   container: {
     minHeight: '100vh',
-    background: SK.bgSecondary,
+    background: `linear-gradient(160deg, ${SK.bgPrimary} 0%, ${SK.bgSecondary} 60%, rgba(200, 0, 65, 0.03) 100%)`,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -151,12 +151,12 @@ const styles = {
   },
   card: {
     background: SK.bgPrimary,
-    borderRadius: '8px',
-    padding: '40px',
+    borderRadius: '16px',
+    padding: '48px 40px',
     border: `1px solid ${SK.border}`,
     width: '100%',
     maxWidth: '400px',
-    boxShadow: SK.shadowLg,
+    boxShadow: '0 12px 40px rgba(50, 63, 72, 0.12)',
   },
   logoRow: {
     marginBottom: '12px',
@@ -168,25 +168,27 @@ const styles = {
     color: SK.ruby,
   },
   title: {
-    fontSize: '22px',
+    fontSize: '24px',
     fontWeight: '700',
     marginBottom: '8px',
     color: SK.textPrimary,
+    letterSpacing: '-0.02em',
   },
   subtitle: {
     fontSize: '14px',
     color: SK.textSecondary,
-    marginBottom: '28px',
-    lineHeight: '1.5',
+    marginBottom: '32px',
+    lineHeight: '1.6',
   },
   errorBox: {
-    background: 'rgba(228, 84, 68, 0.05)',
+    background: 'rgba(228, 84, 68, 0.06)',
     border: `1px solid rgba(228, 84, 68, 0.2)`,
-    borderRadius: '8px',
+    borderRadius: '10px',
     padding: '12px 16px',
     fontSize: '13px',
     color: SK.signalRed,
     marginBottom: '20px',
+    lineHeight: '1.5',
   },
   field: {
     marginBottom: '20px',
@@ -200,16 +202,16 @@ const styles = {
   },
   input: {
     width: '100%',
-    background: SK.bgPrimary,
-    border: `1px solid ${SK.borderStrong}`,
-    borderRadius: '4px',
+    background: SK.bgSecondary,
+    border: `1px solid ${SK.border}`,
+    borderRadius: '8px',
     padding: '12px 16px',
     color: SK.textPrimary,
     fontSize: '14px',
     fontFamily: 'inherit',
     outline: 'none',
     boxSizing: 'border-box',
-    transition: 'border-color 0.2s ease',
+    transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
   },
   button: {
     width: '100%',
@@ -217,17 +219,19 @@ const styles = {
     color: SK.textInverse,
     border: 'none',
     padding: '14px 24px',
-    borderRadius: '4px',
+    borderRadius: '8px',
     fontWeight: '600',
     fontSize: '14px',
     cursor: 'pointer',
     transition: 'all 0.2s ease',
-    marginTop: '8px',
+    marginTop: '12px',
     fontFamily: 'inherit',
+    boxShadow: '0 2px 8px rgba(200, 0, 65, 0.2)',
   },
   footer: {
-    marginTop: '24px',
+    marginTop: '32px',
     fontSize: '12px',
     color: SK.textMuted,
+    letterSpacing: '0.02em',
   },
 };
