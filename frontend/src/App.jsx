@@ -11,6 +11,7 @@ import DbConnect from './components/DbConnect';
 import AuthProvider, { useAuth } from './components/AuthProvider';
 import Login from './components/Login';
 import MatrixRain from './components/MatrixRain';
+import logoSK from './assets/logo_SK.png';
 import UploadCode from './components/UploadCode';
 import ReviewResults from './components/ReviewResults';
 import DeployForm from './components/DeployForm';
@@ -1088,7 +1089,7 @@ function Factory() {
       {/* ---- SIDEBAR ---- */}
       <aside style={{ ...styles.sidebar, transform: sidebarOpen ? 'translateX(0)' : 'translateX(-100%)' }}>
         <div style={{ ...styles.logoRow, cursor: 'pointer' }} onClick={() => { setAppView('landing'); setSidebarOpen(false); }}>
-          <Icons.logo />
+          <img src={logoSK} alt="SK Logo" style={{ width: 28, height: 28, borderRadius: 4, objectFit: 'contain' }} />
           <span style={styles.logoText}>Factory</span>
           <span style={styles.versionBadge}>beta</span>
         </div>

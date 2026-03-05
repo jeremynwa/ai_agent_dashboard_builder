@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useAuth } from './AuthProvider';
 import { completeNewPassword } from '../services/auth';
 import { SK } from '../services/sk-theme';
+import logoSK from '../assets/logo_SK.png';
 
 export default function Login() {
   const { login, error, clearError } = useAuth();
@@ -53,7 +54,8 @@ export default function Login() {
   return (
     <div style={styles.container}>
       <div style={styles.card}>
-        <div style={styles.logoRow}>
+        <div style={{ ...styles.logoRow, display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <img src={logoSK} alt="SK Logo" style={{ height: 32, objectFit: 'contain' }} />
           <span style={styles.logo}>FACTORY</span>
         </div>
         <div style={{ width: '52px', height: '3px', background: SK.ruby, marginBottom: '24px' }} />
