@@ -15,7 +15,7 @@ Parameters:
   GitLabToken:
     Type: String
     NoEcho: true
-    Default: "qT87KLEICAGVoPiiD-XLNm86MQp1Omd5CA.01.0y00pjblf"
+    Default: ""
   ServiceDeskToken:
     Type: String
     NoEcho: true

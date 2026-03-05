@@ -35,6 +35,19 @@ if (Test-Path $rulesDir) {
     aws s3 sync $rulesDir "s3://$PUBLISH_BUCKET/rules/" --region $REGION
 }
 
+# ─── Install npm dependencies in all Lambda directories ─
+Write-Host "Installing npm dependencies..." -ForegroundColor Yellow
+$lambdaDirs = Get-ChildItem -Path $PSScriptRoot -Directory | Where-Object {
+    Test-Path (Join-Path $_.FullName "package.json")
+}
+foreach ($dir in $lambdaDirs) {
+    Write-Host "  npm install in $($dir.Name)..." -ForegroundColor Cyan
+    Push-Location $dir.FullName
+    npm install --omit=dev 2>&1 | Out-Null
+    Pop-Location
+}
+Write-Host "Dependencies installed." -ForegroundColor Green
+
 # ─── Build & Deploy ──────────────────────────────────
 Write-Host "Building..." -ForegroundColor Yellow
 sam build
