@@ -491,7 +491,13 @@ REVIEWER_SKILL_ID=skill_01... VISION_SKILL_ID=skill_01... node test-review-visio
 - AWS CloudShell : alternative à SAM CLI local (SAM pré-installé, accessible depuis la console AWS)
 
 NEXT TIME YOU READ THIS I WANT :
+
 - j'ai deploy mais encore une erreur : Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"Skill not found: skill_01GMx6ta9DNWD6wDmX4S6PhN"},"request_id":"req_011CYkYEf4gqqVPn9BdYnjfX"}
+  - this is due to my deployment to aws not working, let's fix this, suggested approach :
+    - Your deployment isn’t updating because **`sam build` is failing due to npm trying to install non-existent AWS SDK versions (e.g., `@aws-sdk/...@3.97x.x`)**, so no new Lambda artifacts are produced, and `sam deploy` also fails because it receives an **empty `GitLabToken=` parameter**.
+
+    **Next steps:** reset npm to the public registry and clean caches (`npm config set registry https://registry.npmjs.org/`, delete `.aws-sam`, `node_modules`, and lockfiles), run `sam build` again until it succeeds, then redeploy with non-empty tokens (or remove those parameters) so CloudFormation updates the stack.
+
 - to add the same homepage style to the app outputs
 - i want to add a scrapping app option & therefore to re-do the options when selecting to build an app to have dashboard, scrapping or other. and then below the industries -- ask me to send you an example of scrapping repo i have it
 - i also want to add a cost estimate when a prompt is made son that the launcher knows before creating how much it costs
