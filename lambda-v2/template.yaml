@@ -358,7 +358,7 @@ Resources:
         Variables:
           ANTHROPIC_API_KEY: !Ref AnthropicApiKey
           USE_BETA_API: "true"
-          WEB_APP_REVIEWER_SKILL_ID: ""
+          WEB_APP_REVIEWER_SKILL_ID: "skill_01NGUU66Q3PCWWX5RgAbD7bz"
           REVIEW_PASS_THRESHOLD: "70"
           REVIEW_MODEL: "claude-sonnet-4-20250514"
       FunctionUrlConfig:
