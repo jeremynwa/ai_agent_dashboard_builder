@@ -17,6 +17,12 @@ import ReviewResults from './components/ReviewResults';
 import DeployForm from './components/DeployForm';
 import MyApps from './components/MyApps';
 
+// Configure WebContainer API key at module level (MUST be before any .boot() call)
+const _wcClientId = import.meta.env.VITE_WEBCONTAINER_CLIENT_ID;
+if (_wcClientId) {
+  configureAPIKey(_wcClientId);
+}
+
 const MAX_FIX_ATTEMPTS = 3;
 const SCREENSHOT_DELAY = 4000;
 const SCREENSHOT_TIMEOUT = 10000;
@@ -525,15 +531,6 @@ function Factory() {
   useEffect(() => {
     if (bootedRef.current) return;
     bootedRef.current = true;
-
-    // Configure WebContainer API key for production (must be called before boot)
-    const clientId = import.meta.env.VITE_WEBCONTAINER_CLIENT_ID;
-    if (clientId) {
-      console.log('[Boot] Configuring WebContainer API key...');
-      configureAPIKey(clientId);
-    } else {
-      console.log('[Boot] No VITE_WEBCONTAINER_CLIENT_ID — running in localhost mode');
-    }
 
     console.log('[Boot] crossOriginIsolated:', window.crossOriginIsolated);
     console.log('[Boot] SharedArrayBuffer:', typeof SharedArrayBuffer !== 'undefined' ? 'available' : 'MISSING');
