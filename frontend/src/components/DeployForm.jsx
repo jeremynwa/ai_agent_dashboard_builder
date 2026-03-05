@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { pushToGitLab, requestVm, saveApp } from '../services/api';
+import { SK } from '../services/sk-theme';
 
 const VM_SIZES = [
   { value: 'Standard_B1ms', label: 'Standard_B1ms — 1 vCPU, 2GB (Small prototype)' },
@@ -105,8 +106,8 @@ export default function DeployForm({ files, appName, reviewScore = 0, stack = 'r
       <motion.div style={styles.successContainer} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
         <div style={styles.successIcon}>
           <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-            <circle cx="24" cy="24" r="22" stroke="#10B981" strokeWidth="2" fill="rgba(16,185,129,0.08)"/>
-            <path d="M14 24l7 7 13-13" stroke="#10B981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <circle cx="24" cy="24" r="22" stroke={SK.signalGreen} strokeWidth="2" fill="rgba(47,167,77,0.08)"/>
+            <path d="M14 24l7 7 13-13" stroke={SK.signalGreen} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </div>
         <h3 style={styles.successTitle}>{skipVm ? 'Pushed to GitLab' : 'Deployed successfully'}</h3>
@@ -130,7 +131,7 @@ export default function DeployForm({ files, appName, reviewScore = 0, stack = 'r
             <div style={styles.resultCard}>
               <div style={styles.resultCardLabel}>VM Spec Generated</div>
               <div style={styles.resultCardValue}>{vmResult.vmSpec?.vmSize} — {vmResult.vmSpec?.estimatedMonthlyCost}</div>
-              <div style={{ color: '#F59E0B', fontSize: '12px', marginTop: '6px' }}>
+              <div style={{ color: SK.signalYellow, fontSize: '12px', marginTop: '6px' }}>
                 Service Desk not configured — submit manually with the spec above
               </div>
             </div>
@@ -140,9 +141,9 @@ export default function DeployForm({ files, appName, reviewScore = 0, stack = 'r
             <div style={styles.resultCard}>
               <div style={styles.resultCardLabel}>CI/CD Pipelines included</div>
               {ciFiles.map(f => (
-                <div key={f} style={{ ...styles.resultCardValue, color: '#8B5CF6', fontFamily: 'monospace', fontSize: '12px' }}>{f}</div>
+                <div key={f} style={{ ...styles.resultCardValue, color: SK.aqua, fontFamily: 'monospace', fontSize: '12px' }}>{f}</div>
               ))}
-              <div style={{ color: '#52525B', fontSize: '11px', marginTop: '6px' }}>
+              <div style={{ color: SK.textMuted, fontSize: '11px', marginTop: '6px' }}>
                 GitLab CI deploys to GitLab Pages · Azure Pipelines to Azure Static Web Apps
               </div>
             </div>
@@ -207,7 +208,7 @@ export default function DeployForm({ files, appName, reviewScore = 0, stack = 'r
       <div style={styles.section}>
         <div style={styles.sectionTitle}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ marginRight: '6px' }}>
-            <path d="M8 1L10.5 6H14L10 9.5 11.5 14.5 8 11.5 4.5 14.5 6 9.5 2 6H5.5L8 1Z" stroke="#06B6D4" strokeWidth="1.2" strokeLinejoin="round"/>
+            <path d="M8 1L10.5 6H14L10 9.5 11.5 14.5 8 11.5 4.5 14.5 6 9.5 2 6H5.5L8 1Z" stroke={SK.ruby} strokeWidth="1.2" strokeLinejoin="round"/>
           </svg>
           GitLab Repository
         </div>
@@ -238,7 +239,7 @@ export default function DeployForm({ files, appName, reviewScore = 0, stack = 'r
             type="checkbox"
             checked={generateCI}
             onChange={e => setGenerateCI(e.target.checked)}
-            style={{ accentColor: '#06B6D4' }}
+            style={{ accentColor: SK.ruby }}
           />
           <span style={styles.checkboxLabel}>
             Generate CI/CD pipelines (.gitlab-ci.yml + azure-pipelines.yml)
@@ -250,8 +251,8 @@ export default function DeployForm({ files, appName, reviewScore = 0, stack = 'r
       {!skipVm && <div style={styles.section}>
         <div style={styles.sectionTitle}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ marginRight: '6px' }}>
-            <rect x="1" y="3" width="14" height="10" rx="2" stroke="#8B5CF6" strokeWidth="1.2"/>
-            <path d="M5 8h6M8 5v6" stroke="#8B5CF6" strokeWidth="1.2" strokeLinecap="round"/>
+            <rect x="1" y="3" width="14" height="10" rx="2" stroke={SK.aqua} strokeWidth="1.2"/>
+            <path d="M5 8h6M8 5v6" stroke={SK.aqua} strokeWidth="1.2" strokeLinecap="round"/>
           </svg>
           VM Request
         </div>
@@ -297,9 +298,9 @@ export default function DeployForm({ files, appName, reviewScore = 0, stack = 'r
 
       {/* Summary */}
       <div style={styles.summaryRow}>
-        <span style={styles.summaryItem}>Review score: <strong style={{ color: reviewScore >= 70 ? '#10B981' : '#F59E0B' }}>{reviewScore}/100</strong></span>
-        <span style={styles.summaryItem}>Stack: <strong style={{ color: '#06B6D4' }}>{stack}</strong></span>
-        <span style={styles.summaryItem}>Source: <strong style={{ color: '#A1A1AA' }}>{source}</strong></span>
+        <span style={styles.summaryItem}>Review score: <strong style={{ color: reviewScore >= 70 ? SK.signalGreen : SK.signalYellow }}>{reviewScore}/100</strong></span>
+        <span style={styles.summaryItem}>Stack: <strong style={{ color: SK.aqua }}>{stack}</strong></span>
+        <span style={styles.summaryItem}>Source: <strong style={{ color: SK.textSecondary }}>{source}</strong></span>
       </div>
 
       <motion.button
@@ -331,43 +332,44 @@ const styles = {
   header: { display: 'flex', alignItems: 'center', gap: '12px' },
   backBtn: {
     background: 'transparent',
-    border: '1px solid rgba(63,63,70,0.4)',
-    borderRadius: '6px',
-    color: '#71717A',
+    border: `1px solid ${SK.border}`,
+    borderRadius: '4px',
+    color: SK.textSecondary,
     padding: '5px 12px',
     fontSize: '13px',
     cursor: 'pointer',
     fontFamily: 'inherit',
   },
-  title: { color: '#E4E4E7', fontSize: '17px', fontWeight: 600, margin: 0 },
+  title: { color: SK.textPrimary, fontSize: '17px', fontWeight: 600, margin: 0 },
   section: {
-    background: '#111827',
-    border: '1px solid rgba(63,63,70,0.4)',
-    borderRadius: '12px',
+    background: SK.bgPrimary,
+    border: `1px solid ${SK.border}`,
+    borderRadius: '8px',
     padding: '16px',
     display: 'flex',
     flexDirection: 'column',
     gap: '12px',
+    boxShadow: SK.shadowSm,
   },
   sectionTitle: {
-    color: '#E4E4E7',
+    color: SK.textPrimary,
     fontSize: '13px',
     fontWeight: 600,
     display: 'flex',
     alignItems: 'center',
     paddingBottom: '8px',
-    borderBottom: '1px solid rgba(63,63,70,0.3)',
+    borderBottom: `1px solid ${SK.border}`,
     marginBottom: '4px',
   },
   formGroup: { display: 'flex', flexDirection: 'column', gap: '5px' },
   formRow: { display: 'flex', gap: '12px' },
-  label: { color: '#71717A', fontSize: '12px' },
+  label: { color: SK.textSecondary, fontSize: '12px' },
   input: {
-    background: '#0B1120',
-    border: '1px solid rgba(63,63,70,0.5)',
-    borderRadius: '7px',
+    background: SK.bgPrimary,
+    border: `1px solid ${SK.borderStrong}`,
+    borderRadius: '4px',
     padding: '9px 12px',
-    color: '#E4E4E7',
+    color: SK.textPrimary,
     fontSize: '13px',
     outline: 'none',
     fontFamily: 'inherit',
@@ -375,11 +377,11 @@ const styles = {
     boxSizing: 'border-box',
   },
   select: {
-    background: '#0B1120',
-    border: '1px solid rgba(63,63,70,0.5)',
-    borderRadius: '7px',
+    background: SK.bgPrimary,
+    border: `1px solid ${SK.borderStrong}`,
+    borderRadius: '4px',
     padding: '9px 12px',
-    color: '#E4E4E7',
+    color: SK.textPrimary,
     fontSize: '13px',
     outline: 'none',
     fontFamily: 'inherit',
@@ -388,11 +390,11 @@ const styles = {
     cursor: 'pointer',
   },
   textarea: {
-    background: '#0B1120',
-    border: '1px solid rgba(63,63,70,0.5)',
-    borderRadius: '7px',
+    background: SK.bgPrimary,
+    border: `1px solid ${SK.borderStrong}`,
+    borderRadius: '4px',
     padding: '9px 12px',
-    color: '#E4E4E7',
+    color: SK.textPrimary,
     fontSize: '13px',
     outline: 'none',
     fontFamily: 'inherit',
@@ -400,29 +402,29 @@ const styles = {
     boxSizing: 'border-box',
     resize: 'vertical',
   },
-  inputHint: { color: '#52525B', fontSize: '11px' },
+  inputHint: { color: SK.textMuted, fontSize: '11px' },
   checkboxRow: {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
     cursor: 'pointer',
   },
-  checkboxLabel: { color: '#A1A1AA', fontSize: '13px' },
+  checkboxLabel: { color: SK.textSecondary, fontSize: '13px' },
   summaryRow: {
     display: 'flex',
     gap: '16px',
     flexWrap: 'wrap',
     padding: '10px 14px',
-    background: 'rgba(17, 24, 39, 0.6)',
+    background: SK.bgPrimary,
     borderRadius: '8px',
-    border: '1px solid rgba(63,63,70,0.2)',
+    border: `1px solid ${SK.border}`,
   },
-  summaryItem: { color: '#71717A', fontSize: '13px' },
+  summaryItem: { color: SK.textSecondary, fontSize: '13px' },
   deployBtn: {
-    background: 'linear-gradient(135deg, #06B6D4 0%, #8B5CF6 100%)',
+    background: SK.ruby,
     border: 'none',
-    borderRadius: '9px',
-    color: '#fff',
+    borderRadius: '4px',
+    color: SK.textInverse,
     padding: '13px 20px',
     fontSize: '15px',
     fontWeight: 700,
@@ -442,11 +444,11 @@ const styles = {
   spinner: {
     width: '36px',
     height: '36px',
-    border: '3px solid rgba(6,182,212,0.2)',
-    borderTop: '3px solid #06B6D4',
+    border: `3px solid rgba(200,0,65,0.2)`,
+    borderTop: `3px solid ${SK.ruby}`,
     borderRadius: '50%',
   },
-  deployingStatus: { color: '#A1A1AA', fontSize: '14px' },
+  deployingStatus: { color: SK.textSecondary, fontSize: '14px' },
   // Success state
   successContainer: {
     display: 'flex',
@@ -459,24 +461,25 @@ const styles = {
     width: '100%',
   },
   successIcon: {},
-  successTitle: { color: '#10B981', fontSize: '20px', fontWeight: 700, margin: 0 },
+  successTitle: { color: SK.signalGreen, fontSize: '20px', fontWeight: 700, margin: 0 },
   resultCards: { display: 'flex', flexDirection: 'column', gap: '10px', width: '100%' },
   resultCard: {
-    background: '#111827',
-    border: '1px solid rgba(63,63,70,0.4)',
-    borderRadius: '10px',
+    background: SK.bgPrimary,
+    border: `1px solid ${SK.border}`,
+    borderRadius: '8px',
     padding: '14px 16px',
     textDecoration: 'none',
     display: 'block',
     color: 'inherit',
+    boxShadow: SK.shadowSm,
   },
-  resultCardLabel: { color: '#71717A', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' },
-  resultCardValue: { color: '#06B6D4', fontSize: '13px', wordBreak: 'break-all' },
+  resultCardLabel: { color: SK.textSecondary, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' },
+  resultCardValue: { color: SK.aqua, fontSize: '13px', wordBreak: 'break-all' },
   teamsNotif: {
-    color: '#10B981',
+    color: SK.signalGreen,
     fontSize: '13px',
-    background: 'rgba(16,185,129,0.08)',
-    border: '1px solid rgba(16,185,129,0.2)',
+    background: 'rgba(47,167,77,0.06)',
+    border: `1px solid rgba(47,167,77,0.2)`,
     borderRadius: '8px',
     padding: '8px 14px',
     width: '100%',
@@ -484,26 +487,26 @@ const styles = {
     textAlign: 'center',
   },
   collabBox: {
-    background: '#111827',
-    border: '1px solid rgba(63,63,70,0.4)',
-    borderRadius: '10px',
+    background: SK.bgPrimary,
+    border: `1px solid ${SK.border}`,
+    borderRadius: '8px',
     padding: '14px 16px',
     width: '100%',
     boxSizing: 'border-box',
   },
-  collabTitle: { color: '#A1A1AA', fontSize: '12px', fontWeight: 600, marginBottom: '6px' },
-  collabText: { color: '#10B981', fontSize: '13px' },
+  collabTitle: { color: SK.textSecondary, fontSize: '12px', fontWeight: 600, marginBottom: '6px' },
+  collabText: { color: SK.signalGreen, fontSize: '13px' },
   collabWarning: {
-    color: '#F59E0B',
+    color: SK.signalYellow,
     fontSize: '12px',
     marginTop: '6px',
     lineHeight: '1.5',
   },
   doneBtn: {
-    background: 'rgba(6,182,212,0.1)',
-    border: '1px solid rgba(6,182,212,0.3)',
-    borderRadius: '8px',
-    color: '#06B6D4',
+    background: 'rgba(200,0,65,0.08)',
+    border: `1px solid rgba(200,0,65,0.25)`,
+    borderRadius: '4px',
+    color: SK.ruby,
     padding: '10px 28px',
     fontSize: '14px',
     fontWeight: 600,
@@ -512,23 +515,23 @@ const styles = {
   },
   // Error state
   errorContainer: {
-    background: 'rgba(239,68,68,0.08)',
-    border: '1px solid rgba(239,68,68,0.25)',
-    borderRadius: '12px',
+    background: 'rgba(228,84,68,0.05)',
+    border: `1px solid rgba(228,84,68,0.2)`,
+    borderRadius: '8px',
     padding: '24px',
     display: 'flex',
     flexDirection: 'column',
     gap: '12px',
     alignItems: 'center',
   },
-  errorTitle: { color: '#EF4444', fontSize: '16px', fontWeight: 600 },
-  errorMsg: { color: '#A1A1AA', fontSize: '13px', textAlign: 'center', wordBreak: 'break-word' },
+  errorTitle: { color: SK.signalRed, fontSize: '16px', fontWeight: 600 },
+  errorMsg: { color: SK.textSecondary, fontSize: '13px', textAlign: 'center', wordBreak: 'break-word' },
   errorActions: { display: 'flex', gap: '10px' },
   retryBtn: {
-    background: 'rgba(6,182,212,0.1)',
-    border: '1px solid rgba(6,182,212,0.3)',
-    borderRadius: '7px',
-    color: '#06B6D4',
+    background: 'rgba(200,0,65,0.08)',
+    border: `1px solid rgba(200,0,65,0.25)`,
+    borderRadius: '4px',
+    color: SK.ruby,
     padding: '8px 18px',
     fontSize: '13px',
     cursor: 'pointer',
@@ -536,9 +539,9 @@ const styles = {
   },
   cancelBtn: {
     background: 'transparent',
-    border: '1px solid rgba(63,63,70,0.4)',
-    borderRadius: '7px',
-    color: '#71717A',
+    border: `1px solid ${SK.border}`,
+    borderRadius: '4px',
+    color: SK.textSecondary,
     padding: '8px 18px',
     fontSize: '13px',
     cursor: 'pointer',

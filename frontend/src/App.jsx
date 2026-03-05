@@ -5,6 +5,7 @@ import { WebContainer, configureAPIKey } from '@webcontainer/api';
 import { baseFiles } from './services/files-template';
 import { generateApp, visionAnalyze, publishApp, exportApp, reviewCode, API_BASE, DB_PROXY_URL } from './services/api';
 import { exportToZip } from './services/export';
+import { SK } from './services/sk-theme';
 import FileUpload from './components/FileUpload';
 import DbConnect from './components/DbConnect';
 import AuthProvider, { useAuth } from './components/AuthProvider';
@@ -321,10 +322,10 @@ class ErrorBoundary extends React.Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div style={{ minHeight: '100vh', background: '#09090B', color: '#FAFAFA', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: 'system-ui, sans-serif', padding: '24px' }}>
-          <h2 style={{ color: '#EF4444', marginBottom: '12px' }}>Something went wrong</h2>
-          <pre style={{ color: '#A1A1AA', fontSize: '13px', maxWidth: '600px', overflow: 'auto', whiteSpace: 'pre-wrap' }}>{this.state.error?.message}</pre>
-          <button onClick={() => window.location.reload()} style={{ marginTop: '20px', padding: '10px 24px', background: '#06B6D4', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>Reload</button>
+        <div style={{ minHeight: '100vh', background: SK.bgPrimary, color: SK.textPrimary, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: SK.fontFamily, padding: '24px' }}>
+          <h2 style={{ color: SK.signalRed, marginBottom: '12px' }}>Something went wrong</h2>
+          <pre style={{ color: SK.textSecondary, fontSize: '13px', maxWidth: '600px', overflow: 'auto', whiteSpace: 'pre-wrap' }}>{this.state.error?.message}</pre>
+          <button onClick={() => window.location.reload()} style={{ marginTop: '20px', padding: '10px 24px', background: SK.ruby, color: SK.textInverse, border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '14px' }}>Reload</button>
         </div>
       );
     }
@@ -384,9 +385,9 @@ function flattenFiles(obj, path = '') {
 const Icons = {
   logo: () => (
     <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-      <rect width="28" height="28" rx="6" fill="#06B6D4" fillOpacity="0.15"/>
-      <path d="M8 10h12M8 14h8M8 18h10" stroke="#06B6D4" strokeWidth="1.5" strokeLinecap="round"/>
-      <circle cx="21" cy="18" r="2.5" stroke="#06B6D4" strokeWidth="1.5"/>
+      <rect width="28" height="28" rx="6" fill={SK.ruby} fillOpacity="0.15"/>
+      <path d="M8 10h12M8 14h8M8 18h10" stroke={SK.ruby} strokeWidth="1.5" strokeLinecap="round"/>
+      <circle cx="21" cy="18" r="2.5" stroke={SK.ruby} strokeWidth="1.5"/>
     </svg>
   ),
   sparkle: () => (
@@ -1019,7 +1020,7 @@ function Factory() {
             </button>
             <button
               onClick={() => setShowDeployForm(true)}
-              style={{ ...styles.floatingButtonPrimary, background: 'linear-gradient(135deg, #06B6D4 0%, #8B5CF6 100%)' }}
+              style={{ ...styles.floatingButtonPrimary, background: SK.ruby }}
               title={t('deploy')}
             >
               {t('deploy')}
@@ -1046,7 +1047,7 @@ function Factory() {
 
         {/* Deploy form overlay (inside fullscreen preview) */}
         {showDeployForm && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(11,17,32,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '20px' }}>
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(50, 63, 72, 0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '20px' }}>
             <div style={{ width: '100%', maxWidth: '560px', maxHeight: '90vh', overflowY: 'auto' }}>
               <DeployForm
                 files={currentFiles}
@@ -1101,14 +1102,14 @@ function Factory() {
         </button>
 
         <button
-          style={{ ...styles.newAppButton, background: 'rgba(139, 92, 246, 0.1)', border: '1px solid rgba(139, 92, 246, 0.25)', color: '#A78BFA', marginTop: '6px' }}
+          style={{ ...styles.newAppButton, background: 'rgba(109, 177, 199, 0.1)', border: `1px solid rgba(109, 177, 199, 0.25)`, color: SK.aqua, marginTop: '6px' }}
           onClick={() => { setAppView('upload-review'); setUploadedCode(null); setReviewResult(null); setShowDeployForm(false); setSidebarOpen(false); }}
         >
           <span style={{ marginRight: '6px', fontSize: '14px' }}>{t('uploadReview')}</span>
         </button>
 
         <button
-          style={{ ...styles.newAppButton, background: 'rgba(6, 182, 212, 0.05)', border: '1px solid rgba(6, 182, 212, 0.2)', color: '#71717A', marginTop: '4px' }}
+          style={{ ...styles.newAppButton, background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.12)', color: SK.iceBlue, marginTop: '4px' }}
           onClick={() => { setAppView('my-apps'); setSidebarOpen(false); }}
         >
           <span style={{ marginRight: '6px', fontSize: '14px' }}>My Apps</span>
@@ -1140,7 +1141,7 @@ function Factory() {
         <div style={styles.sidebarFooter}>
           <div style={styles.statusRow}>
             <motion.span
-              style={{ ...styles.dot, background: isReady ? '#34D399' : bootError ? '#EF4444' : '#F59E0B' }}
+              style={{ ...styles.dot, background: isReady ? SK.signalGreen : bootError ? SK.signalRed : SK.signalYellow }}
               animate={isReady || bootError ? {} : { opacity: [1, 0.3, 1] }}
               transition={{ duration: 1.2, repeat: Infinity }}
             />
@@ -1182,20 +1183,21 @@ function Factory() {
           >
             <div style={styles.heroSection}>
               <h1 style={styles.title}>{t('landingTitle')}</h1>
-              <p style={styles.subtitle}>{t('landingSubtitle')}</p>
+              <div style={{ width: '52px', height: '3px', background: SK.ruby, margin: '12px auto 0' }} />
+              <p style={{ ...styles.subtitle, marginTop: '16px' }}>{t('landingSubtitle')}</p>
             </div>
 
             <div style={styles.landingCards}>
               <motion.div
                 style={styles.landingCard}
-                whileHover={{ borderColor: 'rgba(6, 182, 212, 0.5)', boxShadow: '0 0 24px rgba(6, 182, 212, 0.1)' }}
+                whileHover={{ borderColor: SK.ruby, boxShadow: `0 0 24px rgba(200, 0, 65, 0.1)` }}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4, delay: 0.15 }}
                 onClick={() => { setPrompt(''); setGenerationStep(0); setIsLoading(false); setAgentStatus(''); setAppView('factory'); }}
               >
                 <div style={styles.landingCardIcon}>
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#06B6D4" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={SK.ruby} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                     <rect x="3" y="3" width="18" height="18" rx="2" />
                     <path d="M3 9h18" />
                     <path d="M9 21V9" />
@@ -1206,21 +1208,21 @@ function Factory() {
               </motion.div>
 
               <motion.div
-                style={{ ...styles.landingCard, borderColor: 'rgba(139, 92, 246, 0.2)' }}
-                whileHover={{ borderColor: 'rgba(139, 92, 246, 0.5)', boxShadow: '0 0 24px rgba(139, 92, 246, 0.1)' }}
+                style={{ ...styles.landingCard, borderColor: `rgba(109, 177, 199, 0.3)` }}
+                whileHover={{ borderColor: SK.aqua, boxShadow: `0 0 24px rgba(109, 177, 199, 0.12)` }}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4, delay: 0.25 }}
                 onClick={() => { setAppView('upload-review'); setUploadedCode(null); setReviewResult(null); setShowDeployForm(false); }}
               >
-                <div style={{ ...styles.landingCardIcon, background: 'rgba(139, 92, 246, 0.1)' }}>
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#A78BFA" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <div style={{ ...styles.landingCardIcon, background: 'rgba(109, 177, 199, 0.1)' }}>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={SK.aqua} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                     <polyline points="17 8 12 3 7 8" />
                     <line x1="12" y1="3" x2="12" y2="15" />
                   </svg>
                 </div>
-                <h2 style={{ ...styles.landingCardTitle, color: '#A78BFA' }}>{t('landingSubmit')}</h2>
+                <h2 style={{ ...styles.landingCardTitle, color: SK.aqua }}>{t('landingSubmit')}</h2>
                 <p style={styles.landingCardDesc}>{t('landingSubmitDesc')}</p>
               </motion.div>
             </div>
@@ -1242,8 +1244,8 @@ function Factory() {
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                 >
-                  <h2 style={{ color: '#E4E4E7', fontSize: '20px', fontWeight: 700, margin: '0 0 6px' }}>{t('uploadReviewTitle')}</h2>
-                  <p style={{ color: '#71717A', fontSize: '13px', margin: 0 }}>{t('uploadReviewDesc')}</p>
+                  <h2 style={{ color: SK.textPrimary, fontSize: '20px', fontWeight: 700, margin: '0 0 6px' }}>{t('uploadReviewTitle')}</h2>
+                  <p style={{ color: SK.textSecondary, fontSize: '13px', margin: 0 }}>{t('uploadReviewDesc')}</p>
                 </motion.div>
                 <UploadCode t={t} onCodeLoaded={async (codeData) => {
                   setUploadedCode(codeData);
@@ -1259,12 +1261,12 @@ function Factory() {
                 }} />
                 {reviewLoading && (
                   <motion.div
-                    style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '16px', color: '#A1A1AA', fontSize: '14px' }}
+                    style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '16px', color: SK.textSecondary, fontSize: '14px' }}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                   >
                     <motion.div
-                      style={{ width: '20px', height: '20px', border: '2px solid rgba(6,182,212,0.2)', borderTop: '2px solid #06B6D4', borderRadius: '50%' }}
+                      style={{ width: '20px', height: '20px', border: `2px solid rgba(200,0,65,0.2)`, borderTop: `2px solid ${SK.ruby}`, borderRadius: '50%' }}
                       animate={{ rotate: 360 }}
                       transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}
                     />
@@ -1272,7 +1274,7 @@ function Factory() {
                   </motion.div>
                 )}
                 {reviewError && (
-                  <div style={{ color: '#EF4444', fontSize: '13px', marginTop: '12px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '8px', padding: '10px 14px' }}>
+                  <div style={{ color: SK.signalRed, fontSize: '13px', marginTop: '12px', background: 'rgba(228,84,68,0.05)', border: `1px solid rgba(228,84,68,0.2)`, borderRadius: '8px', padding: '10px 14px' }}>
                     {t('reviewFailed')} {reviewError}
                   </div>
                 )}
@@ -1312,7 +1314,7 @@ function Factory() {
 
         {/* ---- DEPLOY FORM (generated app) ---- */}
         {showDeployForm && generatedApp && appView === 'factory' && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(11,17,32,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '20px' }}>
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(50, 63, 72, 0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '20px' }}>
             <div style={{ width: '100%', maxWidth: '560px', maxHeight: '90vh', overflowY: 'auto' }}>
               <DeployForm
                 files={currentFiles}
@@ -1379,7 +1381,7 @@ function Factory() {
                       <motion.span
                         style={{
                           ...styles.stepIcon,
-                          color: step.done ? '#34D399' : generationStep === index + 1 ? '#06B6D4' : '#3F3F46',
+                          color: step.done ? SK.signalGreen : generationStep === index + 1 ? SK.ruby : SK.border,
                         }}
                         animate={generationStep === index + 1 ? { scale: [1, 1.3, 1] } : {}}
                         transition={{ duration: 0.6, repeat: generationStep === index + 1 ? Infinity : 0 }}
@@ -1388,7 +1390,7 @@ function Factory() {
                       </motion.span>
                       <span style={{
                         ...styles.stepLabel,
-                        color: step.done ? '#E4E4E7' : generationStep === index + 1 ? '#FFFFFF' : '#52525B'
+                        color: step.done ? SK.textPrimary : generationStep === index + 1 ? SK.textPrimary : SK.textMuted
                       }}>
                         {step.label}
                       </span>
@@ -1412,7 +1414,8 @@ function Factory() {
                 transition={{ duration: 0.5, delay: 0.1 }}
               >
                 <h1 style={styles.title}>{t('title')}</h1>
-                <p style={styles.subtitle}>{t('subtitle')}</p>
+                <div style={{ width: '52px', height: '3px', background: SK.ruby, margin: '12px auto 0' }} />
+                <p style={{ ...styles.subtitle, marginTop: '16px' }}>{t('subtitle')}</p>
               </motion.div>
 
               <motion.div
@@ -1437,7 +1440,7 @@ function Factory() {
 
                 {/* Industry selector */}
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
-                  <span style={{ color: '#71717A', fontSize: '12px', alignSelf: 'center', marginRight: '4px' }}>{t('industryLabel')}</span>
+                  <span style={{ color: SK.textSecondary, fontSize: '12px', alignSelf: 'center', marginRight: '4px' }}>{t('industryLabel')}</span>
                   {['none', 'finance', 'ecommerce', 'saas', 'logistics'].map((ind) => (
                     <button
                       key={ind}
@@ -1446,14 +1449,14 @@ function Factory() {
                         padding: '5px 12px',
                         borderRadius: '16px',
                         border: (ind === 'none' ? !selectedIndustry : selectedIndustry === ind)
-                          ? '1px solid #06B6D4'
-                          : '1px solid rgba(63, 63, 70, 0.3)',
+                          ? `1px solid ${SK.ruby}`
+                          : `1px solid ${SK.border}`,
                         background: (ind === 'none' ? !selectedIndustry : selectedIndustry === ind)
-                          ? 'rgba(6, 182, 212, 0.15)'
-                          : 'rgba(24, 24, 27, 0.4)',
+                          ? 'rgba(200, 0, 65, 0.1)'
+                          : SK.bgSecondary,
                         color: (ind === 'none' ? !selectedIndustry : selectedIndustry === ind)
-                          ? '#06B6D4'
-                          : '#A1A1AA',
+                          ? SK.ruby
+                          : SK.textSecondary,
                         fontSize: '13px',
                         cursor: 'pointer',
                         fontFamily: 'inherit',
@@ -1530,7 +1533,7 @@ function Factory() {
                   {t('generateApp')}
                 </motion.button>
                 {lastGenerateError && (
-                  <div style={{ marginTop: '10px', color: '#EF4444', fontSize: '12px', textAlign: 'center', maxWidth: '480px', wordBreak: 'break-word' }}>
+                  <div style={{ marginTop: '10px', color: SK.signalRed, fontSize: '12px', textAlign: 'center', maxWidth: '480px', wordBreak: 'break-word' }}>
                     Error: {lastGenerateError}
                   </div>
                 )}
@@ -1558,7 +1561,7 @@ function Factory() {
                       onClick={() => setPrompt(s.prompt)}
                       variants={staggerItem}
                       transition={{ duration: 0.3, delay: 0.35 + i * 0.05 }}
-                      whileHover={{ scale: 1.04, borderColor: 'rgba(6, 182, 212, 0.3)' }}
+                      whileHover={{ scale: 1.04, borderColor: `rgba(200, 0, 65, 0.3)` }}
                       whileTap={{ scale: 0.97 }}
                     >
                       {t(`suggestions.${s.key}`)}
@@ -1589,7 +1592,7 @@ function Factory() {
 const styles = {
   loadingScreen: {
     minHeight: '100vh',
-    background: '#09090B',
+    background: SK.bgPrimary,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1597,24 +1600,24 @@ const styles = {
   loadingSpinner: {
     width: '24px',
     height: '24px',
-    border: '2px solid #27272A',
-    borderTop: '2px solid #06B6D4',
+    border: `2px solid ${SK.border}`,
+    borderTop: `2px solid ${SK.ruby}`,
     borderRadius: '50%',
   },
   container: {
     display: 'flex',
     flexDirection: 'column',
     minHeight: '100vh',
-    background: '#09090B',
-    fontFamily: "'DM Sans', 'Inter', system-ui, -apple-system, sans-serif",
-    color: '#FAFAFA',
+    background: SK.bgSecondary,
+    fontFamily: SK.fontFamily,
+    color: SK.textPrimary,
     position: 'relative',
   },
   gridPattern: {
     position: 'fixed',
     top: 0, left: 0, right: 0, bottom: 0,
     backgroundImage:
-      'linear-gradient(rgba(6, 182, 212, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(6, 182, 212, 0.03) 1px, transparent 1px)',
+      `linear-gradient(${SK.iceLight60}40 1px, transparent 1px), linear-gradient(90deg, ${SK.iceLight60}40 1px, transparent 1px)`,
     backgroundSize: '64px 64px',
     pointerEvents: 'none',
     zIndex: 0,
@@ -1625,8 +1628,8 @@ const styles = {
     left: 0,
     bottom: 0,
     width: '260px',
-    background: '#0F0F12',
-    borderRight: '1px solid rgba(63, 63, 70, 0.4)',
+    background: SK.charcoal,
+    borderRight: `1px solid ${SK.iceDark50}`,
     padding: '20px 14px',
     display: 'flex',
     flexDirection: 'column',
@@ -1639,7 +1642,7 @@ const styles = {
     left: 0,
     right: 0,
     bottom: 0,
-    background: 'rgba(0, 0, 0, 0.5)',
+    background: 'rgba(50, 63, 72, 0.5)',
     zIndex: 20,
   },
   logoRow: {
@@ -1652,7 +1655,7 @@ const styles = {
   logoText: {
     fontSize: '15px',
     fontWeight: '600',
-    color: '#FAFAFA',
+    color: SK.textInverse,
     letterSpacing: '-0.01em',
   },
   versionBadge: {
@@ -1660,18 +1663,18 @@ const styles = {
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
-    color: '#06B6D4',
-    background: 'rgba(6, 182, 212, 0.1)',
+    color: SK.salmon,
+    background: 'rgba(200, 0, 65, 0.15)',
     padding: '2px 6px',
     borderRadius: '4px',
     marginLeft: 'auto',
   },
   newAppButton: {
-    background: 'rgba(6, 182, 212, 0.1)',
-    color: '#06B6D4',
-    border: '1px solid rgba(6, 182, 212, 0.2)',
+    background: 'rgba(200, 0, 65, 0.12)',
+    color: SK.salmon,
+    border: '1px solid rgba(200, 0, 65, 0.25)',
     padding: '10px 14px',
-    borderRadius: '8px',
+    borderRadius: '4px',
     fontWeight: '500',
     fontSize: '13px',
     cursor: 'pointer',
@@ -1687,16 +1690,16 @@ const styles = {
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: '0.06em',
-    color: '#52525B',
+    color: SK.iceBlue,
     padding: '0 8px',
     marginBottom: '8px',
   },
   appList: { flex: 1, overflow: 'auto' },
   appItem: {
     padding: '8px 10px',
-    borderRadius: '6px',
+    borderRadius: '4px',
     fontSize: '13px',
-    color: '#A1A1AA',
+    color: SK.iceLight40,
     cursor: 'pointer',
     transition: 'all 0.15s ease',
     marginBottom: '2px',
@@ -1711,7 +1714,7 @@ const styles = {
   sidebarFooter: {
     marginTop: 'auto',
     paddingTop: '16px',
-    borderTop: '1px solid rgba(63, 63, 70, 0.4)',
+    borderTop: `1px solid ${SK.iceDark50}`,
   },
   userRow: {
     display: 'flex',
@@ -1724,8 +1727,8 @@ const styles = {
     width: '24px',
     height: '24px',
     borderRadius: '6px',
-    background: 'rgba(6, 182, 212, 0.15)',
-    color: '#06B6D4',
+    background: 'rgba(200, 0, 65, 0.15)',
+    color: SK.ruby,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1735,7 +1738,7 @@ const styles = {
   },
   userEmail: {
     fontSize: '12px',
-    color: '#71717A',
+    color: SK.textSecondary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
@@ -1744,7 +1747,7 @@ const styles = {
   logoutButton: {
     background: 'none',
     border: 'none',
-    color: '#52525B',
+    color: SK.textMuted,
     fontSize: '14px',
     cursor: 'pointer',
     padding: '2px 6px',
@@ -1773,18 +1776,18 @@ const styles = {
   },
   statusText: {
     fontSize: '11px',
-    color: '#52525B',
+    color: SK.iceBlue,
   },
   langToggle: {
     display: 'flex',
-    border: '1px solid rgba(63, 63, 70, 0.3)',
-    borderRadius: '6px',
+    border: `1px solid ${SK.border}`,
+    borderRadius: '4px',
     overflow: 'hidden',
   },
   langButton: {
     background: 'none',
     border: 'none',
-    color: '#52525B',
+    color: SK.textMuted,
     fontSize: '10px',
     fontWeight: '600',
     letterSpacing: '0.03em',
@@ -1794,8 +1797,8 @@ const styles = {
     transition: 'all 0.15s ease',
   },
   langButtonActive: {
-    background: 'rgba(6, 182, 212, 0.12)',
-    color: '#06B6D4',
+    background: 'rgba(200, 0, 65, 0.1)',
+    color: SK.ruby,
   },
   topBar: {
     display: 'flex',
@@ -1808,10 +1811,10 @@ const styles = {
   menuButton: {
     background: 'none',
     border: 'none',
-    color: '#A1A1AA',
+    color: SK.textSecondary,
     cursor: 'pointer',
     padding: '6px',
-    borderRadius: '6px',
+    borderRadius: '4px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1830,7 +1833,7 @@ const styles = {
   },
   topBarEmail: {
     fontSize: '12px',
-    color: '#71717A',
+    color: SK.textSecondary,
     maxWidth: '160px',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -1865,17 +1868,18 @@ const styles = {
     flexDirection: 'column',
     gap: '14px',
     padding: '32px',
-    background: '#0F0F12',
-    border: '1px solid rgba(6, 182, 212, 0.2)',
-    borderRadius: '14px',
+    background: SK.bgPrimary,
+    border: `1px solid ${SK.border}`,
+    borderRadius: '8px',
     cursor: 'pointer',
     transition: 'border-color 0.25s, box-shadow 0.25s',
+    boxShadow: SK.shadowSm,
   },
   landingCardIcon: {
     width: '48px',
     height: '48px',
-    borderRadius: '12px',
-    background: 'rgba(6, 182, 212, 0.1)',
+    borderRadius: '8px',
+    background: 'rgba(200, 0, 65, 0.08)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1883,44 +1887,45 @@ const styles = {
   landingCardTitle: {
     fontSize: '18px',
     fontWeight: '600',
-    color: '#06B6D4',
+    color: SK.ruby,
     margin: 0,
   },
   landingCardDesc: {
     fontSize: '13px',
-    color: '#71717A',
+    color: SK.textSecondary,
     lineHeight: '1.5',
     margin: 0,
   },
   heroSection: { textAlign: 'center', marginBottom: '36px' },
   title: {
     fontSize: '28px',
-    fontWeight: '600',
-    color: '#FAFAFA',
+    fontWeight: '700',
+    color: SK.textPrimary,
     marginBottom: '10px',
     letterSpacing: '-0.02em',
     lineHeight: '1.2',
   },
   subtitle: {
     fontSize: '14px',
-    color: '#71717A',
+    color: SK.textSecondary,
     lineHeight: '1.5',
   },
   promptContainer: {
-    background: '#0F0F12',
-    borderRadius: '14px',
+    background: SK.bgPrimary,
+    borderRadius: '8px',
     padding: '20px',
-    border: '1px solid rgba(63, 63, 70, 0.4)',
+    border: `1px solid ${SK.border}`,
     marginBottom: '28px',
     overflow: 'hidden',
+    boxShadow: SK.shadowMd,
   },
   promptInput: {
     width: '100%',
-    background: 'rgba(24, 24, 27, 0.6)',
-    border: '1px solid rgba(63, 63, 70, 0.3)',
-    borderRadius: '10px',
+    background: SK.bgPrimary,
+    border: `1px solid ${SK.borderStrong}`,
+    borderRadius: '4px',
     padding: '14px 16px',
-    color: '#FAFAFA',
+    color: SK.textPrimary,
     fontSize: '14px',
     resize: 'none',
     marginBottom: '12px',
@@ -1934,7 +1939,7 @@ const styles = {
   dataSourceToggle: {
     background: 'none',
     border: 'none',
-    color: '#52525B',
+    color: SK.textSecondary,
     fontSize: '12px',
     cursor: 'pointer',
     padding: '4px 0',
@@ -1945,12 +1950,12 @@ const styles = {
     display: 'inline-flex',
     alignItems: 'center',
     gap: '4px',
-    background: 'rgba(6, 182, 212, 0.08)',
-    border: '1px solid rgba(6, 182, 212, 0.15)',
-    borderRadius: '6px',
+    background: 'rgba(109, 177, 199, 0.08)',
+    border: `1px solid rgba(109, 177, 199, 0.2)`,
+    borderRadius: '4px',
     padding: '6px 10px',
     fontSize: '12px',
-    color: '#06B6D4',
+    color: SK.aqua,
   },
   dataChipText: {
     maxWidth: '300px',
@@ -1961,7 +1966,7 @@ const styles = {
   dataChipRemove: {
     background: 'none',
     border: 'none',
-    color: '#06B6D4',
+    color: SK.aqua,
     fontSize: '14px',
     cursor: 'pointer',
     padding: '0 2px',
@@ -1970,11 +1975,11 @@ const styles = {
     fontFamily: 'inherit',
   },
   dataSourcePanel: {
-    background: 'rgba(24, 24, 27, 0.4)',
-    borderRadius: '10px',
+    background: SK.bgSecondary,
+    borderRadius: '8px',
     padding: '14px',
     marginBottom: '12px',
-    border: '1px solid rgba(63, 63, 70, 0.2)',
+    border: `1px solid ${SK.border}`,
     overflow: 'hidden',
   },
   dataSeparator: {
@@ -1983,20 +1988,20 @@ const styles = {
     gap: '10px',
     margin: '10px 0',
   },
-  separatorLine: { flex: 1, height: '1px', background: 'rgba(63, 63, 70, 0.3)' },
+  separatorLine: { flex: 1, height: '1px', background: SK.border },
   separatorText: {
     fontSize: '11px',
-    color: '#3F3F46',
+    color: SK.textMuted,
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
   },
   generateButton: {
     width: '100%',
-    background: 'linear-gradient(135deg, #06B6D4 0%, #0891B2 100%)',
-    color: 'white',
+    background: SK.ruby,
+    color: SK.textInverse,
     border: 'none',
     padding: '13px 24px',
-    borderRadius: '10px',
+    borderRadius: '4px',
     fontWeight: '600',
     fontSize: '14px',
     cursor: 'pointer',
@@ -2010,7 +2015,7 @@ const styles = {
   suggestionsLabel: {
     fontSize: '11px',
     fontWeight: '500',
-    color: '#3F3F46',
+    color: SK.textMuted,
     textTransform: 'uppercase',
     letterSpacing: '0.06em',
     marginBottom: '10px',
@@ -2021,12 +2026,12 @@ const styles = {
     gap: '8px',
   },
   suggestionChip: {
-    background: 'rgba(24, 24, 27, 0.6)',
-    border: '1px solid rgba(63, 63, 70, 0.3)',
+    background: SK.bgPrimary,
+    border: `1px solid ${SK.border}`,
     borderRadius: '20px',
     padding: '7px 14px',
     fontSize: '12px',
-    color: '#A1A1AA',
+    color: SK.textSecondary,
     cursor: 'pointer',
     fontFamily: 'inherit',
     whiteSpace: 'nowrap',
@@ -2037,8 +2042,8 @@ const styles = {
     justifyContent: 'center',
     gap: '8px',
   },
-  footerText: { fontSize: '11px', color: '#27272A' },
-  footerDot: { color: '#27272A', fontSize: '11px' },
+  footerText: { fontSize: '11px', color: SK.textMuted },
+  footerDot: { color: SK.textMuted, fontSize: '11px' },
   generationScreen: {
     display: 'flex',
     alignItems: 'center',
@@ -2046,36 +2051,37 @@ const styles = {
     width: '100%',
   },
   generationCard: {
-    background: '#0F0F12',
-    borderRadius: '16px',
+    background: SK.bgPrimary,
+    borderRadius: '8px',
     padding: '40px',
-    border: '1px solid rgba(63, 63, 70, 0.4)',
+    border: `1px solid ${SK.border}`,
     textAlign: 'center',
     minWidth: '400px',
     maxWidth: '480px',
+    boxShadow: SK.shadowLg,
   },
   progressBar: {
     height: '3px',
-    background: '#18181B',
+    background: SK.bgSecondary,
     borderRadius: '2px',
     marginBottom: '32px',
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
-    background: 'linear-gradient(90deg, #06B6D4, #22D3EE)',
+    background: `linear-gradient(90deg, ${SK.ruby}, ${SK.salmon})`,
     borderRadius: '2px',
   },
   generationTitle: {
     fontSize: '18px',
-    fontWeight: '600',
-    color: '#FAFAFA',
+    fontWeight: '700',
+    color: SK.textPrimary,
     marginBottom: '8px',
     letterSpacing: '-0.02em',
   },
   agentStatus: {
     fontSize: '12px',
-    color: '#06B6D4',
+    color: SK.ruby,
     marginBottom: '24px',
     fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
     opacity: 0.8,
@@ -2098,7 +2104,7 @@ const styles = {
     position: 'relative',
     width: '100vw',
     height: '100vh',
-    background: '#09090B',
+    background: SK.bgSecondary,
   },
   fullScreenPreview: {
     width: '100%',
@@ -2118,9 +2124,9 @@ const styles = {
     position: 'fixed',
     bottom: 0, left: 0, right: 0,
     height: '56px',
-    background: 'rgba(15, 15, 18, 0.92)',
+    background: 'rgba(255, 255, 255, 0.92)',
     backdropFilter: 'blur(12px)',
-    borderTop: '1px solid rgba(63, 63, 70, 0.3)',
+    borderTop: `1px solid ${SK.border}`,
     padding: '0 14px',
     display: 'flex',
     alignItems: 'center',
@@ -2139,32 +2145,32 @@ const styles = {
   },
   feedbackInput: {
     flex: 1,
-    background: 'rgba(24, 24, 27, 0.6)',
-    border: '1px solid rgba(63, 63, 70, 0.3)',
-    borderRadius: '8px',
+    background: SK.bgSecondary,
+    border: `1px solid ${SK.border}`,
+    borderRadius: '4px',
     padding: '10px 14px',
-    color: '#FAFAFA',
+    color: SK.textPrimary,
     fontSize: '13px',
     fontFamily: 'inherit',
     outline: 'none',
   },
   floatingButton: {
-    background: 'rgba(24, 24, 27, 0.8)',
-    color: '#A1A1AA',
-    border: '1px solid rgba(63, 63, 70, 0.3)',
+    background: SK.bgSecondary,
+    color: SK.textSecondary,
+    border: `1px solid ${SK.border}`,
     padding: '9px 14px',
-    borderRadius: '8px',
+    borderRadius: '4px',
     fontSize: '12px',
     cursor: 'pointer',
     transition: 'all 0.15s ease',
     fontFamily: 'inherit',
   },
   floatingButtonPrimary: {
-    background: 'linear-gradient(135deg, #06B6D4 0%, #0891B2 100%)',
-    color: 'white',
+    background: SK.ruby,
+    color: SK.textInverse,
     border: 'none',
     padding: '9px 16px',
-    borderRadius: '8px',
+    borderRadius: '4px',
     fontSize: '12px',
     fontWeight: '500',
     cursor: 'pointer',

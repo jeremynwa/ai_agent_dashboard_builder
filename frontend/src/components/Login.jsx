@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useAuth } from './AuthProvider';
 import { completeNewPassword } from '../services/auth';
+import { SK } from '../services/sk-theme';
 
 export default function Login() {
   const { login, error, clearError } = useAuth();
@@ -55,6 +56,7 @@ export default function Login() {
         <div style={styles.logoRow}>
           <span style={styles.logo}>FACTORY</span>
         </div>
+        <div style={{ width: '52px', height: '3px', background: SK.ruby, marginBottom: '24px' }} />
 
         <h1 style={styles.title}>
           {newPasswordMode ? 'Nouveau mot de passe' : 'Connexion'}
@@ -137,50 +139,51 @@ export default function Login() {
 const styles = {
   container: {
     minHeight: '100vh',
-    background: '#0F0F12',
+    background: SK.bgSecondary,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'column',
-    fontFamily: 'Inter, system-ui, sans-serif',
-    color: '#FFFFFF',
+    fontFamily: SK.fontFamily,
+    color: SK.textPrimary,
   },
   card: {
-    background: '#16161A',
-    borderRadius: '16px',
+    background: SK.bgPrimary,
+    borderRadius: '8px',
     padding: '40px',
-    border: '1px solid #2E2E36',
+    border: `1px solid ${SK.border}`,
     width: '100%',
     maxWidth: '400px',
+    boxShadow: SK.shadowLg,
   },
   logoRow: {
-    marginBottom: '32px',
+    marginBottom: '12px',
   },
   logo: {
     fontSize: '12px',
     fontWeight: '700',
     letterSpacing: '0.1em',
-    color: '#FFFFFF',
+    color: SK.ruby,
   },
   title: {
     fontSize: '22px',
-    fontWeight: '600',
+    fontWeight: '700',
     marginBottom: '8px',
-    color: '#FFFFFF',
+    color: SK.textPrimary,
   },
   subtitle: {
     fontSize: '14px',
-    color: '#71717A',
+    color: SK.textSecondary,
     marginBottom: '28px',
     lineHeight: '1.5',
   },
   errorBox: {
-    background: 'rgba(239, 68, 68, 0.1)',
-    border: '1px solid rgba(239, 68, 68, 0.3)',
+    background: 'rgba(228, 84, 68, 0.05)',
+    border: `1px solid rgba(228, 84, 68, 0.2)`,
     borderRadius: '8px',
     padding: '12px 16px',
     fontSize: '13px',
-    color: '#FCA5A5',
+    color: SK.signalRed,
     marginBottom: '20px',
   },
   field: {
@@ -190,16 +193,16 @@ const styles = {
     display: 'block',
     fontSize: '12px',
     fontWeight: '500',
-    color: '#A1A1AA',
+    color: SK.textSecondary,
     marginBottom: '8px',
   },
   input: {
     width: '100%',
-    background: '#1C1C21',
-    border: '1px solid #2E2E36',
-    borderRadius: '8px',
+    background: SK.bgPrimary,
+    border: `1px solid ${SK.borderStrong}`,
+    borderRadius: '4px',
     padding: '12px 16px',
-    color: '#FFFFFF',
+    color: SK.textPrimary,
     fontSize: '14px',
     fontFamily: 'inherit',
     outline: 'none',
@@ -208,11 +211,11 @@ const styles = {
   },
   button: {
     width: '100%',
-    background: '#00765F',
-    color: 'white',
+    background: SK.ruby,
+    color: SK.textInverse,
     border: 'none',
     padding: '14px 24px',
-    borderRadius: '8px',
+    borderRadius: '4px',
     fontWeight: '600',
     fontSize: '14px',
     cursor: 'pointer',
@@ -223,6 +226,6 @@ const styles = {
   footer: {
     marginTop: '24px',
     fontSize: '12px',
-    color: '#52525B',
+    color: SK.textMuted,
   },
 };

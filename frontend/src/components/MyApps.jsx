@@ -2,11 +2,12 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { getMyApps } from '../services/api';
+import { SK } from '../services/sk-theme';
 
 const STATUS_STYLES = {
-  deployed: { color: '#10B981', bg: 'rgba(16,185,129,0.1)', border: 'rgba(16,185,129,0.2)' },
-  pending: { color: '#F59E0B', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.2)' },
-  failed: { color: '#EF4444', bg: 'rgba(239,68,68,0.1)', border: 'rgba(239,68,68,0.2)' },
+  deployed: { color: SK.signalGreen, bg: 'rgba(47, 167, 77, 0.08)', border: 'rgba(47, 167, 77, 0.2)' },
+  pending: { color: SK.signalYellow, bg: 'rgba(255, 204, 102, 0.08)', border: 'rgba(255, 204, 102, 0.2)' },
+  failed: { color: SK.signalRed, bg: 'rgba(228, 84, 68, 0.08)', border: 'rgba(228, 84, 68, 0.2)' },
 };
 
 const SOURCE_LABELS = {
@@ -23,7 +24,7 @@ function AppCard({ app }) {
       style={styles.card}
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      whileHover={{ borderColor: 'rgba(6,182,212,0.3)' }}
+      whileHover={{ borderColor: SK.ruby }}
     >
       <div style={styles.cardHeader}>
         <div style={styles.cardName}>{app.appName}</div>
@@ -36,7 +37,7 @@ function AppCard({ app }) {
         {app.stack && <span style={styles.metaTag}>{app.stack}</span>}
         {app.source && <span style={styles.metaTag}>{SOURCE_LABELS[app.source] || app.source}</span>}
         {typeof app.reviewScore === 'number' && (
-          <span style={{ ...styles.metaTag, color: app.reviewScore >= 70 ? '#10B981' : '#F59E0B' }}>
+          <span style={{ ...styles.metaTag, color: app.reviewScore >= 70 ? SK.signalGreen : SK.signalYellow }}>
             Score: {app.reviewScore}/100
           </span>
         )}
@@ -99,7 +100,7 @@ export default function MyApps({ onBack }) {
             animate={{ rotate: 360 }}
             transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}
           />
-          <span style={{ color: '#71717A', fontSize: '14px' }}>Loading your apps...</span>
+          <span style={{ color: SK.textSecondary, fontSize: '14px' }}>Loading your apps...</span>
         </div>
       )}
 
@@ -111,10 +112,10 @@ export default function MyApps({ onBack }) {
         <div style={styles.emptyState}>
           <div style={styles.emptyIcon}>
             <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-              <rect width="48" height="48" rx="12" fill="rgba(6,182,212,0.05)" stroke="rgba(6,182,212,0.15)" strokeWidth="1.5"/>
-              <path d="M16 18h16M16 24h10M16 30h12" stroke="#3F3F46" strokeWidth="1.5" strokeLinecap="round"/>
-              <circle cx="34" cy="30" r="5" stroke="#06B6D4" strokeWidth="1.5"/>
-              <path d="M37.5 33.5l3 3" stroke="#06B6D4" strokeWidth="1.5" strokeLinecap="round"/>
+              <rect width="48" height="48" rx="12" fill="rgba(200,0,65,0.05)" stroke="rgba(200,0,65,0.15)" strokeWidth="1.5"/>
+              <path d="M16 18h16M16 24h10M16 30h12" stroke={SK.border} strokeWidth="1.5" strokeLinecap="round"/>
+              <circle cx="34" cy="30" r="5" stroke={SK.ruby} strokeWidth="1.5"/>
+              <path d="M37.5 33.5l3 3" stroke={SK.ruby} strokeWidth="1.5" strokeLinecap="round"/>
             </svg>
           </div>
           <div style={styles.emptyTitle}>No apps yet</div>
@@ -148,23 +149,23 @@ const styles = {
     alignItems: 'center',
     gap: '12px',
     paddingBottom: '16px',
-    borderBottom: '1px solid rgba(63,63,70,0.3)',
+    borderBottom: `1px solid ${SK.border}`,
   },
   backBtn: {
     background: 'transparent',
-    border: '1px solid rgba(63,63,70,0.4)',
-    borderRadius: '6px',
-    color: '#71717A',
+    border: `1px solid ${SK.border}`,
+    borderRadius: '4px',
+    color: SK.textSecondary,
     padding: '5px 12px',
     fontSize: '13px',
     cursor: 'pointer',
     fontFamily: 'inherit',
   },
-  title: { color: '#E4E4E7', fontSize: '20px', fontWeight: 700, margin: 0 },
+  title: { color: SK.textPrimary, fontSize: '20px', fontWeight: 700, margin: 0 },
   appCount: {
-    color: '#52525B',
+    color: SK.textMuted,
     fontSize: '13px',
-    background: 'rgba(63,63,70,0.2)',
+    background: SK.bgSecondary,
     padding: '3px 10px',
     borderRadius: '10px',
   },
@@ -174,18 +175,19 @@ const styles = {
     gap: '12px',
   },
   card: {
-    background: '#111827',
-    border: '1px solid rgba(63,63,70,0.4)',
-    borderRadius: '12px',
+    background: SK.bgPrimary,
+    border: `1px solid ${SK.border}`,
+    borderRadius: '8px',
     padding: '16px',
     display: 'flex',
     flexDirection: 'column',
     gap: '10px',
     transition: 'border-color 0.2s ease',
     cursor: 'default',
+    boxShadow: SK.shadowSm,
   },
   cardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' },
-  cardName: { color: '#E4E4E7', fontWeight: 600, fontSize: '14px', wordBreak: 'break-word' },
+  cardName: { color: SK.textPrimary, fontWeight: 600, fontSize: '14px', wordBreak: 'break-word' },
   statusBadge: {
     fontSize: '11px',
     padding: '2px 8px',
@@ -198,25 +200,25 @@ const styles = {
   cardMeta: { display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' },
   metaTag: {
     fontSize: '11px',
-    color: '#71717A',
-    background: 'rgba(63,63,70,0.2)',
+    color: SK.textSecondary,
+    background: SK.bgSecondary,
     padding: '2px 8px',
     borderRadius: '8px',
   },
-  metaDate: { fontSize: '11px', color: '#52525B', marginLeft: 'auto' },
+  metaDate: { fontSize: '11px', color: SK.textMuted, marginLeft: 'auto' },
   cardLinks: { display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' },
   link: {
-    color: '#06B6D4',
+    color: SK.ruby,
     fontSize: '12px',
     textDecoration: 'none',
-    borderBottom: '1px solid rgba(6,182,212,0.3)',
+    borderBottom: `1px solid rgba(200,0,65,0.3)`,
     paddingBottom: '1px',
   },
-  ticketId: { color: '#71717A', fontSize: '12px', fontFamily: 'monospace' },
+  ticketId: { color: SK.textSecondary, fontSize: '12px', fontFamily: 'monospace' },
   vmSpec: {
-    color: '#52525B',
+    color: SK.textMuted,
     fontSize: '11px',
-    borderTop: '1px solid rgba(63,63,70,0.2)',
+    borderTop: `1px solid ${SK.border}`,
     paddingTop: '8px',
   },
   centerState: {
@@ -229,14 +231,14 @@ const styles = {
   spinner: {
     width: '28px',
     height: '28px',
-    border: '2px solid rgba(6,182,212,0.2)',
-    borderTop: '2px solid #06B6D4',
+    border: `2px solid rgba(200,0,65,0.2)`,
+    borderTop: `2px solid ${SK.ruby}`,
     borderRadius: '50%',
   },
   errorBox: {
-    color: '#EF4444',
-    background: 'rgba(239,68,68,0.08)',
-    border: '1px solid rgba(239,68,68,0.2)',
+    color: SK.signalRed,
+    background: 'rgba(228, 84, 68, 0.06)',
+    border: '1px solid rgba(228, 84, 68, 0.2)',
     borderRadius: '8px',
     padding: '12px 16px',
     fontSize: '13px',
@@ -250,13 +252,13 @@ const styles = {
     textAlign: 'center',
   },
   emptyIcon: {},
-  emptyTitle: { color: '#A1A1AA', fontSize: '16px', fontWeight: 500 },
-  emptyHint: { color: '#71717A', fontSize: '13px' },
+  emptyTitle: { color: SK.textSecondary, fontSize: '16px', fontWeight: 500 },
+  emptyHint: { color: SK.textMuted, fontSize: '13px' },
   backToFactoryBtn: {
-    background: 'rgba(6,182,212,0.1)',
-    border: '1px solid rgba(6,182,212,0.3)',
-    borderRadius: '8px',
-    color: '#06B6D4',
+    background: 'rgba(200,0,65,0.08)',
+    border: `1px solid rgba(200,0,65,0.25)`,
+    borderRadius: '4px',
+    color: SK.ruby,
     padding: '9px 20px',
     fontSize: '14px',
     cursor: 'pointer',

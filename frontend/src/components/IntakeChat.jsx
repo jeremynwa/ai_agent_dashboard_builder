@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { routeIntake } from '../services/api';
+import { SK } from '../services/sk-theme';
 
 const GREETING = "Hi! I'm here to help. Do you have an existing app you'd like to upload and have reviewed, or do you want to build something new from scratch?";
 
@@ -108,9 +109,9 @@ const styles = {
     gap: '16px',
   },
   chatWindow: {
-    background: '#111827',
-    borderRadius: '12px',
-    border: '1px solid rgba(63, 63, 70, 0.4)',
+    background: SK.bgPrimary,
+    borderRadius: '8px',
+    border: `1px solid ${SK.border}`,
     padding: '20px',
     display: 'flex',
     flexDirection: 'column',
@@ -118,6 +119,7 @@ const styles = {
     minHeight: '160px',
     maxHeight: '320px',
     overflowY: 'auto',
+    boxShadow: SK.shadowSm,
   },
   bubble: {
     padding: '10px 14px',
@@ -128,9 +130,9 @@ const styles = {
     wordBreak: 'break-word',
   },
   aiBubble: {
-    background: 'rgba(6, 182, 212, 0.08)',
-    border: '1px solid rgba(6, 182, 212, 0.2)',
-    color: '#E4E4E7',
+    background: 'rgba(109, 177, 199, 0.08)',
+    border: `1px solid rgba(109, 177, 199, 0.2)`,
+    color: SK.textPrimary,
     alignSelf: 'flex-start',
     padding: '10px 14px',
     borderRadius: '10px',
@@ -139,9 +141,9 @@ const styles = {
     maxWidth: '85%',
   },
   userBubble: {
-    background: 'rgba(139, 92, 246, 0.12)',
-    border: '1px solid rgba(139, 92, 246, 0.25)',
-    color: '#E4E4E7',
+    background: 'rgba(200, 0, 65, 0.06)',
+    border: `1px solid rgba(200, 0, 65, 0.2)`,
+    color: SK.textPrimary,
     alignSelf: 'flex-end',
   },
   dots: {
@@ -150,7 +152,7 @@ const styles = {
     '& span': {
       width: '6px',
       height: '6px',
-      background: '#06B6D4',
+      background: SK.ruby,
       borderRadius: '50%',
     },
   },
@@ -160,20 +162,20 @@ const styles = {
   },
   input: {
     flex: 1,
-    background: '#111827',
-    border: '1px solid rgba(63, 63, 70, 0.5)',
-    borderRadius: '8px',
+    background: SK.bgPrimary,
+    border: `1px solid ${SK.borderStrong}`,
+    borderRadius: '4px',
     padding: '10px 14px',
-    color: '#E4E4E7',
+    color: SK.textPrimary,
     fontSize: '14px',
     outline: 'none',
     fontFamily: 'inherit',
   },
   sendBtn: {
-    background: '#06B6D4',
-    color: '#0B1120',
+    background: SK.ruby,
+    color: SK.textInverse,
     border: 'none',
-    borderRadius: '8px',
+    borderRadius: '4px',
     padding: '10px 18px',
     fontSize: '14px',
     fontWeight: 600,
@@ -187,23 +189,23 @@ const styles = {
     flexWrap: 'wrap',
   },
   quickLabel: {
-    color: '#71717A',
+    color: SK.textSecondary,
     fontSize: '12px',
   },
   quickBtn: {
-    background: 'rgba(24, 24, 27, 0.6)',
-    border: '1px solid rgba(63, 63, 70, 0.4)',
-    borderRadius: '8px',
+    background: SK.bgSecondary,
+    border: `1px solid ${SK.border}`,
+    borderRadius: '4px',
     padding: '7px 14px',
-    color: '#A1A1AA',
+    color: SK.textSecondary,
     fontSize: '13px',
     cursor: 'pointer',
     fontFamily: 'inherit',
     transition: 'all 0.15s ease',
   },
   quickBtnPrimary: {
-    background: 'rgba(6, 182, 212, 0.1)',
-    border: '1px solid rgba(6, 182, 212, 0.3)',
-    color: '#06B6D4',
+    background: 'rgba(200, 0, 65, 0.08)',
+    border: `1px solid rgba(200, 0, 65, 0.25)`,
+    color: SK.ruby,
   },
 };

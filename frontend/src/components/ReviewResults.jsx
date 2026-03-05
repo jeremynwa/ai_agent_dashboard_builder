@@ -1,23 +1,24 @@
 // ReviewResults.jsx — Display agent review score, issues, and apply fixes
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { SK } from '../services/sk-theme';
 
 const SEVERITY_COLORS = {
-  critical: { bg: 'rgba(239, 68, 68, 0.1)', border: 'rgba(239, 68, 68, 0.3)', text: '#EF4444', label: 'Critical' },
-  high: { bg: 'rgba(245, 158, 11, 0.1)', border: 'rgba(245, 158, 11, 0.3)', text: '#F59E0B', label: 'High' },
-  medium: { bg: 'rgba(139, 92, 246, 0.1)', border: 'rgba(139, 92, 246, 0.3)', text: '#8B5CF6', label: 'Medium' },
-  low: { bg: 'rgba(161, 161, 170, 0.1)', border: 'rgba(161, 161, 170, 0.2)', text: '#A1A1AA', label: 'Low' },
+  critical: { bg: 'rgba(228, 84, 68, 0.08)', border: 'rgba(228, 84, 68, 0.25)', text: SK.signalRed, label: 'Critical' },
+  high: { bg: 'rgba(255, 204, 102, 0.08)', border: 'rgba(255, 204, 102, 0.25)', text: SK.signalYellow, label: 'High' },
+  medium: { bg: 'rgba(109, 177, 199, 0.08)', border: 'rgba(109, 177, 199, 0.25)', text: SK.aqua, label: 'Medium' },
+  low: { bg: 'rgba(168, 185, 195, 0.08)', border: 'rgba(168, 185, 195, 0.2)', text: SK.textMuted, label: 'Low' },
 };
 
 function ScoreBadge({ score, t = (k) => k }) {
-  const color = score >= 70 ? '#10B981' : score >= 50 ? '#F59E0B' : '#EF4444';
+  const color = score >= 70 ? SK.signalGreen : score >= 50 ? SK.signalYellow : SK.signalRed;
   const label = score >= 70 ? t('scoreApproved') : score >= 50 ? t('scoreNeedsWork') : t('scoreBlocked');
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
       <div style={{ position: 'relative', width: '72px', height: '72px' }}>
         <svg width="72" height="72" viewBox="0 0 72 72">
-          <circle cx="36" cy="36" r="30" fill="none" stroke="rgba(63,63,70,0.3)" strokeWidth="6" />
+          <circle cx="36" cy="36" r="30" fill="none" stroke={SK.border} strokeWidth="6" />
           <circle
             cx="36" cy="36" r="30"
             fill="none"
@@ -36,7 +37,7 @@ function ScoreBadge({ score, t = (k) => k }) {
       </div>
       <div>
         <div style={{ color, fontWeight: 700, fontSize: '16px' }}>{label}</div>
-        <div style={{ color: '#71717A', fontSize: '12px', marginTop: '2px' }}>{t('qualityScore')}</div>
+        <div style={{ color: SK.textSecondary, fontSize: '12px', marginTop: '2px' }}>{t('qualityScore')}</div>
       </div>
     </div>
   );
@@ -96,7 +97,7 @@ export default function ReviewResults({ score, issues = [], summary, approved, f
           {high.length > 0 && <span style={styles.issueCount} data-sev="high">{high.length} High</span>}
           {medium.length > 0 && <span style={styles.issueCount} data-sev="medium">{medium.length} Medium</span>}
           {low.length > 0 && <span style={styles.issueCount} data-sev="low">{low.length} Low</span>}
-          {issues.length === 0 && <span style={{ color: '#10B981', fontSize: '13px' }}>{t('noIssues')}</span>}
+          {issues.length === 0 && <span style={{ color: SK.signalGreen, fontSize: '13px' }}>{t('noIssues')}</span>}
         </div>
       </div>
 
@@ -173,29 +174,30 @@ const styles = {
   },
   backBtn: {
     background: 'transparent',
-    border: '1px solid rgba(63,63,70,0.4)',
-    borderRadius: '6px',
-    color: '#71717A',
+    border: `1px solid ${SK.border}`,
+    borderRadius: '4px',
+    color: SK.textSecondary,
     padding: '5px 12px',
     fontSize: '13px',
     cursor: 'pointer',
     fontFamily: 'inherit',
   },
   title: {
-    color: '#E4E4E7',
+    color: SK.textPrimary,
     fontSize: '18px',
     fontWeight: 600,
     margin: 0,
   },
   scoreSection: {
-    background: '#111827',
-    border: '1px solid rgba(63,63,70,0.4)',
-    borderRadius: '12px',
+    background: SK.bgPrimary,
+    border: `1px solid ${SK.border}`,
+    borderRadius: '8px',
     padding: '20px',
     display: 'flex',
     alignItems: 'center',
     gap: '24px',
     flexWrap: 'wrap',
+    boxShadow: SK.shadowSm,
   },
   issueSummary: {
     display: 'flex',
@@ -207,19 +209,20 @@ const styles = {
     fontSize: '12px',
     padding: '3px 10px',
     borderRadius: '20px',
-    background: 'rgba(63,63,70,0.3)',
-    color: '#A1A1AA',
+    background: SK.bgSecondary,
+    color: SK.textSecondary,
   },
   summaryBox: {
-    background: '#111827',
-    border: '1px solid rgba(63,63,70,0.4)',
-    borderRadius: '10px',
+    background: SK.bgPrimary,
+    border: `1px solid ${SK.border}`,
+    borderRadius: '8px',
     padding: '14px 16px',
+    boxShadow: SK.shadowSm,
   },
-  summaryLabel: { color: '#71717A', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' },
-  summaryText: { color: '#E4E4E7', fontSize: '13px', lineHeight: '1.6', margin: 0 },
+  summaryLabel: { color: SK.textSecondary, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' },
+  summaryText: { color: SK.textPrimary, fontSize: '13px', lineHeight: '1.6', margin: 0 },
   issuesSection: { display: 'flex', flexDirection: 'column', gap: '8px' },
-  issuesSectionLabel: { color: '#71717A', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' },
+  issuesSectionLabel: { color: SK.textSecondary, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' },
   issuesList: { display: 'flex', flexDirection: 'column', gap: '6px' },
   issueCard: {
     borderRadius: '8px',
@@ -237,15 +240,15 @@ const styles = {
     textTransform: 'uppercase',
     letterSpacing: '0.04em',
   },
-  issueRule: { color: '#A1A1AA', fontSize: '12px', fontFamily: 'monospace' },
-  issueFile: { color: '#52525B', fontSize: '11px', fontFamily: 'monospace', marginLeft: 'auto' },
-  issueMessage: { color: '#E4E4E7', fontSize: '13px' },
-  issueFix: { color: '#71717A', fontSize: '12px', fontStyle: 'italic' },
+  issueRule: { color: SK.textSecondary, fontSize: '12px', fontFamily: 'monospace' },
+  issueFile: { color: SK.textMuted, fontSize: '11px', fontFamily: 'monospace', marginLeft: 'auto' },
+  issueMessage: { color: SK.textPrimary, fontSize: '13px' },
+  issueFix: { color: SK.textSecondary, fontSize: '12px', fontStyle: 'italic' },
   showMoreBtn: {
     background: 'transparent',
-    border: '1px solid rgba(63,63,70,0.35)',
-    borderRadius: '6px',
-    color: '#71717A',
+    border: `1px solid ${SK.border}`,
+    borderRadius: '4px',
+    color: SK.textSecondary,
     padding: '6px 14px',
     fontSize: '12px',
     cursor: 'pointer',
@@ -258,10 +261,10 @@ const styles = {
     gap: '10px',
   },
   fixBtn: {
-    background: 'rgba(139, 92, 246, 0.15)',
-    border: '1px solid rgba(139, 92, 246, 0.35)',
-    borderRadius: '8px',
-    color: '#8B5CF6',
+    background: 'rgba(109, 177, 199, 0.1)',
+    border: `1px solid rgba(109, 177, 199, 0.3)`,
+    borderRadius: '4px',
+    color: SK.aqua,
     padding: '11px 20px',
     fontSize: '14px',
     fontWeight: 600,
@@ -271,19 +274,19 @@ const styles = {
     boxSizing: 'border-box',
   },
   fixesAppliedBadge: {
-    color: '#10B981',
+    color: SK.signalGreen,
     fontSize: '13px',
     textAlign: 'center',
     padding: '6px',
-    background: 'rgba(16, 185, 129, 0.08)',
-    border: '1px solid rgba(16, 185, 129, 0.2)',
+    background: 'rgba(47, 167, 77, 0.06)',
+    border: '1px solid rgba(47, 167, 77, 0.2)',
     borderRadius: '8px',
   },
   deployBtn: {
-    background: 'linear-gradient(135deg, #06B6D4 0%, #8B5CF6 100%)',
+    background: SK.ruby,
     border: 'none',
-    borderRadius: '8px',
-    color: '#fff',
+    borderRadius: '4px',
+    color: SK.textInverse,
     padding: '12px 20px',
     fontSize: '14px',
     fontWeight: 600,

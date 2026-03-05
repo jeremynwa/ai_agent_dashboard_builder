@@ -1,6 +1,7 @@
 // UploadCode.jsx — ZIP upload for existing web apps
 import { useState, useRef } from 'react';
 import { motion } from 'motion/react';
+import { SK } from '../services/sk-theme';
 
 // JSZip is loaded lazily to avoid bundle size impact on first load
 async function loadJSZip() {
@@ -132,7 +133,7 @@ export default function UploadCode({ onCodeLoaded, t = (k) => k }) {
         <div style={styles.parsedHeader}>
           <div>
             <div style={styles.parsedTitle}>{appName}</div>
-            <div style={styles.parsedMeta}>{fileTree.length} {t('filesDetected')} · Stack: <span style={{ color: '#06B6D4' }}>{stack}</span></div>
+            <div style={styles.parsedMeta}>{fileTree.length} {t('filesDetected')} · Stack: <span style={{ color: SK.aqua }}>{stack}</span></div>
           </div>
           <button style={styles.clearBtn} onClick={() => { setParsedFiles(null); setFileTree(null); setAppName(''); }}>
             {t('change')}
@@ -204,8 +205,8 @@ export default function UploadCode({ onCodeLoaded, t = (k) => k }) {
           <div style={styles.dropContent}>
             <div style={styles.dropIcon}>
               <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-                <rect width="32" height="32" rx="8" fill="rgba(6,182,212,0.1)"/>
-                <path d="M16 8v12M10 14l6-6 6 6M8 22v2h16v-2" stroke="#06B6D4" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <rect width="32" height="32" rx="8" fill={`rgba(200,0,65,0.08)`}/>
+                <path d="M16 8v12M10 14l6-6 6 6M8 22v2h16v-2" stroke={SK.ruby} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             </div>
             <div style={styles.dropTitle}>{t('dropZoneTitle')}</div>
@@ -222,17 +223,17 @@ export default function UploadCode({ onCodeLoaded, t = (k) => k }) {
 const styles = {
   container: { width: '100%' },
   dropZone: {
-    border: '2px dashed rgba(6, 182, 212, 0.25)',
-    borderRadius: '12px',
+    border: `2px dashed ${SK.borderStrong}`,
+    borderRadius: '8px',
     padding: '36px 24px',
     cursor: 'pointer',
     transition: 'all 0.2s ease',
-    background: 'rgba(6, 182, 212, 0.03)',
+    background: SK.bgPrimary,
     textAlign: 'center',
   },
   dropZoneActive: {
-    border: '2px dashed #06B6D4',
-    background: 'rgba(6, 182, 212, 0.08)',
+    border: `2px dashed ${SK.ruby}`,
+    background: 'rgba(200, 0, 65, 0.04)',
   },
   dropContent: {
     display: 'flex',
@@ -241,33 +242,34 @@ const styles = {
     gap: '8px',
   },
   dropIcon: { marginBottom: '4px' },
-  dropTitle: { color: '#E4E4E7', fontSize: '15px', fontWeight: 500 },
-  dropHint: { color: '#A1A1AA', fontSize: '13px' },
-  dropSub: { color: '#52525B', fontSize: '12px', marginTop: '4px' },
+  dropTitle: { color: SK.textPrimary, fontSize: '15px', fontWeight: 500 },
+  dropHint: { color: SK.textSecondary, fontSize: '13px' },
+  dropSub: { color: SK.textMuted, fontSize: '12px', marginTop: '4px' },
   spinner: {
     width: '24px',
     height: '24px',
-    border: '2px solid rgba(6,182,212,0.2)',
-    borderTop: '2px solid #06B6D4',
+    border: `2px solid rgba(200,0,65,0.2)`,
+    borderTop: `2px solid ${SK.ruby}`,
     borderRadius: '50%',
   },
   error: {
     marginTop: '10px',
-    color: '#EF4444',
+    color: SK.signalRed,
     fontSize: '13px',
-    background: 'rgba(239, 68, 68, 0.08)',
-    border: '1px solid rgba(239, 68, 68, 0.2)',
+    background: 'rgba(228, 84, 68, 0.06)',
+    border: `1px solid rgba(228, 84, 68, 0.2)`,
     borderRadius: '8px',
     padding: '8px 12px',
   },
   parsedContainer: {
-    background: '#111827',
-    border: '1px solid rgba(63, 63, 70, 0.4)',
-    borderRadius: '12px',
+    background: SK.bgPrimary,
+    border: `1px solid ${SK.border}`,
+    borderRadius: '8px',
     padding: '16px',
     display: 'flex',
     flexDirection: 'column',
     gap: '12px',
+    boxShadow: SK.shadowSm,
   },
   parsedHeader: {
     display: 'flex',
@@ -275,26 +277,26 @@ const styles = {
     alignItems: 'flex-start',
     gap: '12px',
   },
-  parsedTitle: { color: '#E4E4E7', fontWeight: 600, fontSize: '15px' },
-  parsedMeta: { color: '#71717A', fontSize: '12px', marginTop: '2px' },
+  parsedTitle: { color: SK.textPrimary, fontWeight: 600, fontSize: '15px' },
+  parsedMeta: { color: SK.textSecondary, fontSize: '12px', marginTop: '2px' },
   clearBtn: {
     background: 'transparent',
-    border: '1px solid rgba(63, 63, 70, 0.4)',
-    borderRadius: '6px',
-    color: '#71717A',
+    border: `1px solid ${SK.border}`,
+    borderRadius: '4px',
+    color: SK.textSecondary,
     padding: '4px 10px',
     fontSize: '12px',
     cursor: 'pointer',
     fontFamily: 'inherit',
   },
   appNameRow: { display: 'flex', flexDirection: 'column', gap: '6px' },
-  label: { color: '#71717A', fontSize: '12px' },
+  label: { color: SK.textSecondary, fontSize: '12px' },
   nameInput: {
-    background: '#0B1120',
-    border: '1px solid rgba(63, 63, 70, 0.5)',
-    borderRadius: '6px',
+    background: SK.bgPrimary,
+    border: `1px solid ${SK.borderStrong}`,
+    borderRadius: '4px',
     padding: '8px 12px',
-    color: '#E4E4E7',
+    color: SK.textPrimary,
     fontSize: '13px',
     outline: 'none',
     fontFamily: 'inherit',
@@ -302,7 +304,7 @@ const styles = {
     boxSizing: 'border-box',
   },
   fileTree: {
-    background: '#0B1120',
+    background: SK.bgSecondary,
     borderRadius: '8px',
     padding: '10px',
     maxHeight: '160px',
@@ -312,15 +314,15 @@ const styles = {
     gap: '2px',
   },
   fileItem: { display: 'flex', alignItems: 'center', gap: '6px', padding: '2px 0' },
-  fileIcon: { color: '#71717A', fontSize: '10px', width: '14px', textAlign: 'center' },
-  filePath: { color: '#A1A1AA', fontSize: '12px', fontFamily: 'monospace' },
-  moreFiles: { color: '#52525B', fontSize: '11px', paddingTop: '4px', textAlign: 'center' },
+  fileIcon: { color: SK.textSecondary, fontSize: '10px', width: '14px', textAlign: 'center' },
+  filePath: { color: SK.textSecondary, fontSize: '12px', fontFamily: 'monospace' },
+  moreFiles: { color: SK.textMuted, fontSize: '11px', paddingTop: '4px', textAlign: 'center' },
   reviewBtn: {
-    background: 'linear-gradient(135deg, #06B6D4 0%, #8B5CF6 100%)',
+    background: SK.ruby,
     border: 'none',
-    borderRadius: '8px',
+    borderRadius: '4px',
     padding: '11px 20px',
-    color: '#fff',
+    color: SK.textInverse,
     fontWeight: 600,
     fontSize: '14px',
     cursor: 'pointer',

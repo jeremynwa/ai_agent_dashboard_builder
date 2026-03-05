@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import * as XLSX from 'xlsx';
+import { SK } from '../services/sk-theme';
 
 function FileUpload({ onDataLoaded }) {
   const [fileName, setFileName] = useState(null);
@@ -33,21 +34,21 @@ function FileUpload({ onDataLoaded }) {
   };
 
   return (
-    <div className="w-full">
-      <label className="flex flex-col items-center justify-center w-full h-24 border border-dashed border-slate-600 rounded-lg cursor-pointer hover:border-slate-500 hover:bg-slate-800/30 transition-all">
-        <div className="flex flex-col items-center justify-center pt-5 pb-6">
+    <div style={{ width: '100%' }}>
+      <label style={styles.dropLabel}>
+        <div style={styles.dropContent}>
           {fileName ? (
-            <span className="text-sm text-slate-300">{fileName}</span>
+            <span style={{ fontSize: '14px', color: SK.textPrimary }}>{fileName}</span>
           ) : (
             <>
-              <span className="text-sm text-slate-400">Importer un fichier Excel ou CSV</span>
-              <span className="text-xs text-slate-500 mt-1">Cliquez ou glissez-deposez</span>
+              <span style={{ fontSize: '14px', color: SK.textSecondary }}>Importer un fichier Excel ou CSV</span>
+              <span style={{ fontSize: '12px', color: SK.textMuted, marginTop: '4px' }}>Cliquez ou glissez-deposez</span>
             </>
           )}
         </div>
         <input
           type="file"
-          className="hidden"
+          style={{ display: 'none' }}
           accept=".xlsx,.xls,.csv"
           onChange={handleFile}
         />
@@ -55,5 +56,30 @@ function FileUpload({ onDataLoaded }) {
     </div>
   );
 }
+
+const styles = {
+  dropLabel: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    height: '96px',
+    border: `1px dashed ${SK.borderStrong}`,
+    borderRadius: '8px',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    boxSizing: 'border-box',
+    background: SK.bgPrimary,
+  },
+  dropContent: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: '20px',
+    paddingBottom: '24px',
+  },
+};
 
 export default FileUpload;
