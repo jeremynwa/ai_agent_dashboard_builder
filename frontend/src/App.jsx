@@ -559,6 +559,29 @@ function Factory() {
     logsRef.current = [...logsRef.current, message];
   };
 
+  // Sync appView with browser history so "Back" navigates within the app
+  useEffect(() => {
+    const onPopState = (e) => {
+      const view = e.state?.appView || 'landing';
+      setAppView(view);
+      setSidebarOpen(false);
+    };
+    window.addEventListener('popstate', onPopState);
+    // Replace current entry with landing state
+    window.history.replaceState({ appView: 'landing' }, '');
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    // Push history entry when navigating away from landing
+    if (appView !== 'landing') {
+      const current = window.history.state?.appView;
+      if (current !== appView) {
+        window.history.pushState({ appView }, '');
+      }
+    }
+  }, [appView]);
+
   // Persist savedApps to localStorage
   useEffect(() => {
     try {
