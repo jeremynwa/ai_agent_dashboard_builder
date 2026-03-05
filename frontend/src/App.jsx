@@ -942,12 +942,16 @@ function Factory() {
     setClarifyState('loading');
     try {
       const hasData = !!(excelData || dbData);
+      console.log('[clarify] calling /intake with:', { prompt, industry: selectedIndustry, hasData, dbMode: !!dbData });
       const result = await clarifyPrompt(prompt, selectedIndustry || null, hasData, !!dbData);
+      console.log('[clarify] response:', JSON.stringify(result));
       if (result.questions && result.questions.length > 0) {
         setClarifyState({ questions: result.questions });
         return; // wait for user to answer questions
       }
-    } catch {
+      console.log('[clarify] no questions returned, skipping to generation');
+    } catch (err) {
+      console.error('[clarify] failed:', err);
       // clarify failed — proceed directly
     }
     setClarifyState(null);

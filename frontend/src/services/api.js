@@ -268,7 +268,10 @@ export async function clarifyPrompt(message, industry = null, hasData = false, d
     headers,
     body: JSON.stringify({ message, mode: 'clarify', industry, hasData, dbMode }),
   });
-  if (!res.ok) return { questions: [] }; // graceful fallback
+  if (!res.ok) {
+    console.error('[clarifyPrompt] API error:', res.status, res.statusText, await res.text().catch(() => ''));
+    return { questions: [] };
+  }
   return res.json();
 }
 
