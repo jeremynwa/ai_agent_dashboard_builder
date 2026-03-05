@@ -127,9 +127,9 @@ const translations = {
     exporting: 'Exporting...',
     landingTitle: 'Welcome to Factory',
     landingSubtitle: 'What would you like to do?',
-    landingBuild: 'I want to build an app',
+    landingBuild: 'I want to build a NEW app',
     landingBuildDesc: 'Describe your dashboard — AI generates it in seconds.',
-    landingSubmit: 'I have an app to submit',
+    landingSubmit: 'I created an app and I want to submit',
     landingSubmitDesc: 'Upload your app for AI-powered code review and deployment.',
     // Upload & Review page
     uploadReview: 'Upload & Review',
@@ -230,9 +230,9 @@ const translations = {
     exporting: 'Export en cours...',
     landingTitle: 'Bienvenue sur Factory',
     landingSubtitle: 'Que souhaitez-vous faire ?',
-    landingBuild: 'Je veux construire une app',
+    landingBuild: 'Je veux construire une NOUVELLE app',
     landingBuildDesc: "Décrivez votre dashboard — l'IA le génère en quelques secondes.",
-    landingSubmit: "J'ai une app à soumettre",
+    landingSubmit: "J'ai créé une app et je veux la soumettre",
     landingSubmitDesc: "Uploadez votre app pour une review de code par IA et un déploiement.",
     // Upload & Review page
     uploadReview: 'Uploader & Réviser',
