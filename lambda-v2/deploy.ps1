@@ -62,14 +62,18 @@ $paramOverrides = @(
 if ($env:GITLAB_TOKEN)      { $paramOverrides += "GitLabToken=$($env:GITLAB_TOKEN)" }
 if ($env:SERVICEDESK_TOKEN) { $paramOverrides += "ServiceDeskToken=$($env:SERVICEDESK_TOKEN)" }
 
-sam deploy `
-    --stack-name $STACK_NAME `
-    --region $REGION `
-    --s3-bucket $S3_DEPLOY_BUCKET `
-    --capabilities CAPABILITY_IAM `
-    --parameter-overrides ($paramOverrides -join ' ') `
-    --no-confirm-changeset `
-    --no-fail-on-empty-changeset
+$samArgs = @(
+    "deploy",
+    "--stack-name", $STACK_NAME,
+    "--region", $REGION,
+    "--s3-bucket", $S3_DEPLOY_BUCKET,
+    "--capabilities", "CAPABILITY_IAM",
+    "--parameter-overrides"
+) + $paramOverrides + @(
+    "--no-confirm-changeset",
+    "--no-fail-on-empty-changeset"
+)
+& sam @samArgs
 
 # ─── Upload Agent Skills (optional) ──────────────────
 $skillsUpload = Read-Host "Upload/update Agent Skills? (y/N)"
