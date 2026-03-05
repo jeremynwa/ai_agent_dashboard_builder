@@ -491,7 +491,7 @@ REVIEWER_SKILL_ID=skill_01... VISION_SKILL_ID=skill_01... node test-review-visio
 - AWS CloudShell : alternative à SAM CLI local (SAM pré-installé, accessible depuis la console AWS)
 
 NEXT TIME YOU READ THIS I WANT :
-
+- j'ai deploy mais encore une erreur : Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"Skill not found: skill_01GMx6ta9DNWD6wDmX4S6PhN"},"request_id":"req_011CYkYEf4gqqVPn9BdYnjfX"}
 - to add the same homepage style to the app outputs
 - i want to add a scrapping app option & therefore to re-do the options when selecting to build an app to have dashboard, scrapping or other. and then below the industries -- ask me to send you an example of scrapping repo i have it
 - i also want to add a cost estimate when a prompt is made son that the launcher knows before creating how much it costs
