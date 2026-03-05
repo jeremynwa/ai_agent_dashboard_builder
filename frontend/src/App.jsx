@@ -535,6 +535,12 @@ function Factory() {
     console.log('[Boot] crossOriginIsolated:', window.crossOriginIsolated);
     console.log('[Boot] SharedArrayBuffer:', typeof SharedArrayBuffer !== 'undefined' ? 'available' : 'MISSING');
 
+    if (!window.crossOriginIsolated && !_wcClientId) {
+      console.error('[Boot] crossOriginIsolated is false and no WebContainer API key configured');
+      setBootError('WebContainer requires Cross-Origin Isolation headers (COOP/COEP). Verify Azure Static Web App configuration or set VITE_WEBCONTAINER_CLIENT_ID.');
+      return;
+    }
+
     const bootTimeout = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('WebContainer boot timeout (30s)')), 30000)
     );
