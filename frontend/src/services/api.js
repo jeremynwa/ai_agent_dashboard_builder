@@ -38,7 +38,7 @@ function trimDataToFit(allData, maxBytes) {
   return allData.slice(0, lo);
 }
 
-export async function generateApp(prompt, excelData = null, existingCode = null, dbContext = null, industry = null, { modelHint, cachedAnalysis } = {}) {
+export async function generateApp(prompt, excelData = null, existingCode = null, dbContext = null, industry = null, { modelHint, cachedAnalysis, appType } = {}) {
   const headers = await authHeaders();
 
   // Send as many rows as possible for accurate local stats (computed in Lambda).
@@ -60,6 +60,7 @@ export async function generateApp(prompt, excelData = null, existingCode = null,
   if (industry) body.industry = industry;
   if (modelHint) body.modelHint = modelHint;
   if (cachedAnalysis) body.cachedAnalysis = cachedAnalysis;
+  if (appType && appType !== 'dashboard') body.appType = appType;
   let res = await fetch(GENERATE_URL, {
     method: 'POST',
     headers,

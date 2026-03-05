@@ -17,6 +17,7 @@ const INDUSTRY_SKILL_IDS = {
 };
 const REVIEWER_SKILL_ID = process.env.REVIEWER_SKILL_ID || null;
 const VISION_SKILL_ID = process.env.VISION_SKILL_ID || null;
+const SCRAPER_SKILL_ID = process.env.SCRAPER_SKILL_ID || null;
 const REVIEW_MODEL = process.env.REVIEW_MODEL || 'claude-sonnet-4-20250514';
 const VISION_MODEL = process.env.VISION_MODEL || 'claude-sonnet-4-20250514';
 
@@ -502,7 +503,7 @@ export const handler = async (event) => {
 
   try {
     const body = JSON.parse(event.body || '{}');
-    const { prompt, useRules, excelData, existingCode, existingFiles, dbContext, screenshot, industry, modelHint, cachedAnalysis } = body;
+    const { prompt, useRules, excelData, existingCode, existingFiles, dbContext, screenshot, industry, modelHint, cachedAnalysis, appType } = body;
     const existingApp = existingCode || existingFiles || null;
 
     // ============ REVIEW (skill-based) ============
@@ -659,12 +660,33 @@ ${JSON.stringify(analysis, null, 2)}`;
       }
     }
 
-    // Determine system prompt and skills
+    // Determine system prompt and skills based on appType
+    const effectiveAppType = appType || 'dashboard';
     let systemPrompt;
     let skills = [];
 
-    if (USE_BETA_API && DASHBOARD_SKILL_ID) {
-      // Skill mode: minimal system prompt (skill has all the rules)
+    if (effectiveAppType === 'scraping' && USE_BETA_API && SCRAPER_SKILL_ID) {
+      // ---- SCRAPING MODE ----
+      systemPrompt = `Use the scraper-generator skill. Read ALL reference files before generating.
+
+Tu es un expert Python senior specialise en web scraping avec Playwright.
+Genere une application Python complete pour extraire des donnees de sites web.
+
+REGLES:
+- Retourne UNIQUEMENT du JSON valide: { "files": { "config.py": "code", "main.py": "code", ... } }
+- Le code doit etre Python 3.11+ valide avec async/await Playwright
+- Toujours inclure: config.py, main.py, scrapers/, export/, requirements.txt
+- Toujours masquer le webdriver et utiliser un user-agent realiste
+- Delais obligatoires entre chaque page (2-5s minimum, 8-15s pour sites proteges)
+- Export dual: JSON intermediaire + Excel final (openpyxl)
+- Support --only pour ne re-scraper que certaines categories
+- Gestion des erreurs: une page qui echoue ne doit JAMAIS arreter le scraping global
+
+CRITICAL OUTPUT FORMAT: Return your final answer as a JSON object directly in your text response: { "files": { "config.py": "...", "main.py": "...", ... } }. Do NOT write files to the container. Return the complete JSON as TEXT.`;
+      skills.push(SCRAPER_SKILL_ID);
+
+    } else if (USE_BETA_API && DASHBOARD_SKILL_ID && effectiveAppType !== 'other') {
+      // ---- DASHBOARD MODE (default) ----
       systemPrompt = `Use the dashboard-generator skill. Read ALL reference files before generating.
 
 RAPPELS CRITIQUES (en plus du skill):
@@ -693,6 +715,23 @@ RAPPELS CRITIQUES (en plus du skill):
 
       // Force JSON output in text (not in container files)
       systemPrompt += '\n\nCRITICAL OUTPUT FORMAT: Return your final answer as a JSON object directly in your text response: { "files": { "src/App.jsx": "...", ... } }. Do NOT write files to the container. Return the complete JSON as TEXT.';
+
+    } else if (effectiveAppType === 'other') {
+      // ---- OTHER / GENERIC MODE ----
+      systemPrompt = `Tu es un developpeur full-stack senior. Genere une application web complete selon la description de l'utilisateur.
+
+REGLES:
+- Retourne UNIQUEMENT du JSON valide: { "files": { "src/App.jsx": "code", ... } }
+- Le code doit etre React valide avec des composants fonctionnels
+- Design professionnel, responsive, moderne
+- Gestion des erreurs gracieuse
+
+CRITICAL OUTPUT FORMAT: Return your final answer as a JSON object directly in your text response: { "files": { "src/App.jsx": "...", ... } }. Do NOT write files to the container. Return the complete JSON as TEXT.`;
+
+      // Use dashboard skill if available (it has CSS/design rules that are useful)
+      if (USE_BETA_API && DASHBOARD_SKILL_ID) {
+        skills.push(DASHBOARD_SKILL_ID);
+      }
     } else {
       // Standard mode: full monolithic prompt (fallback)
       systemPrompt = SYSTEM_PROMPT;
@@ -705,6 +744,8 @@ RAPPELS CRITIQUES (en plus du skill):
       userMessage = `Code actuel:\n\n`;
       for (const [p, c] of Object.entries(existingApp)) userMessage += `--- ${p} ---\n${c}\n\n`;
       userMessage += `\nMODIFICATION: ${prompt}${rulesContext}${dataContext}${analysisContext}\n\nRetourne le JSON complet.`;
+    } else if (effectiveAppType === 'scraping') {
+      userMessage = `Genere une application Python de scraping pour: ${prompt}${rulesContext}`;
     } else {
       userMessage = `Genere une app React dashboard pour: ${prompt}${rulesContext}${dataContext}${analysisContext}`;
     }

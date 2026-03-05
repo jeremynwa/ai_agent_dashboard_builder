@@ -106,14 +106,6 @@ const translations = {
     errorPrefix: 'Error: ',
     rows: 'rows',
     tables: 'tables',
-    suggestions: {
-      salesKpis: 'Sales KPIs',
-      churnAnalysis: 'Churn Analysis',
-      revenueTrends: 'Revenue Trends',
-      marketingRoi: 'Marketing ROI',
-      hrAnalytics: 'HR Analytics',
-      supplyChain: 'Supply Chain',
-    },
     industryLabel: 'Industry',
     industries: {
       none: 'General',
@@ -176,6 +168,23 @@ const translations = {
     clarifyPlaceholder: 'Type your answer...',
     clarifySkip: 'Skip & generate now',
     clarifyLoading: 'Preparing questions...',
+    appTypeDashboard: 'Dashboard',
+    appTypeDashboardDesc: 'React dashboard from your data',
+    appTypeScraping: 'Scraping',
+    appTypeScrapingDesc: 'Python scraper with Playwright',
+    appTypeOther: 'Other',
+    appTypeOtherDesc: 'Custom app from description',
+    suggestions: {
+      salesKpis: 'Sales KPIs',
+      churnAnalysis: 'Churn Analysis',
+      revenueTrends: 'Revenue Trends',
+      marketingRoi: 'Marketing ROI',
+      hrAnalytics: 'HR Analytics',
+      supplyChain: 'Supply Chain',
+      scrapePrices: 'Scrape product prices',
+      scrapeListings: 'Scrape directory listings',
+      scrapeCompetitors: 'Monitor competitor prices',
+    },
   },
   fr: {
     title: 'Que voulez-vous construire ?',
@@ -222,6 +231,9 @@ const translations = {
       marketingRoi: 'ROI Marketing',
       hrAnalytics: 'Analytics RH',
       supplyChain: 'Supply Chain',
+      scrapePrices: 'Scraper des prix produits',
+      scrapeListings: 'Scraper un annuaire',
+      scrapeCompetitors: 'Surveiller les prix concurrents',
     },
     industryLabel: 'Secteur',
     industries: {
@@ -285,16 +297,28 @@ const translations = {
     clarifyPlaceholder: 'Tapez votre réponse...',
     clarifySkip: 'Passer & générer maintenant',
     clarifyLoading: 'Préparation des questions...',
+    appTypeDashboard: 'Dashboard',
+    appTypeDashboardDesc: 'Dashboard React depuis vos données',
+    appTypeScraping: 'Scraping',
+    appTypeScrapingDesc: 'Scraper Python avec Playwright',
+    appTypeOther: 'Autre',
+    appTypeOtherDesc: "App personnalisée sur description",
   },
 };
 
-const PROMPT_SUGGESTIONS = [
+const DASHBOARD_SUGGESTIONS = [
   { key: 'salesKpis', prompt: 'Dashboard des ventes avec KPIs revenus, marge, panier moyen et tendances mensuelles' },
   { key: 'churnAnalysis', prompt: "Dashboard d'analyse du churn avec cohortes, taux de rétention et prédictions" },
   { key: 'revenueTrends', prompt: 'Dashboard revenus avec évolution MRR/ARR, segments clients et forecasting' },
   { key: 'marketingRoi', prompt: "Dashboard marketing avec ROI par canal, funnel de conversion et coût d'acquisition" },
   { key: 'hrAnalytics', prompt: 'Dashboard RH avec effectifs, turnover, recrutement et satisfaction employés' },
   { key: 'supplyChain', prompt: 'Dashboard supply chain avec stocks, délais livraison et performance fournisseurs' },
+];
+
+const SCRAPING_SUGGESTIONS = [
+  { key: 'scrapePrices', prompt: 'Scraper les prix de produits sur un site e-commerce (catégorie chaussures) avec pagination, export Excel' },
+  { key: 'scrapeListings', prompt: "Scraper un annuaire d'entreprises : nom, adresse, téléphone, note, avec pagination automatique" },
+  { key: 'scrapeCompetitors', prompt: 'Surveiller les prix concurrents sur 3 sites e-commerce, comparer par produit, export Excel multi-onglets' },
 ];
 
 // ============ LANG CONTEXT ============
@@ -515,6 +539,7 @@ function Factory() {
   const [deployFilesOverride, setDeployFilesOverride] = useState(null); // fixed files after apply
   const [costEstimate, setCostEstimate] = useState(null); // { total, breakdown, currency }
   const [clarifyState, setClarifyState] = useState(null); // null | 'loading' | { questions: [...] }
+  const [appType, setAppType] = useState('dashboard'); // 'dashboard' | 'scraping' | 'other'
   const webcontainerRef = useRef(null);
   const bootedRef = useRef(false);
   const iframeRef = useRef(null);
@@ -754,7 +779,8 @@ function Factory() {
   const cachedDataHashRef = useRef(null);
 
   // ============ FULL AGENT LOOP ============
-  const agentGenerate = async (userPrompt, existingCode = null, skipReview = false, skipVision = false) => {
+  const agentGenerate = async (userPrompt, existingCode = null, skipReview = false, skipVision = false, overrideAppType = null) => {
+    const effectiveAppType = overrideAppType || appType;
     const dbContext = dbData ? { type: dbData.type, schema: dbData.schema } : null;
     let currentCode = existingCode;
     let lastError = null;
@@ -764,12 +790,24 @@ function Factory() {
     const dataHash = excelData ? `${excelData.fileName}_${excelData.totalRows}` : dbContext ? JSON.stringify(dbContext.schema).slice(0, 100) : null;
     const hasCachedAnalysis = dataHash && dataHash === cachedDataHashRef.current && cachedAnalysisRef.current;
 
+    // Scraping apps: generate code only, no compilation/preview
+    if (effectiveAppType === 'scraping') {
+      setAgentStatus(t('generatingCode'));
+      setGenerationStep(1);
+      const result = await generateApp(userPrompt, null, currentCode, null, null, { appType: 'scraping' });
+      currentCode = result.files;
+      setGenerationStep(5);
+      setCurrentFiles(currentCode);
+      return { success: true, url: null, files: currentCode };
+    }
+
     for (let attempt = 0; attempt <= MAX_FIX_ATTEMPTS; attempt++) {
       if (attempt === 0) {
         setAgentStatus(t('generatingCode'));
         setGenerationStep(1);
         const result = await generateApp(userPrompt, excelData, currentCode, dbContext, selectedIndustry || null, {
           cachedAnalysis: hasCachedAnalysis ? cachedAnalysisRef.current : undefined,
+          appType: effectiveAppType,
         });
         currentCode = result.files;
         // Cache analysis result for subsequent calls with same dataset
@@ -780,7 +818,7 @@ function Factory() {
       } else {
         setAgentStatus(t('autoFix').replace('{n}', attempt).replace('{max}', MAX_FIX_ATTEMPTS));
         const fixPrompt = `L'application a une erreur de compilation. Corrige le code.\n\nERREUR:\n${lastError}\n\nCorrige cette erreur et retourne le JSON complet avec TOUS les fichiers.`;
-        const result = await generateApp(fixPrompt, excelData, stripDataFiles(currentCode), dbContext, selectedIndustry || null);
+        const result = await generateApp(fixPrompt, excelData, stripDataFiles(currentCode), dbContext, selectedIndustry || null, { appType: effectiveAppType });
         currentCode = result.files;
       }
 
@@ -854,7 +892,8 @@ function Factory() {
     setGenerationStep(0);
     setAgentStatus(t('starting'));
     try {
-      const result = await agentGenerate(finalPrompt);
+      const skipReviewVision = appType === 'scraping';
+      const result = await agentGenerate(finalPrompt, null, skipReviewVision, skipReviewVision);
       if (result.success) {
         setGenerationStep(5);
         setAgentStatus('');
@@ -874,7 +913,8 @@ function Factory() {
   };
 
   const handleGenerate = async () => {
-    if (!prompt.trim() || !webcontainerRef.current) return;
+    if (!prompt.trim()) return;
+    if (appType !== 'scraping' && !webcontainerRef.current) return;
     // Start clarification flow
     setClarifyState('loading');
     try {
@@ -1042,6 +1082,58 @@ function Factory() {
   };
 
   // ============ GENERATED APP VIEW (fullscreen) ============
+  // Scraping mode: no preview, show ZIP download only
+  if (generatedApp && !previewUrl && appType === 'scraping') {
+    return (
+      <div style={styles.container}>
+        <div style={styles.gridPattern} />
+        <header style={styles.topBar}>
+          <button style={styles.menuButton} onClick={() => setSidebarOpen(o => !o)} title="Menu" aria-label="Toggle menu">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+              <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+          </button>
+          <div style={styles.topBarRight}>
+            <LangToggle />
+          </div>
+        </header>
+        <main style={{ ...styles.main, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <motion.div
+            style={{ textAlign: 'center', maxWidth: '480px' }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+          >
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}>
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={SK.signalGreen} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" />
+              </svg>
+            </div>
+            <h2 style={{ color: SK.textPrimary, fontSize: '22px', fontWeight: 700, marginBottom: '8px' }}>
+              {t('appTypeScraping')} — {generatedApp.name}
+            </h2>
+            <p style={{ color: SK.textSecondary, fontSize: '14px', marginBottom: '24px' }}>
+              Python scraper generated. Download the ZIP to run locally.
+            </p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <motion.button
+                style={styles.floatingButtonPrimary}
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+                onClick={() => exportToZip(currentFiles)}
+              >
+                {t('export')} ZIP
+              </motion.button>
+              <button onClick={handleBackToFactory} style={styles.floatingButton}>
+                {t('factory')}
+              </button>
+            </div>
+          </motion.div>
+        </main>
+      </div>
+    );
+  }
+
   if (generatedApp && previewUrl) {
     return (
       <div style={styles.appFullScreen}>
@@ -1481,6 +1573,55 @@ function Factory() {
                 <p style={{ ...styles.subtitle, marginTop: '16px' }}>{t('subtitle')}</p>
               </motion.div>
 
+              {/* App Type Selector */}
+              <motion.div
+                style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginBottom: '24px', flexWrap: 'wrap' }}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.15 }}
+              >
+                {[
+                  { key: 'dashboard', icon: (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18" /><path d="M9 21V9" />
+                    </svg>
+                  )},
+                  { key: 'scraping', icon: (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="3" /><path d="M12 2v4" /><path d="M12 18v4" /><path d="M4.93 4.93l2.83 2.83" /><path d="M16.24 16.24l2.83 2.83" /><path d="M2 12h4" /><path d="M18 12h4" /><path d="M4.93 19.07l2.83-2.83" /><path d="M16.24 7.76l2.83-2.83" />
+                    </svg>
+                  )},
+                  { key: 'other', icon: (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" />
+                    </svg>
+                  )},
+                ].map((item) => {
+                  const isActive = appType === item.key;
+                  return (
+                    <motion.button
+                      key={item.key}
+                      onClick={() => setAppType(item.key)}
+                      style={{
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px',
+                        padding: '14px 20px', minWidth: '140px',
+                        borderRadius: '12px',
+                        border: isActive ? `1.5px solid ${SK.ruby}` : `1px solid ${SK.border}`,
+                        background: isActive ? 'rgba(200, 0, 65, 0.08)' : SK.bgSecondary,
+                        color: isActive ? SK.ruby : SK.textSecondary,
+                        cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s ease',
+                      }}
+                      whileHover={{ borderColor: SK.ruby, y: -1 }}
+                      whileTap={{ scale: 0.97 }}
+                    >
+                      <span style={{ opacity: isActive ? 1 : 0.6 }}>{item.icon}</span>
+                      <span style={{ fontSize: '14px', fontWeight: 600 }}>{t(`appType${item.key.charAt(0).toUpperCase() + item.key.slice(1)}`)}</span>
+                      <span style={{ fontSize: '11px', color: SK.textMuted, fontWeight: 400 }}>{t(`appType${item.key.charAt(0).toUpperCase() + item.key.slice(1)}Desc`)}</span>
+                    </motion.button>
+                  );
+                })}
+              </motion.div>
+
               <motion.div
                 style={styles.promptContainer}
                 initial={{ opacity: 0, y: 16 }}
@@ -1501,7 +1642,8 @@ function Factory() {
                   rows={3}
                 />
 
-                {/* Industry selector */}
+                {/* Industry selector — only for dashboard */}
+                {appType === 'dashboard' && (
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
                   <span style={{ color: SK.textSecondary, fontSize: '12px', alignSelf: 'center', marginRight: '4px' }}>{t('industryLabel')}</span>
                   {['none', 'finance', 'ecommerce', 'saas', 'logistics'].map((ind) => (
@@ -1530,8 +1672,10 @@ function Factory() {
                     </button>
                   ))}
                 </div>
+                )}
 
-                {/* Data source */}
+                {/* Data source — hidden for scraping */}
+                {appType !== 'scraping' && (<>
                 <div style={styles.dataRow}>
                   {dataSourceLabel ? (
                     <motion.div
@@ -1580,19 +1724,20 @@ function Factory() {
                     </motion.div>
                   )}
                 </AnimatePresence>
+                </>)}
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <motion.button
                     style={{
                       ...styles.generateButton,
                       flex: 1,
-                      opacity: (!prompt.trim() || !isReady || clarifyState === 'loading') ? 0.4 : 1,
-                      cursor: (!prompt.trim() || !isReady || clarifyState === 'loading') ? 'default' : 'pointer',
+                      opacity: (!prompt.trim() || (appType !== 'scraping' && !isReady) || clarifyState === 'loading') ? 0.4 : 1,
+                      cursor: (!prompt.trim() || (appType !== 'scraping' && !isReady) || clarifyState === 'loading') ? 'default' : 'pointer',
                     }}
                     onClick={handleGenerate}
-                    disabled={!prompt.trim() || !isReady || clarifyState === 'loading'}
-                    whileHover={prompt.trim() && isReady && clarifyState !== 'loading' ? { scale: 1.015 } : {}}
-                    whileTap={prompt.trim() && isReady && clarifyState !== 'loading' ? { scale: 0.985 } : {}}
+                    disabled={!prompt.trim() || (appType !== 'scraping' && !isReady) || clarifyState === 'loading'}
+                    whileHover={prompt.trim() && (appType === 'scraping' || isReady) && clarifyState !== 'loading' ? { scale: 1.015 } : {}}
+                    whileTap={prompt.trim() && (appType === 'scraping' || isReady) && clarifyState !== 'loading' ? { scale: 0.985 } : {}}
                   >
                     <Icons.sparkle />
                     {clarifyState === 'loading' ? t('clarifyLoading') : t('generateApp')}
@@ -1654,7 +1799,7 @@ function Factory() {
                   {t('tryPrompt')}
                 </motion.div>
                 <div style={styles.suggestionsGrid}>
-                  {PROMPT_SUGGESTIONS.map((s, i) => (
+                  {(appType === 'scraping' ? SCRAPING_SUGGESTIONS : DASHBOARD_SUGGESTIONS).map((s, i) => (
                     <motion.button
                       key={s.key}
                       style={styles.suggestionChip}
