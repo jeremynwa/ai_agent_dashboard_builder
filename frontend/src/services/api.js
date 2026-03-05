@@ -60,15 +60,29 @@ export async function generateApp(prompt, excelData = null, existingCode = null,
   if (industry) body.industry = industry;
   if (modelHint) body.modelHint = modelHint;
   if (cachedAnalysis) body.cachedAnalysis = cachedAnalysis;
-  const res = await fetch(GENERATE_URL, {
+  let res = await fetch(GENERATE_URL, {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
   });
   if (!res.ok) {
     const errBody = await res.json().catch(() => ({}));
+    const errMsg = errBody.error || '';
+    // If an industry skill expired/was deleted, retry without it
+    if (industry && errMsg.includes('Skill not found')) {
+      console.warn('⚠️ Industry skill not found, retrying without industry:', errMsg);
+      const retryBody = { ...body };
+      delete retryBody.industry;
+      res = await fetch(GENERATE_URL, { method: 'POST', headers, body: JSON.stringify(retryBody) });
+      if (!res.ok) {
+        const retryErr = await res.json().catch(() => ({}));
+        if (res.status === 401) throw new Error('Session expirée. Reconnectez-vous.');
+        throw new Error(retryErr.error || 'Generation failed');
+      }
+      return res.json();
+    }
     if (res.status === 401) throw new Error('Session expirée. Reconnectez-vous.');
-    throw new Error(errBody.error || 'Generation failed');
+    throw new Error(errMsg || 'Generation failed');
   }
   return res.json();
 }

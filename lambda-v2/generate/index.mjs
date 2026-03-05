@@ -715,13 +715,31 @@ RAPPELS CRITIQUES (en plus du skill):
       : 'claude-sonnet-4-20250514';
 
     const generateLabel = modelHint === 'review' ? 'review-fallback' : 'generate';
-    const message = await callClaude({
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userMessage }],
-      skills,
-      model: effectiveModel,
-      label: generateLabel,
-    });
+    let message;
+    try {
+      message = await callClaude({
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userMessage }],
+        skills,
+        model: effectiveModel,
+        label: generateLabel,
+      });
+    } catch (skillError) {
+      // If a skill was deleted/expired on Anthropic, retry without industry skill
+      if (skillError.status === 400 && skillError.message?.includes('Skill not found')) {
+        console.warn('⚠️ Skill not found, retrying without industry skill:', skillError.message);
+        const coreSkills = skills.filter(s => s === DASHBOARD_SKILL_ID || s === DATA_ANALYZER_SKILL_ID);
+        message = await callClaude({
+          system: systemPrompt,
+          messages: [{ role: 'user', content: userMessage }],
+          skills: coreSkills.length > 0 ? coreSkills : undefined,
+          model: effectiveModel,
+          label: generateLabel,
+        });
+      } else {
+        throw skillError;
+      }
+    }
 
     const content = extractResponseText(message);
     const jsonMatch = content.match(/\{[\s\S]*\}/);
