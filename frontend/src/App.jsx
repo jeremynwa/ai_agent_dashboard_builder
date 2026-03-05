@@ -539,7 +539,7 @@ function Factory() {
   const [deployFilesOverride, setDeployFilesOverride] = useState(null); // fixed files after apply
   const [costEstimate, setCostEstimate] = useState(null); // { total, breakdown, currency }
   const [clarifyState, setClarifyState] = useState(null); // null | 'loading' | { questions: [...] }
-  const [appType, setAppType] = useState('dashboard'); // 'dashboard' | 'scraping' | 'other'
+  const [appType, setAppType] = useState(null); // null | 'dashboard' | 'scraping' | 'other'
   const webcontainerRef = useRef(null);
   const bootedRef = useRef(false);
   const iframeRef = useRef(null);
@@ -1574,59 +1574,84 @@ function Factory() {
               </motion.div>
 
               {/* App Type Selector */}
-              <motion.div
-                style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginBottom: '24px', flexWrap: 'wrap' }}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: 0.15 }}
-              >
-                {[
-                  { key: 'dashboard', icon: (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18" /><path d="M9 21V9" />
-                    </svg>
-                  )},
-                  { key: 'scraping', icon: (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="12" cy="12" r="3" /><path d="M12 2v4" /><path d="M12 18v4" /><path d="M4.93 4.93l2.83 2.83" /><path d="M16.24 16.24l2.83 2.83" /><path d="M2 12h4" /><path d="M18 12h4" /><path d="M4.93 19.07l2.83-2.83" /><path d="M16.24 7.76l2.83-2.83" />
-                    </svg>
-                  )},
-                  { key: 'other', icon: (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" />
-                    </svg>
-                  )},
-                ].map((item) => {
-                  const isActive = appType === item.key;
-                  return (
-                    <motion.button
-                      key={item.key}
-                      onClick={() => setAppType(item.key)}
-                      style={{
-                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px',
-                        padding: '14px 20px', minWidth: '140px',
-                        borderRadius: '12px',
-                        border: isActive ? `1.5px solid ${SK.ruby}` : `1px solid ${SK.border}`,
-                        background: isActive ? 'rgba(200, 0, 65, 0.08)' : SK.bgSecondary,
-                        color: isActive ? SK.ruby : SK.textSecondary,
-                        cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s ease',
-                      }}
-                      whileHover={{ borderColor: SK.ruby, y: -1 }}
-                      whileTap={{ scale: 0.97 }}
-                    >
-                      <span style={{ opacity: isActive ? 1 : 0.6 }}>{item.icon}</span>
-                      <span style={{ fontSize: '14px', fontWeight: 600 }}>{t(`appType${item.key.charAt(0).toUpperCase() + item.key.slice(1)}`)}</span>
-                      <span style={{ fontSize: '11px', color: SK.textMuted, fontWeight: 400 }}>{t(`appType${item.key.charAt(0).toUpperCase() + item.key.slice(1)}Desc`)}</span>
-                    </motion.button>
-                  );
-                })}
-              </motion.div>
+              {(() => {
+                const isCollapsed = appType !== null;
+                const iconSize = isCollapsed ? 16 : 28;
+                return (
+                  <motion.div
+                    layout
+                    style={{
+                      display: 'flex',
+                      gap: isCollapsed ? '8px' : '16px',
+                      justifyContent: 'center',
+                      marginBottom: '24px',
+                      flexWrap: 'wrap',
+                    }}
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.4, delay: 0.15 }}
+                  >
+                    {[
+                      { key: 'dashboard', icon: (sz) => (
+                        <svg width={sz} height={sz} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18" /><path d="M9 21V9" />
+                        </svg>
+                      )},
+                      { key: 'scraping', icon: (sz) => (
+                        <svg width={sz} height={sz} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="3" /><path d="M12 2v4" /><path d="M12 18v4" /><path d="M4.93 4.93l2.83 2.83" /><path d="M16.24 16.24l2.83 2.83" /><path d="M2 12h4" /><path d="M18 12h4" /><path d="M4.93 19.07l2.83-2.83" /><path d="M16.24 7.76l2.83-2.83" />
+                        </svg>
+                      )},
+                      { key: 'other', icon: (sz) => (
+                        <svg width={sz} height={sz} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" />
+                        </svg>
+                      )},
+                    ].map((item) => {
+                      const isActive = appType === item.key;
+                      return (
+                        <motion.button
+                          key={item.key}
+                          layout
+                          onClick={() => setAppType(item.key)}
+                          style={{
+                            display: 'flex',
+                            flexDirection: isCollapsed ? 'row' : 'column',
+                            alignItems: 'center',
+                            gap: isCollapsed ? '6px' : '8px',
+                            padding: isCollapsed ? '8px 18px' : '24px 32px',
+                            minWidth: isCollapsed ? 'auto' : '180px',
+                            borderRadius: isCollapsed ? '20px' : '12px',
+                            border: isActive ? `1.5px solid ${SK.ruby}` : `1px solid ${SK.border}`,
+                            background: isActive ? 'rgba(200, 0, 65, 0.08)' : SK.bgSecondary,
+                            color: isActive ? SK.ruby : SK.textSecondary,
+                            cursor: 'pointer', fontFamily: 'inherit',
+                            transition: 'border 0.2s ease, background 0.2s ease, color 0.2s ease',
+                          }}
+                          whileHover={{ borderColor: SK.ruby, y: isCollapsed ? 0 : -2 }}
+                          whileTap={{ scale: 0.97 }}
+                        >
+                          <span style={{ opacity: isActive ? 1 : 0.6, display: 'flex', alignItems: 'center' }}>{item.icon(iconSize)}</span>
+                          <span style={{ fontSize: isCollapsed ? '13px' : '16px', fontWeight: 600 }}>{t(`appType${item.key.charAt(0).toUpperCase() + item.key.slice(1)}`)}</span>
+                          {!isCollapsed && (
+                            <span style={{ fontSize: '12px', color: SK.textMuted, fontWeight: 400 }}>{t(`appType${item.key.charAt(0).toUpperCase() + item.key.slice(1)}Desc`)}</span>
+                          )}
+                        </motion.button>
+                      );
+                    })}
+                  </motion.div>
+                );
+              })()}
 
+              <AnimatePresence>
+              {appType && (
               <motion.div
+                key="prompt-form"
                 style={styles.promptContainer}
-                initial={{ opacity: 0, y: 16 }}
+                initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.2 }}
+                exit={{ opacity: 0, y: 20 }}
+                transition={{ duration: 0.3, ease: 'easeOut' }}
               >
                 <textarea
                   style={styles.promptInput}
@@ -1731,13 +1756,13 @@ function Factory() {
                     style={{
                       ...styles.generateButton,
                       flex: 1,
-                      opacity: (!prompt.trim() || (appType !== 'scraping' && !isReady) || clarifyState === 'loading') ? 0.4 : 1,
-                      cursor: (!prompt.trim() || (appType !== 'scraping' && !isReady) || clarifyState === 'loading') ? 'default' : 'pointer',
+                      opacity: (!appType || !prompt.trim() || (appType !== 'scraping' && !isReady) || clarifyState === 'loading') ? 0.4 : 1,
+                      cursor: (!appType || !prompt.trim() || (appType !== 'scraping' && !isReady) || clarifyState === 'loading') ? 'default' : 'pointer',
                     }}
                     onClick={handleGenerate}
-                    disabled={!prompt.trim() || (appType !== 'scraping' && !isReady) || clarifyState === 'loading'}
-                    whileHover={prompt.trim() && (appType === 'scraping' || isReady) && clarifyState !== 'loading' ? { scale: 1.015 } : {}}
-                    whileTap={prompt.trim() && (appType === 'scraping' || isReady) && clarifyState !== 'loading' ? { scale: 0.985 } : {}}
+                    disabled={!appType || !prompt.trim() || (appType !== 'scraping' && !isReady) || clarifyState === 'loading'}
+                    whileHover={appType && prompt.trim() && (appType === 'scraping' || isReady) && clarifyState !== 'loading' ? { scale: 1.015 } : {}}
+                    whileTap={appType && prompt.trim() && (appType === 'scraping' || isReady) && clarifyState !== 'loading' ? { scale: 0.985 } : {}}
                   >
                     <Icons.sparkle />
                     {clarifyState === 'loading' ? t('clarifyLoading') : t('generateApp')}
@@ -1762,6 +1787,8 @@ function Factory() {
                   </div>
                 )}
               </motion.div>
+              )}
+              </AnimatePresence>
 
               {/* Clarification Chat */}
               <AnimatePresence>
@@ -1784,7 +1811,8 @@ function Factory() {
                 )}
               </AnimatePresence>
 
-              {/* Suggestions */}
+              {/* Suggestions — only when an app type is selected */}
+              {appType && (
               <motion.div
                 style={styles.suggestionsSection}
                 initial="initial"
@@ -1814,6 +1842,7 @@ function Factory() {
                   ))}
                 </div>
               </motion.div>
+              )}
 
               <motion.div
                 style={styles.footerRow}
