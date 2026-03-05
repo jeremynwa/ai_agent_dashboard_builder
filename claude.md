@@ -173,17 +173,17 @@ BROWSER DU CLIENT
 
 ## Stack Technique
 
-| Composant  | Technologie                              |
-| ---------- | ---------------------------------------- |
-| Frontend   | React 18 + Vite 7                        |
-| Preview    | @webcontainer/api (StackBlitz)           |
-| Charts     | Recharts                                 |
-| Animations | Motion.dev (motion/react)                |
-| Auth       | AWS Cognito (amazon-cognito-identity-js) |
-| Backend    | AWS Lambda (Node.js 20, SAM)             |
-| IA         | Claude API (claude-sonnet-4) + Agent Skills beta |
-| Storage    | S3                                       |
-| Deploy     | SAM CLI + PowerShell script              |
+| Composant  | Technologie                                                |
+| ---------- | ---------------------------------------------------------- |
+| Frontend   | React 18 + Vite 7                                          |
+| Preview    | @webcontainer/api (StackBlitz)                             |
+| Charts     | Recharts                                                   |
+| Animations | Motion.dev (motion/react)                                  |
+| Auth       | AWS Cognito (amazon-cognito-identity-js)                   |
+| Backend    | AWS Lambda (Node.js 20, SAM)                               |
+| IA         | Claude API (claude-sonnet-4) + Agent Skills beta           |
+| Storage    | S3                                                         |
+| Deploy     | SAM CLI + PowerShell script                                |
 | Export     | JSZip (zip) + Anthropic pre-built skills (XLSX, PPTX, PDF) |
 
 ## Structure du Projet
@@ -320,12 +320,12 @@ Le mode est contrôlé par `USE_BETA_API` + `DASHBOARD_SKILL_ID` + `DATA_ANALYZE
 
 4 skills injectant KPIs, vocabulaire FR, et recommandations graphiques par secteur.
 
-| Secteur | Skill ID | KPIs exemples |
-|---------|----------|---------------|
-| Finance | `skill_013h9deHQb7CaA47xd59Uytd` | EBITDA, Marge brute, BFR, ROE, DSO |
+| Secteur    | Skill ID                         | KPIs exemples                                         |
+| ---------- | -------------------------------- | ----------------------------------------------------- |
+| Finance    | `skill_013h9deHQb7CaA47xd59Uytd` | EBITDA, Marge brute, BFR, ROE, DSO                    |
 | E-commerce | `skill_014PUPgrYoGE8BRDwiDhZDMP` | Panier moyen, Taux de conversion, Abandon panier, CAC |
-| SaaS | `skill_01Ekuh6H7ZKBkA2qzdXYzr1y` | MRR, ARR, Churn rate, LTV/CAC, NPS |
-| Logistique | `skill_011zy4TbPD7jcWEfiMKfi4jN` | OTIF, Lead time, Taux de rupture, Couverture stock |
+| SaaS       | `skill_01Ekuh6H7ZKBkA2qzdXYzr1y` | MRR, ARR, Churn rate, LTV/CAC, NPS                    |
+| Logistique | `skill_011zy4TbPD7jcWEfiMKfi4jN` | OTIF, Lead time, Taux de rupture, Couverture stock    |
 
 - **Structure** : `SKILL.md` + `references/kpis.md` + `references/charts.md` + `references/vocabulary.md`
 - **Frontend** : Chips de sélection secteur (Généraliste, Finance, E-commerce, SaaS, Logistique)
@@ -334,11 +334,11 @@ Le mode est contrôlé par `USE_BETA_API` + `DASHBOARD_SKILL_ID` + `DATA_ANALYZE
 
 ### Agent Skills — Review & Vision
 
-| Skill | Skill ID | Rôle |
-|-------|----------|------|
-| Dashboard Reviewer | `skill_01G3LJaHUFQn9WTbcrmTFCrB` | Vérifications statiques (check_code.py) + review qualité IA |
-| Vision Analyzer | `skill_016hJRgXdpBiDrcbknvQYQLW` | Analyse screenshots, détecte problèmes visuels, corrige code |
-| Web App Reviewer | `WEB_APP_REVIEWER_SKILL_ID` (à configurer) | Review généraliste toute app web (XSS, secrets, perf, a11y) |
+| Skill              | Skill ID                                   | Rôle                                                         |
+| ------------------ | ------------------------------------------ | ------------------------------------------------------------ |
+| Dashboard Reviewer | `skill_01G3LJaHUFQn9WTbcrmTFCrB`           | Vérifications statiques (check_code.py) + review qualité IA  |
+| Vision Analyzer    | `skill_016hJRgXdpBiDrcbknvQYQLW`           | Analyse screenshots, détecte problèmes visuels, corrige code |
+| Web App Reviewer   | `WEB_APP_REVIEWER_SKILL_ID` (à configurer) | Review généraliste toute app web (XSS, secrets, perf, a11y)  |
 
 - **Review** : `check_code.py` (15 checks : imports, PieChart+Cell, COLORS, emojis, gradient IDs, insights, filtres, IDs bruts)
 - **Vision** : `common-issues.md` (12 patterns : overlaps, espaces vides, texte illisible, PieChart gris, filtres cassés)
@@ -367,6 +367,7 @@ Le mode est contrôlé par `USE_BETA_API` + `DASHBOARD_SKILL_ID` + `DATA_ANALYZE
 ### Routing — IntakeChat
 
 Claude Haiku reçoit le message de l'utilisateur → retourne `{ route: "upload|generate|clarify" }`.
+
 - `upload` → flow Upload & Review
 - `generate` → factory existante (prompt + données)
 - `clarify` → question de suivi
@@ -404,6 +405,7 @@ APP_REGISTRY_TABLE    = "AppRegistry"
 ```
 
 Frontend `.env` (auto-écrit par deploy.ps1) :
+
 ```
 VITE_REVIEW_CODE_URL  = <ReviewCodeFunction URL>
 VITE_GIT_PUSH_URL     = <GitPushFunction URL>
@@ -487,3 +489,10 @@ REVIEWER_SKILL_ID=skill_01... VISION_SKILL_ID=skill_01... node test-review-visio
 - `vm-request` Lambda : Teams + ServiceDesk tous deux best-effort (non-fatal si échoue)
 - `apps` Lambda : DynamoDB QueryCommand par userId, triés par createdAt DESC
 - AWS CloudShell : alternative à SAM CLI local (SAM pré-installé, accessible depuis la console AWS)
+
+NEXT TIME YOU READ THIS I WANT :
+
+- to add the same homepage style to the app outputs
+- i want to add a scrapping app option & therefore to re-do the options when selecting to build an app to have dashboard, scrapping or other. and then below the industries -- ask me to send you an example of scrapping repo i have it
+- i also want to add a cost estimate when a prompt is made son that the launcher knows before creating how much it costs
+- i also want to include a quick exchange with the user after the NEW app prompt (in the same rectangle it creates smoothly a conversation), ask like 2-3 questions if the prompt is unclear / to get more info
