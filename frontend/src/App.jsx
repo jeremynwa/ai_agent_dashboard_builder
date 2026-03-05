@@ -1585,7 +1585,7 @@ function Factory() {
                       gap: isCollapsed ? '8px' : '16px',
                       justifyContent: 'center',
                       marginBottom: '24px',
-                      flexWrap: 'wrap',
+                      flexWrap: isCollapsed ? 'wrap' : 'nowrap',
                     }}
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
