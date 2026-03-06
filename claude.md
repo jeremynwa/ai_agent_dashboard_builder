@@ -426,11 +426,64 @@ VITE_GIT_PUSH_URL     = <GitPushFunction URL>
 - ⚠️ Mode DB + Publish : credentials dans le JS bundlé
 - **TODO** : warning au publish DB, CloudFront+auth, API key par dashboard, queries pré-définies
 
+## Prérequis Machine (si deploy échoue)
+
+L'IT bloque les installateurs classiques (winget, MSI). Utiliser les installations portables :
+
+### SAM CLI (si `sam` not found)
+```powershell
+pip install aws-sam-cli
+# Ajouter au PATH si pas trouvé :
+$env:PATH += ";$env:APPDATA\Python\Python313\Scripts"
+# Vérifier :
+sam --version
+```
+
+### Node.js (si `npm` / `node` not found)
+```powershell
+# 1. Télécharger le zip portable (pas MSI)
+curl -L -o "$HOME\Downloads\node-v20.18.0-win-x64.zip" "https://nodejs.org/dist/v20.18.0/node-v20.18.0-win-x64.zip"
+
+# 2. Extraire
+Expand-Archive "$HOME\Downloads\node-v20.18.0-win-x64.zip" -DestinationPath "C:\Users\13287\nodejs"
+
+# 3. Ajouter au PATH (permanent, une seule fois)
+[Environment]::SetEnvironmentVariable("PATH", $env:PATH + ";C:\Users\13287\nodejs\node-v20.18.0-win-x64", "User")
+
+# 4. Ajouter au PATH (session courante)
+$env:PATH += ";C:\Users\13287\nodejs\node-v20.18.0-win-x64"
+
+# 5. Vérifier
+node --version   # v20.18.0
+npm --version    # 10.8.2
+```
+
+### AWS CLI (si `aws` not found)
+```powershell
+pip install awscli
+$env:PATH += ";$env:APPDATA\Python\Python313\Scripts"
+aws --version
+```
+
+### Execution Policy (si .ps1 bloqué)
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+```
+
 ## Commandes
 
+**IMPORTANT** : les chemins contiennent des espaces → toujours utiliser des guillemets `"..."`.
+
 ```powershell
-cd lambda-v2 && .\deploy.ps1     # Deploy backend
-cd frontend && npm run dev         # Run frontend
+# ⚡ DEPLOY RAPIDE (copier-coller dans PowerShell)
+# 1. PATH (obligatoire si nouvelle session PowerShell)
+$env:PATH += ";C:\Users\13287\nodejs\node-v20.18.0-win-x64;$env:APPDATA\Python\Python313\Scripts"
+# 2. Deploy backend (SAM)
+cd "C:\Users\13287\Documents\VS Code\ai_agent_dashboard_builder\ai_agent_dashboard_builder\lambda-v2"
+.\deploy.ps1
+# 3. Run frontend (dev local)
+cd "C:\Users\13287\Documents\VS Code\ai_agent_dashboard_builder\ai_agent_dashboard_builder\frontend"
+npm run dev
 
 # Skills management
 cd lambda-v2
@@ -452,6 +505,11 @@ DASHBOARD_SKILL_ID=skill_01... node test-skill-generation.mjs  # Test skill gene
 DATA_ANALYZER_SKILL_ID=skill_01... node test-data-analyzer.mjs  # Test data analysis
 REVIEWER_SKILL_ID=skill_01... VISION_SKILL_ID=skill_01... node test-review-vision.mjs  # Test review + vision
 ```
+
+## Bugs Connus
+
+Voir **[potential_bugs.md](potential_bugs.md)** pour la liste des bugs rencontrés et leurs fixes.
+Quand un bug est corrigé et pourrait revenir, le documenter dans ce fichier (symptome, cause, fix).
 
 ## Notes Dev
 
