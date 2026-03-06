@@ -242,22 +242,59 @@ export async function requestVm(payload) {
   return res.json();
 }
 
-// ============ ESTIMATE COST ============
-export async function estimateCost({ prompt, rowCount = 0, hasData = false, industry = null, dbMode = false }) {
-  const headers = await authHeaders();
-  const res = await fetch(`${API_BASE}/estimate-cost`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      prompt: typeof prompt === 'string' ? prompt.length : 0,
-      rowCount,
-      hasData,
-      industry,
-      dbMode,
-    }),
-  });
-  if (!res.ok) return null; // graceful fallback
-  return res.json();
+// ============ COST COMPUTATION ============
+// Pricing per million tokens (Anthropic public pricing)
+const PRICING = {
+  'claude-sonnet-4-20250514':  { input: 3.00, output: 15.00, cacheWrite: 3.75, cacheRead: 0.30 },
+  'claude-haiku-4-5-20251001': { input: 0.80, output: 4.00,  cacheWrite: 1.00, cacheRead: 0.08 },
+};
+
+function getPricing(model) {
+  if (model?.includes('haiku')) return PRICING['claude-haiku-4-5-20251001'];
+  return PRICING['claude-sonnet-4-20250514']; // default
+}
+
+// Compute actual cost from real usage returned by generate Lambda
+export function computeActualCost(usage) {
+  if (!usage?.phases?.length) return null;
+  const breakdown = [];
+  let total = 0;
+  for (const phase of usage.phases) {
+    const p = getPricing(phase.model);
+    const cost =
+      (phase.input_tokens / 1e6) * p.input +
+      (phase.output_tokens / 1e6) * p.output +
+      (phase.cache_creation_input_tokens / 1e6) * p.cacheWrite +
+      (phase.cache_read_input_tokens / 1e6) * p.cacheRead;
+    breakdown.push({ label: phase.label, model: phase.model, cost: Math.round(cost * 10000) / 10000, ...phase });
+    total += cost;
+  }
+  return { total: Math.round(total * 10000) / 10000, breakdown, currency: 'USD', totals: usage.totals };
+}
+
+// Quick client-side pre-estimate (no API call needed)
+export function estimateCostQuick({ promptLength = 0, rowCount = 0, hasData = false, industry = false }) {
+  const CHARS_PER_TOKEN = 4;
+  const p = getPricing('claude-sonnet-4-20250514');
+  const pH = getPricing('claude-haiku-4-5-20251001');
+
+  // Generation phase (Sonnet): system ~4500 cached + user prompt + data sample
+  const systemTokens = 4500;
+  const promptTokens = Math.ceil(promptLength / CHARS_PER_TOKEN);
+  const dataTokens = hasData ? Math.min(Math.ceil(rowCount * 50 / CHARS_PER_TOKEN), 8000) : 0;
+  const industryTokens = industry ? 1500 : 0;
+  const genInput = promptTokens + dataTokens + industryTokens;
+  const genOutput = 6000; // typical generated code
+  const genCost = (systemTokens / 1e6) * p.cacheRead + (genInput / 1e6) * p.input + (genOutput / 1e6) * p.output;
+
+  // Review phase (Haiku): code review
+  const reviewCost = (1500 / 1e6) * pH.cacheRead + (4000 / 1e6) * pH.input + (600 / 1e6) * pH.output;
+
+  // Vision phase (Haiku): screenshot analysis
+  const visionCost = (1000 / 1e6) * pH.cacheRead + (5000 / 1e6) * pH.input + (400 / 1e6) * pH.output;
+
+  const total = genCost + reviewCost + visionCost;
+  return { total: Math.round(total * 10000) / 10000, currency: 'USD' };
 }
 
 // ============ CLARIFY PROMPT ============

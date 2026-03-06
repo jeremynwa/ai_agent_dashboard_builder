@@ -22,6 +22,24 @@ const REVIEW_MODEL = process.env.REVIEW_MODEL || 'claude-sonnet-4-20250514';
 const VISION_MODEL = process.env.VISION_MODEL || 'claude-sonnet-4-20250514';
 
 // ============================================================================
+// Usage accumulator — reset per request, populated by callClaude()
+// ============================================================================
+let _usageAccumulator = [];
+
+function resetUsage() { _usageAccumulator = []; }
+
+function getAccumulatedUsage() {
+  const totals = { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };
+  for (const u of _usageAccumulator) {
+    totals.input_tokens += u.input_tokens;
+    totals.output_tokens += u.output_tokens;
+    totals.cache_creation_input_tokens += u.cache_creation_input_tokens;
+    totals.cache_read_input_tokens += u.cache_read_input_tokens;
+  }
+  return { phases: _usageAccumulator, totals };
+}
+
+// ============================================================================
 // callClaude — wrapper that supports both standard and beta (skills) API
 // ============================================================================
 async function callClaude({ system, messages, skills = [], maxTokens = 16384, model = 'claude-sonnet-4-20250514', temperature = 0, label = 'unknown' }) {
@@ -64,15 +82,19 @@ async function callClaude({ system, messages, skills = [], maxTokens = 16384, mo
   // Structured monitoring log
   const elapsedMs = Date.now() - startMs;
   const usage = response.usage || {};
-  console.log(JSON.stringify({
-    event: 'claude_call',
+  const phaseUsage = {
     label,
     model,
-    skills: skills.map(s => typeof s === 'string' ? s : s.skill_id || s.type),
     input_tokens: usage.input_tokens || 0,
     output_tokens: usage.output_tokens || 0,
     cache_creation_input_tokens: usage.cache_creation_input_tokens || 0,
     cache_read_input_tokens: usage.cache_read_input_tokens || 0,
+  };
+  _usageAccumulator.push(phaseUsage);
+  console.log(JSON.stringify({
+    event: 'claude_call',
+    ...phaseUsage,
+    skills: skills.map(s => typeof s === 'string' ? s : s.skill_id || s.type),
     elapsed_ms: elapsedMs,
     stop_reason: response.stop_reason,
   }));
@@ -501,6 +523,8 @@ export const handler = async (event) => {
   if (authError) return reply(statusCode, { error: authError });
   console.log(`Authenticated: ${user.email || user.sub}`);
 
+  resetUsage();
+
   try {
     const body = JSON.parse(event.body || '{}');
     const { prompt, useRules, excelData, existingCode, existingFiles, dbContext, screenshot, industry, modelHint, cachedAnalysis, appType } = body;
@@ -525,6 +549,7 @@ export const handler = async (event) => {
       if (!reviewJsonMatch) throw new Error('No JSON from reviewer');
       const reviewParsed = JSON.parse(reviewJsonMatch[0]);
       for (const [fp, code] of Object.entries(reviewParsed.files)) reviewParsed.files[fp] = fixJsxCode(code);
+      reviewParsed._usage = getAccumulatedUsage();
       return reply(200, reviewParsed);
     }
 
@@ -560,13 +585,17 @@ export const handler = async (event) => {
             { type: 'text', text: VISION_USER_PROMPT + codeContext + '\n\nRetourne le JSON complet.' },
           ]}],
         });
-        // Log for fallback vision call
+        // Log + accumulate for fallback vision call
         const visionUsage = visionResponse.usage || {};
-        console.log(JSON.stringify({
-          event: 'claude_call', label: 'vision-fallback', model: VISION_MODEL, skills: [],
+        const visionPhase = {
+          label: 'vision-fallback', model: VISION_MODEL,
           input_tokens: visionUsage.input_tokens || 0, output_tokens: visionUsage.output_tokens || 0,
           cache_creation_input_tokens: visionUsage.cache_creation_input_tokens || 0,
           cache_read_input_tokens: visionUsage.cache_read_input_tokens || 0,
+        };
+        _usageAccumulator.push(visionPhase);
+        console.log(JSON.stringify({
+          event: 'claude_call', ...visionPhase, skills: [],
           elapsed_ms: Date.now() - startVision, stop_reason: visionResponse.stop_reason,
         }));
       }
@@ -576,6 +605,7 @@ export const handler = async (event) => {
       if (!jsonMatch) throw new Error('Pas de JSON (vision)');
       const parsed = JSON.parse(jsonMatch[0]);
       for (const [fp, code] of Object.entries(parsed.files)) parsed.files[fp] = fixJsxCode(code);
+      parsed._usage = getAccumulatedUsage();
       return reply(200, parsed);
     }
 
@@ -792,6 +822,7 @@ CRITICAL OUTPUT FORMAT: Return your final answer as a JSON object directly in yo
     if (analysisResult && !cachedAnalysis) {
       parsed._analysisResult = analysisResult;
     }
+    parsed._usage = getAccumulatedUsage();
     return reply(200, parsed);
   } catch (error) {
     console.error('Generate error:', error);

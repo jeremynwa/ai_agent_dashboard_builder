@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, createContext, useContext } from 'r
 import { motion, AnimatePresence } from 'motion/react';
 import { WebContainer, configureAPIKey } from '@webcontainer/api';
 import { baseFiles } from './services/files-template';
-import { generateApp, visionAnalyze, publishApp, exportApp, reviewCode, estimateCost, clarifyPrompt, API_BASE, DB_PROXY_URL } from './services/api';
+import { generateApp, visionAnalyze, publishApp, exportApp, reviewCode, estimateCostQuick, computeActualCost, clarifyPrompt, API_BASE, DB_PROXY_URL } from './services/api';
 import { exportToZip } from './services/export';
 import { SK } from './services/sk-theme';
 import FileUpload from './components/FileUpload';
@@ -162,7 +162,9 @@ const translations = {
     deployLocked: 'Deploy locked (score {score}/100 < 70)',
     deployScoreRequired: 'Score must be 70+ to deploy (current: {score})',
     fixPrefix: 'Fix:',
-    estimatedCost: 'Est. ~${cost} USD',
+    estimatedCost: 'Est. ~$${cost}',
+    actualCost: 'Cost: $${cost}',
+    actualCostTokens: '${input}→${output} tok',
     clarifyTitle: 'A few quick questions',
     clarifyYourPrompt: 'Your prompt',
     clarifyPlaceholder: 'Type your answer...',
@@ -291,7 +293,9 @@ const translations = {
     deployLocked: 'Déploiement verrouillé (score {score}/100 < 70)',
     deployScoreRequired: 'Le score doit être 70+ pour déployer (actuel : {score})',
     fixPrefix: 'Correction :',
-    estimatedCost: 'Est. ~${cost} USD',
+    estimatedCost: 'Est. ~${cost} $',
+    actualCost: 'Coût : ${cost} $',
+    actualCostTokens: '${input}→${output} tok',
     clarifyTitle: 'Quelques questions rapides',
     clarifyYourPrompt: 'Votre prompt',
     clarifyPlaceholder: 'Tapez votre réponse...',
@@ -537,7 +541,8 @@ function Factory() {
   const [reviewError, setReviewError] = useState('');
   const [showDeployForm, setShowDeployForm] = useState(false);
   const [deployFilesOverride, setDeployFilesOverride] = useState(null); // fixed files after apply
-  const [costEstimate, setCostEstimate] = useState(null); // { total, breakdown, currency }
+  const [costEstimate, setCostEstimate] = useState(null); // { total, currency } pre-estimate
+  const [actualCost, setActualCost] = useState(null); // { total, breakdown, currency, totals } after generation
   const [clarifyState, setClarifyState] = useState(null); // null | 'loading' | { questions: [...] }
   const [appType, setAppType] = useState(null); // null | 'dashboard' | 'scraping' | 'other'
   const webcontainerRef = useRef(null);
@@ -623,29 +628,21 @@ function Factory() {
       });
   }, []);
 
-  // ---- Debounced cost estimate ----
+  // ---- Client-side cost pre-estimate (no API call) ----
   useEffect(() => {
     if (!prompt.trim() || prompt.trim().length < 10) {
       setCostEstimate(null);
       return;
     }
-    const timer = setTimeout(async () => {
-      try {
-        const hasData = !!(excelData || dbData);
-        const rowCount = excelData?.totalRows || 0;
-        const result = await estimateCost({
-          prompt,
-          rowCount,
-          hasData,
-          industry: selectedIndustry || null,
-          dbMode: !!dbData,
-        });
-        if (result) setCostEstimate(result);
-      } catch {
-        // silent — cost estimate is non-critical
-      }
-    }, 1000);
-    return () => clearTimeout(timer);
+    const hasData = !!(excelData || dbData);
+    const rowCount = excelData?.totalRows || 0;
+    const result = estimateCostQuick({
+      promptLength: prompt.length,
+      rowCount,
+      hasData,
+      industry: !!selectedIndustry,
+    });
+    setCostEstimate(result);
   }, [prompt, excelData, dbData, selectedIndustry]);
 
   const handleDataLoaded = (data) => {
@@ -808,6 +805,7 @@ function Factory() {
     let currentCode = existingCode;
     let lastError = null;
     let latestUrl = null;
+    const allUsagePhases = []; // accumulate _usage from all API calls
 
     // Compute a simple hash of current data to detect dataset changes
     const dataHash = excelData ? `${excelData.fileName}_${excelData.totalRows}` : dbContext ? JSON.stringify(dbContext.schema).slice(0, 100) : null;
@@ -819,9 +817,10 @@ function Factory() {
       setGenerationStep(1);
       const result = await generateApp(userPrompt, null, currentCode, null, null, { appType: 'scraping' });
       currentCode = result.files;
+      if (result._usage?.phases) allUsagePhases.push(...result._usage.phases);
       setGenerationStep(5);
       setCurrentFiles(currentCode);
-      return { success: true, url: null, files: currentCode };
+      return { success: true, url: null, files: currentCode, _usagePhases: allUsagePhases };
     }
 
     for (let attempt = 0; attempt <= MAX_FIX_ATTEMPTS; attempt++) {
@@ -833,6 +832,7 @@ function Factory() {
           appType: effectiveAppType,
         });
         currentCode = result.files;
+        if (result._usage?.phases) allUsagePhases.push(...result._usage.phases);
         // Cache analysis result for subsequent calls with same dataset
         if (result._analysisResult) {
           cachedAnalysisRef.current = result._analysisResult;
@@ -843,6 +843,7 @@ function Factory() {
         const fixPrompt = `L'application a une erreur de compilation. Corrige le code.\n\nERREUR:\n${lastError}\n\nCorrige cette erreur et retourne le JSON complet avec TOUS les fichiers.`;
         const result = await generateApp(fixPrompt, excelData, stripDataFiles(currentCode), dbContext, selectedIndustry || null, { appType: effectiveAppType });
         currentCode = result.files;
+        if (result._usage?.phases) allUsagePhases.push(...result._usage.phases);
       }
 
       setAgentStatus(attempt === 0 ? t('compiling') : t('recompiling'));
@@ -864,6 +865,7 @@ function Factory() {
           setGenerationStep(3);
           try {
             const reviewResult = await generateApp(REVIEW_PROMPT, excelData, stripToAppOnly(currentCode), dbContext, null, { modelHint: 'review' });
+            if (reviewResult._usage?.phases) allUsagePhases.push(...reviewResult._usage.phases);
             setAgentStatus(t('recompiling'));
             const reviewCompile = await tryCompile(reviewResult.files);
             if (reviewCompile.success) {
@@ -883,6 +885,7 @@ function Factory() {
           if (screenshot) {
             try {
               const visionResult = await visionAnalyze(screenshot, stripToAppOnly(currentCode), excelData, dbContext);
+              if (visionResult._usage?.phases) allUsagePhases.push(...visionResult._usage.phases);
               setAgentStatus(t('finalRecompile'));
               const visionCompile = await tryCompile(visionResult.files);
               if (visionCompile.success) {
@@ -897,7 +900,7 @@ function Factory() {
         }
 
         setCurrentFiles(currentCode);
-        return { success: true, url: latestUrl, files: currentCode };
+        return { success: true, url: latestUrl, files: currentCode, _usagePhases: allUsagePhases };
       }
 
       lastError = compileResult.error;
@@ -911,6 +914,7 @@ function Factory() {
     setIsLoading(true);
     setClarifyState(null);
     setLastGenerateError('');
+    setActualCost(null);
     setPreviewUrl(null);
     setGenerationStep(0);
     setAgentStatus(t('starting'));
@@ -922,6 +926,17 @@ function Factory() {
         setAgentStatus('');
         setGeneratedApp({ name: finalPrompt.slice(0, 30), prompt: finalPrompt, url: result.url });
         setSavedApps(prev => [...prev, { id: Date.now(), name: finalPrompt.slice(0, 30), prompt: finalPrompt, files: result.files }].slice(-10));
+        // Compute actual cost from real token usage
+        if (result._usagePhases?.length) {
+          const totals = { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };
+          for (const u of result._usagePhases) {
+            totals.input_tokens += u.input_tokens || 0;
+            totals.output_tokens += u.output_tokens || 0;
+            totals.cache_creation_input_tokens += u.cache_creation_input_tokens || 0;
+            totals.cache_read_input_tokens += u.cache_read_input_tokens || 0;
+          }
+          setActualCost(computeActualCost({ phases: result._usagePhases, totals }));
+        }
       } else {
         setAgentStatus(`${t('errorPrefix')}${result.error.slice(0, 200)}`);
         setLastGenerateError(result.error.slice(0, 200));
@@ -987,6 +1002,18 @@ function Factory() {
       const result = await generateApp(feedback, excelData, stripDataFiles(currentFiles), dbContext, selectedIndustry || null, {
         cachedAnalysis: cachedAnalysisRef.current || undefined,
       });
+      // Update actual cost with refine usage
+      if (result._usage?.phases?.length) {
+        const allPhases = [...(actualCost?.breakdown || []), ...result._usage.phases];
+        const totals = { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };
+        for (const u of allPhases) {
+          totals.input_tokens += u.input_tokens || 0;
+          totals.output_tokens += u.output_tokens || 0;
+          totals.cache_creation_input_tokens += u.cache_creation_input_tokens || 0;
+          totals.cache_read_input_tokens += u.cache_read_input_tokens || 0;
+        }
+        setActualCost(computeActualCost({ phases: allPhases, totals }));
+      }
       const compileResult = await tryCompile(result.files);
       if (compileResult.success) {
         setCurrentFiles(result.files);
@@ -1102,6 +1129,7 @@ function Factory() {
     logsRef.current = [];
     setGenerationStep(0);
     setAgentStatus('');
+    setActualCost(null);
     if (devProcessRef.current) {
       try { devProcessRef.current.kill(); } catch (_) {}
       devProcessRef.current = null;
@@ -1206,6 +1234,11 @@ function Factory() {
             >
               {t('deploy')}
             </button>
+            {actualCost && (
+              <span style={{ ...styles.costBadge, borderColor: 'rgba(16, 185, 129, 0.4)', background: 'rgba(16, 185, 129, 0.08)', color: '#10B981', fontSize: '11px', padding: '4px 8px' }}>
+                {t('actualCost').replace('${cost}', actualCost.total.toFixed(4))}
+              </span>
+            )}
           </div>
           <div style={styles.feedbackContainer}>
             <input
@@ -1650,7 +1683,7 @@ function Factory() {
                             minWidth: isCollapsed ? 'auto' : '180px',
                             borderRadius: isCollapsed ? '20px' : '12px',
                             border: isActive ? `1.5px solid ${SK.ruby}` : `1px solid ${SK.border}`,
-                            background: isActive ? 'rgba(200, 0, 65, 0.08)' : SK.bgSecondary,
+                            background: isActive ? 'rgba(200, 0, 65, 0.08)' : SK.white,
                             color: isActive ? SK.ruby : SK.textSecondary,
                             cursor: 'pointer', fontFamily: 'inherit',
                             transition: 'border 0.2s ease, background 0.2s ease, color 0.2s ease',
@@ -1795,7 +1828,25 @@ function Factory() {
                     {clarifyState === 'loading' ? t('clarifyLoading') : t('generateApp')}
                   </motion.button>
                   <AnimatePresence>
-                    {costEstimate && !clarifyState && (
+                    {actualCost && !isLoading && (
+                      <motion.div
+                        style={{ ...styles.costBadge, borderColor: 'rgba(16, 185, 129, 0.4)', background: 'rgba(16, 185, 129, 0.08)', display: 'flex', flexDirection: 'column', gap: '2px' }}
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.9 }}
+                        transition={{ duration: 0.25 }}
+                      >
+                        <span style={{ color: '#10B981' }}>{t('actualCost').replace('${cost}', actualCost.total.toFixed(4))}</span>
+                        {actualCost.totals && (
+                          <span style={{ fontSize: '10px', color: SK.textMuted }}>
+                            {t('actualCostTokens')
+                              .replace('${input}', (actualCost.totals.input_tokens + actualCost.totals.cache_creation_input_tokens + actualCost.totals.cache_read_input_tokens).toLocaleString())
+                              .replace('${output}', actualCost.totals.output_tokens.toLocaleString())}
+                          </span>
+                        )}
+                      </motion.div>
+                    )}
+                    {!actualCost && costEstimate && !clarifyState && !isLoading && (
                       <motion.span
                         style={styles.costBadge}
                         initial={{ opacity: 0, scale: 0.9 }}
