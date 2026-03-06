@@ -347,3 +347,52 @@ export async function saveApp(payload) {
   }
   return res.json();
 }
+
+// ============ REVIEW RESEARCH ============
+const REVIEW_RESEARCH_URL = import.meta.env.VITE_REVIEW_RESEARCH_URL || `${API_BASE}/review-research`;
+
+export async function startReviewResearch(config) {
+  const headers = await authHeaders();
+  const res = await fetch(`${REVIEW_RESEARCH_URL}/start`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ config }),
+  });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    if (res.status === 401) throw new Error('Session expiree. Reconnectez-vous.');
+    throw new Error(errBody.error || 'Failed to start research');
+  }
+  return res.json();
+}
+
+export async function getResearchStatus(jobId) {
+  const headers = await authHeaders();
+  const res = await fetch(`${REVIEW_RESEARCH_URL}/status/${jobId}`, { headers });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    throw new Error(errBody.error || 'Failed to get status');
+  }
+  return res.json();
+}
+
+export async function getResearchResults(jobId) {
+  const headers = await authHeaders();
+  const res = await fetch(`${REVIEW_RESEARCH_URL}/results/${jobId}`, { headers });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    throw new Error(errBody.error || 'Failed to get results');
+  }
+  return res.json();
+}
+
+export async function estimateResearchCost(config) {
+  const headers = await authHeaders();
+  const res = await fetch(`${REVIEW_RESEARCH_URL}/estimate`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ config }),
+  });
+  if (!res.ok) return null;
+  return res.json();
+}

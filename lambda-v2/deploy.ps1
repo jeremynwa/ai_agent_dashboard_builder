@@ -59,8 +59,9 @@ $paramOverrides = @(
     "PublishBucket=$PUBLISH_BUCKET",
     "MyRegion=$REGION"
 )
-if ($env:GITLAB_TOKEN)      { $paramOverrides += "GitLabToken=$($env:GITLAB_TOKEN)" }
-if ($env:SERVICEDESK_TOKEN) { $paramOverrides += "ServiceDeskToken=$($env:SERVICEDESK_TOKEN)" }
+if ($env:GITLAB_TOKEN)       { $paramOverrides += "GitLabToken=$($env:GITLAB_TOKEN)" }
+if ($env:SERVICEDESK_TOKEN)  { $paramOverrides += "ServiceDeskToken=$($env:SERVICEDESK_TOKEN)" }
+if ($env:OUTSCRAPER_API_KEY) { $paramOverrides += "OutscraperApiKey=$($env:OUTSCRAPER_API_KEY)" }
 
 $samArgs = @(
     "deploy",
@@ -125,6 +126,7 @@ $DB_PROXY_URL = ($outputs | Where-Object { $_.OutputKey -eq "DbProxyUrl" }).Outp
 $EXPORT_URL = ($outputs | Where-Object { $_.OutputKey -eq "ExportUrl" }).OutputValue
 $REVIEW_CODE_URL = ($outputs | Where-Object { $_.OutputKey -eq "ReviewCodeUrl" }).OutputValue
 $GIT_PUSH_URL = ($outputs | Where-Object { $_.OutputKey -eq "GitPushUrl" }).OutputValue
+$REVIEW_RESEARCH_URL = ($outputs | Where-Object { $_.OutputKey -eq "ReviewResearchUrl" }).OutputValue
 $COGNITO_POOL_ID = ($outputs | Where-Object { $_.OutputKey -eq "CognitoUserPoolId" }).OutputValue
 $COGNITO_CLIENT_ID = ($outputs | Where-Object { $_.OutputKey -eq "CognitoClientId" }).OutputValue
 
@@ -137,6 +139,7 @@ VITE_DB_PROXY_URL=$DB_PROXY_URL
 VITE_EXPORT_URL=$EXPORT_URL
 VITE_REVIEW_CODE_URL=$REVIEW_CODE_URL
 VITE_GIT_PUSH_URL=$GIT_PUSH_URL
+VITE_REVIEW_RESEARCH_URL=$REVIEW_RESEARCH_URL
 VITE_COGNITO_USER_POOL_ID=$COGNITO_POOL_ID
 VITE_COGNITO_CLIENT_ID=$COGNITO_CLIENT_ID
 "@

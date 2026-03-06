@@ -17,6 +17,7 @@ import ReviewResults from './components/ReviewResults';
 import DeployForm from './components/DeployForm';
 import MyApps from './components/MyApps';
 import ClarificationChat from './components/ClarificationChat';
+import ReviewResearch from './components/ReviewResearch';
 
 // Configure WebContainer API key at module level (MUST be before any .boot() call)
 const _wcClientId = import.meta.env.VITE_WEBCONTAINER_CLIENT_ID;
@@ -648,7 +649,7 @@ function Factory() {
   const [selectedIndustry, setSelectedIndustry] = useState('');
   const [exportingFormat, setExportingFormat] = useState(null);
   // ---- New: Upload & Review + Deploy flow ----
-  const [appView, setAppView] = useState('landing'); // 'landing' | 'factory' | 'upload-review' | 'my-apps'
+  const [appView, setAppView] = useState('landing'); // 'landing' | 'factory' | 'upload-review' | 'my-apps' | 'review-research'
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [uploadedCode, setUploadedCode] = useState(null); // { files, appName, stack }
   const [reviewResult, setReviewResult] = useState(null); // { score, issues, fixedFiles, approved }
@@ -1444,6 +1445,13 @@ function Factory() {
         </button>
 
         <button
+          style={{ ...styles.newAppButton, background: 'rgba(47, 167, 77, 0.08)', border: '1px solid rgba(47, 167, 77, 0.25)', color: SK.signalGreen, marginTop: '6px' }}
+          onClick={() => { setAppView('review-research'); setSidebarOpen(false); }}
+        >
+          <span style={{ marginRight: '6px', fontSize: '14px' }}>Review Research</span>
+        </button>
+
+        <button
           style={{ ...styles.newAppButton, background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.12)', color: SK.iceBlue, marginTop: '4px' }}
           onClick={() => { setAppView('my-apps'); setSidebarOpen(false); }}
         >
@@ -1561,6 +1569,26 @@ function Factory() {
                 <h2 style={{ ...styles.landingCardTitle, color: SK.aqua }}>{t('landingSubmit')}</h2>
                 <p style={styles.landingCardDesc}>{t('landingSubmitDesc')}</p>
               </motion.div>
+
+              <motion.div
+                style={{ ...styles.landingCard, borderColor: 'rgba(47, 167, 77, 0.3)' }}
+                whileHover={{ borderColor: SK.signalGreen, boxShadow: '0 8px 32px rgba(47, 167, 77, 0.12)', y: -2 }}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.35 }}
+                onClick={() => setAppView('review-research')}
+              >
+                <div style={{ ...styles.landingCardIcon, background: 'rgba(47, 167, 77, 0.08)' }}>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={SK.signalGreen} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                    <line x1="11" y1="8" x2="11" y2="14" />
+                    <line x1="8" y1="11" x2="14" y2="11" />
+                  </svg>
+                </div>
+                <h2 style={{ ...styles.landingCardTitle, color: SK.signalGreen }}>{t('landingResearch')}</h2>
+                <p style={styles.landingCardDesc}>{t('landingResearchDesc')}</p>
+              </motion.div>
             </div>
           </div>
         )}
@@ -1568,6 +1596,11 @@ function Factory() {
         {/* ---- MY APPS VIEW ---- */}
         {appView === 'my-apps' && (
           <MyApps onBack={() => setAppView('factory')} />
+        )}
+
+        {/* ---- REVIEW RESEARCH VIEW ---- */}
+        {appView === 'review-research' && (
+          <ReviewResearch onBack={() => setAppView('landing')} t={t} />
         )}
 
         {/* ---- UPLOAD & REVIEW VIEW ---- */}

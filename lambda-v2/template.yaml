@@ -20,6 +20,10 @@ Parameters:
     Type: String
     NoEcho: true
     Default: ""
+  OutscraperApiKey:
+    Type: String
+    NoEcho: true
+    Default: ""
 
 Globals:
   Function:
@@ -535,6 +539,50 @@ Resources:
         Banner:
           - js=import { createRequire } from 'module'; const require = createRequire(import.meta.url);
 
+  # ============ REVIEW RESEARCH (Google Maps review analysis) ============
+  ReviewResearchFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: app-factory-review-research
+      Handler: index.handler
+      CodeUri: review-research/
+      Timeout: 300
+      MemorySize: 512
+      Environment:
+        Variables:
+          ANTHROPIC_API_KEY: !Ref AnthropicApiKey
+          OUTSCRAPER_API_KEY: !Ref OutscraperApiKey
+          BUCKET_NAME: !Ref PublishBucket
+          REVIEW_RESEARCH_MODEL: "claude-sonnet-4-20250514"
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref PublishBucket
+      FunctionUrlConfig:
+        AuthType: NONE
+        Cors:
+          AllowOrigins:
+            - '*'
+          AllowHeaders:
+            - Content-Type
+            - Authorization
+          AllowMethods:
+            - GET
+            - POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: false
+        Target: es2022
+        Format: esm
+        OutExtension:
+          - .js=.mjs
+        EntryPoints:
+          - index.mjs
+        External:
+          - '@aws-sdk/*'
+        Banner:
+          - js=import { createRequire } from 'module'; const require = createRequire(import.meta.url);
+
 Outputs:
   ApiUrl:
     Description: API Gateway URL (rules + publish + db + intake + vm-request + apps)
@@ -554,6 +602,9 @@ Outputs:
   GitPushUrl:
     Description: Git Push Function URL
     Value: !GetAtt GitPushFunctionUrl.FunctionUrl
+  ReviewResearchUrl:
+    Description: Review Research Function URL
+    Value: !GetAtt ReviewResearchFunctionUrl.FunctionUrl
   CognitoUserPoolId:
     Description: Cognito User Pool ID (for frontend .env)
     Value: !Ref CognitoUserPool
