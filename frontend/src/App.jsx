@@ -808,8 +808,12 @@ function Factory() {
     const injected = {};
     for (const [path, content] of Object.entries(resultFiles)) {
       let fileContent = content;
-      if (path === 'src/data.js' && excelData?.fullData) {
-        fileContent = fileContent.replace('"__INJECT_DATA__"', JSON.stringify(excelData.fullData));
+      if (path === 'src/data.js') {
+        if (excelData?.fullData) {
+          fileContent = fileContent.replace('"__INJECT_DATA__"', JSON.stringify(excelData.fullData));
+        } else if (fileContent.includes('"__INJECT_DATA__"')) {
+          fileContent = fileContent.replace('"__INJECT_DATA__"', '[]');
+        }
       }
       if (path === 'src/db.js' && dbData) {
         fileContent = fileContent.replace('"__DB_PROXY_URL__"', JSON.stringify(DB_PROXY_URL));
