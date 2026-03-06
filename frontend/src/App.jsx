@@ -1811,11 +1811,11 @@ function Factory() {
                 </AnimatePresence>
                 </>)}
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
                   <motion.button
                     style={{
                       ...styles.generateButton,
-                      flex: 1,
+                      width: '100%',
                       opacity: (!appType || !prompt.trim() || (appType !== 'scraping' && !isReady) || clarifyState === 'loading') ? 0.4 : 1,
                       cursor: (!appType || !prompt.trim() || (appType !== 'scraping' && !isReady) || clarifyState === 'loading') ? 'default' : 'pointer',
                     }}
@@ -1829,30 +1829,30 @@ function Factory() {
                   </motion.button>
                   <AnimatePresence>
                     {actualCost && !isLoading && (
-                      <motion.div
-                        style={{ ...styles.costBadge, borderColor: 'rgba(16, 185, 129, 0.4)', background: 'rgba(16, 185, 129, 0.08)', display: 'flex', flexDirection: 'column', gap: '2px' }}
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.9 }}
-                        transition={{ duration: 0.25 }}
+                      <motion.span
+                        style={{ fontSize: '11px', color: '#10B981', fontWeight: 400 }}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.2 }}
                       >
-                        <span style={{ color: '#10B981' }}>{t('actualCost').replace('${cost}', actualCost.total.toFixed(4))}</span>
+                        {t('actualCost').replace('${cost}', actualCost.total.toFixed(4))}
                         {actualCost.totals && (
-                          <span style={{ fontSize: '10px', color: SK.textMuted }}>
+                          <span style={{ color: SK.textMuted, marginLeft: '6px' }}>
                             {t('actualCostTokens')
                               .replace('${input}', (actualCost.totals.input_tokens + actualCost.totals.cache_creation_input_tokens + actualCost.totals.cache_read_input_tokens).toLocaleString())
                               .replace('${output}', actualCost.totals.output_tokens.toLocaleString())}
                           </span>
                         )}
-                      </motion.div>
+                      </motion.span>
                     )}
                     {!actualCost && costEstimate && !clarifyState && !isLoading && (
                       <motion.span
-                        style={styles.costBadge}
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.9 }}
-                        transition={{ duration: 0.25 }}
+                        style={{ fontSize: '11px', color: SK.textSecondary, fontWeight: 400 }}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.2 }}
                       >
                         {t('estimatedCost').replace('${cost}', costEstimate.total.toFixed(2))}
                       </motion.span>

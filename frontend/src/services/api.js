@@ -273,28 +273,41 @@ export function computeActualCost(usage) {
 }
 
 // Quick client-side pre-estimate (no API call needed)
+// Skills + code execution add massive overhead: skill references (~30K tokens),
+// code execution tool calls (~20K), retries, etc.
 export function estimateCostQuick({ promptLength = 0, rowCount = 0, hasData = false, industry = false }) {
   const CHARS_PER_TOKEN = 4;
   const p = getPricing('claude-sonnet-4-20250514');
   const pH = getPricing('claude-haiku-4-5-20251001');
 
-  // Generation phase (Sonnet): system ~4500 cached + user prompt + data sample
-  const systemTokens = 4500;
+  // Generation phase (Sonnet): system + skills refs + code execution overhead
+  const systemTokens = 12000;       // system prompt ~400 lines
+  const skillRefTokens = 30000;     // 11 reference files loaded by dashboard-generator skill
+  const codeExecOverhead = 20000;   // code execution tool calls + container setup
   const promptTokens = Math.ceil(promptLength / CHARS_PER_TOKEN);
   const dataTokens = hasData ? Math.min(Math.ceil(rowCount * 50 / CHARS_PER_TOKEN), 8000) : 0;
-  const industryTokens = industry ? 1500 : 0;
-  const genInput = promptTokens + dataTokens + industryTokens;
-  const genOutput = 6000; // typical generated code
-  const genCost = (systemTokens / 1e6) * p.cacheRead + (genInput / 1e6) * p.input + (genOutput / 1e6) * p.output;
+  const industryTokens = industry ? 5000 : 0; // industry skill refs
+  const genInputFresh = promptTokens + dataTokens + industryTokens + codeExecOverhead;
+  const genInputCached = systemTokens + skillRefTokens;
+  const genOutput = 30000;          // code gen + tool use + retries
+  const genCacheCost = (genInputCached / 1e6) * ((p.cacheWrite + p.cacheRead) / 2);
+  const genCost = genCacheCost + (genInputFresh / 1e6) * p.input + (genOutput / 1e6) * p.output;
 
-  // Review phase (Haiku): code review
-  const reviewCost = (1500 / 1e6) * pH.cacheRead + (4000 / 1e6) * pH.input + (600 / 1e6) * pH.output;
+  // Data analysis phase (Haiku, only if data uploaded)
+  const analysisCost = hasData
+    ? (5000 / 1e6) * pH.cacheRead + ((dataTokens + promptTokens + 10000) / 1e6) * pH.input + (2000 / 1e6) * pH.output
+    : 0;
 
-  // Vision phase (Haiku): screenshot analysis
-  const visionCost = (1000 / 1e6) * pH.cacheRead + (5000 / 1e6) * pH.input + (400 / 1e6) * pH.output;
+  // Review phase (Haiku): reviewer skill + code execution
+  const reviewInput = 40000;  // skill refs + generated code + tool calls
+  const reviewCost = (reviewInput / 1e6) * pH.input + (8000 / 1e6) * pH.output;
 
-  const total = genCost + reviewCost + visionCost;
-  return { total: Math.round(total * 10000) / 10000, currency: 'USD' };
+  // Vision phase (Haiku): vision skill + screenshot + code
+  const visionInput = 30000;  // skill refs + screenshot + code context
+  const visionCost = (visionInput / 1e6) * pH.input + (5000 / 1e6) * pH.output;
+
+  const total = genCost + analysisCost + reviewCost + visionCost;
+  return { total: Math.round(total * 100) / 100, currency: 'USD' };
 }
 
 // ============ CLARIFY PROMPT ============
