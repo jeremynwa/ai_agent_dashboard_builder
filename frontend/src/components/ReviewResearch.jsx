@@ -54,6 +54,7 @@ const SCALES = ['1-100', '1-10', '1-5', 'binary'];
 function ScopeStep({ config, setConfig, t }) {
   const addBrand = () => setConfig(c => ({ ...c, brands: [...c.brands, ''] }));
   const addCompetitor = () => setConfig(c => ({ ...c, competitors: [...c.competitors, ''] }));
+  const showCompetitors = config.competitors.length > 0;
 
   return (
     <div style={s.stepContent}>
@@ -104,28 +105,47 @@ function ScopeStep({ config, setConfig, t }) {
       ))}
       <button style={s.addBtn} onClick={addBrand}>+ {t('rr.addBrand')}</button>
 
-      <label style={{ ...s.label, marginTop: 16 }}>{t('rr.competitors')}</label>
-      {config.competitors.map((c, i) => (
-        <div key={i} style={s.inputRow}>
-          <input
-            style={s.input}
-            value={c}
-            placeholder={t('rr.competitorPlaceholder')}
-            onChange={(e) => {
-              const competitors = [...config.competitors];
-              competitors[i] = e.target.value;
-              setConfig(cfg => ({ ...cfg, competitors }));
-            }}
-          />
-          {config.competitors.length > 1 && (
+      {!showCompetitors ? (
+        <button
+          style={{ ...s.addBtn, marginTop: 16, color: '#6DB1C7', borderColor: 'rgba(109,177,199,0.3)' }}
+          onClick={() => setConfig(c => ({ ...c, competitors: [''] }))}
+        >
+          {t('rr.addCompetitors')}
+        </button>
+      ) : (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 }}>
+            <label style={s.label}>{t('rr.competitors')}</label>
             <button
-              style={s.removeBtn}
-              onClick={() => setConfig(cfg => ({ ...cfg, competitors: cfg.competitors.filter((_, j) => j !== i) }))}
-            >x</button>
-          )}
-        </div>
-      ))}
-      <button style={s.addBtn} onClick={addCompetitor}>+ {t('rr.addCompetitor')}</button>
+              style={{ background: 'none', border: 'none', color: '#9CA3AF', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}
+              onClick={() => setConfig(c => ({ ...c, competitors: [] }))}
+            >
+              {t('rr.hideCompetitors')}
+            </button>
+          </div>
+          {config.competitors.map((c, i) => (
+            <div key={i} style={s.inputRow}>
+              <input
+                style={s.input}
+                value={c}
+                placeholder={t('rr.competitorPlaceholder')}
+                onChange={(e) => {
+                  const competitors = [...config.competitors];
+                  competitors[i] = e.target.value;
+                  setConfig(cfg => ({ ...cfg, competitors }));
+                }}
+              />
+              {config.competitors.length > 1 && (
+                <button
+                  style={s.removeBtn}
+                  onClick={() => setConfig(cfg => ({ ...cfg, competitors: cfg.competitors.filter((_, j) => j !== i) }))}
+                >x</button>
+              )}
+            </div>
+          ))}
+          <button style={s.addBtn} onClick={addCompetitor}>+ {t('rr.addCompetitor')}</button>
+        </>
+      )}
 
       <label style={{ ...s.label, marginTop: 16 }}>{t('rr.location')}</label>
       <input
@@ -490,7 +510,7 @@ export default function ReviewResearch({ onBack, t = (k) => k }) {
   const [config, setConfig] = useState({
     industry: 'restaurant',
     brands: [''],
-    competitors: [''],
+    competitors: [],
     location: '',
     maxReviewsPerBrand: 500,
     language: 'fr',
@@ -510,7 +530,7 @@ export default function ReviewResearch({ onBack, t = (k) => k }) {
 
   // Compute cost when config changes
   useEffect(() => {
-    const n = config.brands.filter(b => b.trim()).length * config.maxReviewsPerBrand;
+    const n = (config.brands.filter(b => b.trim()).length + config.competitors.filter(c => c.trim()).length) * config.maxReviewsPerBrand;
     if (n <= 0) { setCost(null); return; }
 
     const scrapingCost = config.dataSource === 'scrape' ? (n / 1000) * 1.50 : 0;
@@ -529,7 +549,7 @@ export default function ReviewResearch({ onBack, t = (k) => k }) {
     const analysisCost = firstReviewCost + (hits * cachedReviewCost) + (misses * missReviewCost);
 
     setCost({ scraping: scrapingCost, analysis: analysisCost, total: scrapingCost + analysisCost, reviewCount: n });
-  }, [config.brands, config.maxReviewsPerBrand, config.dataSource]);
+  }, [config.brands, config.competitors, config.maxReviewsPerBrand, config.dataSource]);
 
   // Poll job status
   useEffect(() => {
@@ -584,7 +604,7 @@ export default function ReviewResearch({ onBack, t = (k) => k }) {
     setStatus({});
     setResults(null);
     setError('');
-    setConfig(c => ({ ...c, brands: [''], competitors: [''], location: '' }));
+    setConfig(c => ({ ...c, brands: [''], competitors: [], location: '' }));
   };
 
   const stepLabels = [t('rr.stepScope'), t('rr.stepCriteria'), t('rr.stepSource'), t('rr.stepConfirm')];

@@ -232,10 +232,23 @@ async function runAnalysis(jobId, config, reviews) {
 
   // Compute average scores
   const avgScores = computeAverageScores(results, config);
+  const groupSummary = computeScoresByGroup(results, config);
 
   // Compute cost
   const pricing = { input: 3.0, output: 15.0, cacheWrite: 3.75, cacheRead: 0.30 };
   const analysisCost = (totalInputTokens / 1e6) * pricing.input + (totalOutputTokens / 1e6) * pricing.output;
+
+  // Generate Excel (HTML-based .xls)
+  const excelXml = generateExcelHtml(results, config, groupSummary);
+  const excelKey = `review-research/results/${jobId}.xls`;
+  await s3.send(new PutObjectCommand({
+    Bucket: BUCKET,
+    Key: excelKey,
+    Body: excelXml,
+    ContentType: 'application/vnd.ms-excel',
+  }));
+  const region = process.env.MY_REGION || 'eu-north-1';
+  const excelUrl = `https://${BUCKET}.s3.${region}.amazonaws.com/${excelKey}`;
 
   // Save final results
   const finalData = {
@@ -245,11 +258,13 @@ async function runAnalysis(jobId, config, reviews) {
     total,
     errors,
     results,
+    excelUrl,
     summary: {
       totalReviews: total,
       analyzedReviews: analyzed - errors,
       skipped: errors,
       avgScores,
+      groupSummary,
       cost: {
         scraping: config.dataSource === 'scrape' ? (total / 1000) * 1.50 : 0,
         analysis: Math.round(analysisCost * 100) / 100,
@@ -289,6 +304,101 @@ function computeAverageScores(results, config) {
   return scores;
 }
 
+function computeScoresByGroup(results, config) {
+  const validResults = results.filter(r => !r.error);
+  const groups = {};
+  for (const r of validResults) {
+    const key = r._meta?.place || r._query || 'Unknown';
+    const type = r._type || 'brand';
+    if (!groups[key]) groups[key] = { type, results: [] };
+    groups[key].results.push(r);
+  }
+
+  const summary = {};
+  for (const [name, group] of Object.entries(groups)) {
+    summary[name] = { type: group.type, scores: {}, count: group.results.length };
+    for (const c of config.criteria) {
+      const scoreKey = `${c.id}_score`;
+      const vals = group.results
+        .map(r => r[scoreKey])
+        .filter(v => v !== 'N/A' && v !== undefined && v !== null)
+        .map(Number)
+        .filter(n => !isNaN(n));
+      if (vals.length > 0) {
+        summary[name].scores[c.id] = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+      }
+    }
+  }
+  return summary;
+}
+
+// ============ EXCEL GENERATOR (HTML-based .xls) ============
+function generateExcelHtml(results, config, groupSummary) {
+  const validResults = results.filter(r => !r.error);
+  const criteriaHeaders = config.criteria.map(c => c.id.replace(/_/g, ' '));
+  const criteriaIds = config.criteria.map(c => c.id);
+
+  const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  const buildSheet = (name, rows) => {
+    let html = `<Worksheet ss:Name="${esc(name)}"><Table>\n`;
+    // Header row
+    html += '<Row>';
+    html += '<Cell><Data ss:Type="String">Place</Data></Cell>';
+    html += '<Cell><Data ss:Type="String">Author</Data></Cell>';
+    html += '<Cell><Data ss:Type="String">Rating</Data></Cell>';
+    html += '<Cell><Data ss:Type="String">Date</Data></Cell>';
+    html += '<Cell><Data ss:Type="String">Type</Data></Cell>';
+    for (const h of criteriaHeaders) html += `<Cell><Data ss:Type="String">${esc(h)} (score)</Data></Cell>`;
+    for (const h of criteriaHeaders) html += `<Cell><Data ss:Type="String">${esc(h)} (keyword)</Data></Cell>`;
+    html += '</Row>\n';
+    // Data rows
+    for (const r of rows) {
+      html += '<Row>';
+      html += `<Cell><Data ss:Type="String">${esc(r._meta?.place)}</Data></Cell>`;
+      html += `<Cell><Data ss:Type="String">${esc(r._meta?.author)}</Data></Cell>`;
+      html += `<Cell><Data ss:Type="Number">${r._meta?.rating || 0}</Data></Cell>`;
+      html += `<Cell><Data ss:Type="String">${esc(r._meta?.date)}</Data></Cell>`;
+      html += `<Cell><Data ss:Type="String">${esc(r._type || 'brand')}</Data></Cell>`;
+      for (const id of criteriaIds) html += `<Cell><Data ss:Type="${r[`${id}_score`] === 'N/A' ? 'String' : 'Number'}">${r[`${id}_score`] ?? 'N/A'}</Data></Cell>`;
+      for (const id of criteriaIds) html += `<Cell><Data ss:Type="String">${esc(r[`${id}_keyword`] || 'N/A')}</Data></Cell>`;
+      html += '</Row>\n';
+    }
+    html += '</Table></Worksheet>\n';
+    return html;
+  };
+
+  const buildSummarySheet = () => {
+    let html = '<Worksheet ss:Name="Summary"><Table>\n';
+    html += '<Row><Cell><Data ss:Type="String">Name</Data></Cell><Cell><Data ss:Type="String">Type</Data></Cell><Cell><Data ss:Type="String">Reviews</Data></Cell>';
+    for (const h of criteriaHeaders) html += `<Cell><Data ss:Type="String">${esc(h)}</Data></Cell>`;
+    html += '</Row>\n';
+    for (const [name, data] of Object.entries(groupSummary)) {
+      html += '<Row>';
+      html += `<Cell><Data ss:Type="String">${esc(name)}</Data></Cell>`;
+      html += `<Cell><Data ss:Type="String">${esc(data.type)}</Data></Cell>`;
+      html += `<Cell><Data ss:Type="Number">${data.count}</Data></Cell>`;
+      for (const id of criteriaIds) html += `<Cell><Data ss:Type="${data.scores[id] != null ? 'Number' : 'String'}">${data.scores[id] ?? 'N/A'}</Data></Cell>`;
+      html += '</Row>\n';
+    }
+    html += '</Table></Worksheet>\n';
+    return html;
+  };
+
+  const brandRows = validResults.filter(r => (r._type || 'brand') === 'brand');
+  const compRows = validResults.filter(r => r._type === 'competitor');
+
+  let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
+  xml += '<?mso-application progid="Excel.Sheet"?>\n';
+  xml += '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">\n';
+  xml += buildSheet('Brands', brandRows);
+  if (compRows.length > 0) xml += buildSheet('Competitors', compRows);
+  xml += buildSummarySheet();
+  xml += '</Workbook>';
+
+  return xml;
+}
+
 function estimateEta(remaining, secPerReview) {
   const secs = Math.ceil(remaining * secPerReview);
   if (secs < 60) return `${secs}s`;
@@ -297,7 +407,7 @@ function estimateEta(remaining, secPerReview) {
 
 // ============ COST ESTIMATION ============
 function estimateCost(config) {
-  const n = (config.brands?.length || 1) * (config.maxReviewsPerBrand || 500);
+  const n = ((config.brands?.length || 1) + (config.competitors?.filter(c => c.trim()).length || 0)) * (config.maxReviewsPerBrand || 500);
   const scrapingCost = config.dataSource === 'scrape' ? (n / 1000) * 1.50 : 0;
 
   const avgInputTokens = 1800;
@@ -369,6 +479,7 @@ export const handler = async (event) => {
       // Note: Lambda has 300s timeout. For large jobs, consider Step Functions.
       // For now, we run synchronously and poll from frontend.
       const brands = config.brands.filter(b => b.trim());
+      const competitors = (config.competitors || []).filter(c => c.trim());
       const allReviews = [];
 
       if (config.dataSource === 'scrape') {
@@ -376,15 +487,23 @@ export const handler = async (event) => {
         for (const brand of brands) {
           try {
             const reviews = await scrapeGoogleMaps(brand, config.location, config.maxReviewsPerBrand);
-            allReviews.push(...reviews);
+            allReviews.push(...reviews.map(r => ({ ...r, _type: 'brand', _query: brand })));
           } catch (err) {
             console.error(`Scraping failed for ${brand}:`, err.message);
-            // Continue with other brands
+          }
+        }
+        // Scrape reviews for each competitor
+        for (const comp of competitors) {
+          try {
+            const reviews = await scrapeGoogleMaps(comp, config.location, config.maxReviewsPerBrand);
+            allReviews.push(...reviews.map(r => ({ ...r, _type: 'competitor', _query: comp })));
+          } catch (err) {
+            console.error(`Scraping failed for competitor ${comp}:`, err.message);
           }
         }
       } else if (config.dataSource === 'upload' && config.reviews) {
         // Reviews already parsed and sent in the payload
-        allReviews.push(...config.reviews);
+        allReviews.push(...config.reviews.map(r => ({ ...r, _type: r._type || 'brand' })));
       }
 
       if (allReviews.length === 0) {
@@ -426,9 +545,11 @@ export const handler = async (event) => {
       if (!job) return reply(404, { error: 'Job not found' });
       if (job.status !== 'completed') return reply(400, { error: 'Job not completed' });
 
+      const region = process.env.MY_REGION || 'eu-north-1';
       return reply(200, {
         summary: job.summary,
-        jsonUrl: `https://${BUCKET}.s3.${process.env.MY_REGION || 'eu-north-1'}.amazonaws.com/review-research/results/${jobId}.json`,
+        excelUrl: job.excelUrl || `https://${BUCKET}.s3.${region}.amazonaws.com/review-research/results/${jobId}.xls`,
+        jsonUrl: `https://${BUCKET}.s3.${region}.amazonaws.com/review-research/results/${jobId}.json`,
       });
     }
 
