@@ -88,8 +88,8 @@ export default function IntakeChat({ onRoute }) {
 
       <div style={styles.quickButtons}>
         <span style={styles.quickLabel}>Or choose directly:</span>
-        <button style={styles.quickBtn} onClick={() => onRoute('upload', 'I have a first draft')}>
-          I have a FIRST DRAFT
+        <button style={styles.quickBtn} onClick={() => onRoute('upload', 'I have an app')}>
+          I have an APP
         </button>
         <button style={{ ...styles.quickBtn, ...styles.quickBtnPrimary }} onClick={() => onRoute('generate', 'I have an idea')}>
           I have an IDEA

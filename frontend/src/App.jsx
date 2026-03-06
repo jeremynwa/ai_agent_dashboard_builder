@@ -123,7 +123,7 @@ const translations = {
     landingSubtitle: 'What would you like to do?',
     landingBuild: 'I have an IDEA',
     landingBuildDesc: 'Describe your project. AI builds it in seconds.',
-    landingSubmit: 'I have a FIRST DRAFT',
+    landingSubmit: 'I have an APP',
     landingSubmitDesc: 'Upload your app for AI review and deployment.',
     // Upload & Review page
     uploadReview: 'Upload & Review',
@@ -177,6 +177,8 @@ const translations = {
     appTypeScrapingDesc: 'Automated data collection',
     appTypeNewsletter: 'Newsletter',
     appTypeNewsletterDesc: 'Automated newsletter pipeline',
+    appTypeReviewResearch: 'Review Research',
+    appTypeReviewResearchDesc: 'Analyze Google Maps reviews with AI',
     appTypeOther: 'Other',
     appTypeOtherDesc: 'Custom app from description',
     landingResearch: 'I want to ANALYZE reviews',
@@ -217,7 +219,7 @@ const translations = {
     'rr.costEstimate': 'Cost estimate',
     'rr.scraping': 'Scraping',
     'rr.analysis': 'Claude analysis',
-    'rr.costNote': 'Includes ~90% savings via prompt caching.',
+    'rr.costNote': '',
     'rr.launch': 'Launch analysis',
     'rr.launching': 'Launching...',
     'rr.back': 'Back',
@@ -320,7 +322,7 @@ const translations = {
     landingSubtitle: 'Que souhaitez-vous faire ?',
     landingBuild: "J'ai une IDÉE",
     landingBuildDesc: "Décrivez votre projet. L'IA le construit en quelques secondes.",
-    landingSubmit: "J'ai un PREMIER DRAFT",
+    landingSubmit: "J'ai une APP",
     landingSubmitDesc: "Uploadez votre app pour une review et un déploiement.",
     // Upload & Review page
     uploadReview: 'Uploader & Réviser',
@@ -374,6 +376,8 @@ const translations = {
     appTypeScrapingDesc: 'Collecte de données automatisée',
     appTypeNewsletter: 'Newsletter',
     appTypeNewsletterDesc: 'Pipeline de newsletter automatisée',
+    appTypeReviewResearch: 'Review Research',
+    appTypeReviewResearchDesc: 'Analysez des avis Google Maps avec IA',
     appTypeOther: 'Autre',
     appTypeOtherDesc: "App personnalisée sur description",
     landingResearch: 'Je veux ANALYSER des avis',
@@ -414,7 +418,7 @@ const translations = {
     'rr.costEstimate': 'Estimation du cout',
     'rr.scraping': 'Scraping',
     'rr.analysis': 'Analyse Claude',
-    'rr.costNote': 'Inclut ~90% de reduction via le prompt caching.',
+    'rr.costNote': '',
     'rr.launch': "Lancer l'analyse",
     'rr.launching': 'Lancement...',
     'rr.back': 'Retour',
@@ -1589,25 +1593,6 @@ function Factory() {
                 <p style={styles.landingCardDesc}>{t('landingSubmitDesc')}</p>
               </motion.div>
 
-              <motion.div
-                style={{ ...styles.landingCard, borderColor: 'rgba(47, 167, 77, 0.3)' }}
-                whileHover={{ borderColor: SK.signalGreen, boxShadow: '0 8px 32px rgba(47, 167, 77, 0.12)', y: -2 }}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: 0.35 }}
-                onClick={() => setAppView('review-research')}
-              >
-                <div style={{ ...styles.landingCardIcon, background: 'rgba(47, 167, 77, 0.08)' }}>
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={SK.signalGreen} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="11" cy="11" r="8" />
-                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                    <line x1="11" y1="8" x2="11" y2="14" />
-                    <line x1="8" y1="11" x2="14" y2="11" />
-                  </svg>
-                </div>
-                <h2 style={{ ...styles.landingCardTitle, color: SK.signalGreen }}>{t('landingResearch')}</h2>
-                <p style={styles.landingCardDesc}>{t('landingResearchDesc')}</p>
-              </motion.div>
             </div>
           </div>
         )}
@@ -1818,7 +1803,7 @@ function Factory() {
                       gap: isCollapsed ? '8px' : '16px',
                       justifyContent: 'center',
                       marginBottom: '24px',
-                      flexWrap: isCollapsed ? 'wrap' : 'nowrap',
+                      flexWrap: 'wrap',
                     }}
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -1840,6 +1825,11 @@ function Factory() {
                           <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
                         </svg>
                       )},
+                      { key: 'reviewResearch', icon: (sz) => (
+                        <svg width={sz} height={sz} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /><line x1="11" y1="8" x2="11" y2="14" /><line x1="8" y1="11" x2="14" y2="11" />
+                        </svg>
+                      )},
                       { key: 'other', icon: (sz) => (
                         <svg width={sz} height={sz} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                           <polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" />
@@ -1851,14 +1841,20 @@ function Factory() {
                         <motion.button
                           key={item.key}
                           layout
-                          onClick={() => setAppType(item.key)}
+                          onClick={() => {
+                            if (item.key === 'reviewResearch') {
+                              setAppView('review-research');
+                            } else {
+                              setAppType(item.key);
+                            }
+                          }}
                           style={{
                             display: 'flex',
                             flexDirection: isCollapsed ? 'row' : 'column',
                             alignItems: 'center',
                             gap: isCollapsed ? '6px' : '8px',
                             padding: isCollapsed ? '8px 18px' : '24px 32px',
-                            minWidth: isCollapsed ? 'auto' : '180px',
+                            minWidth: isCollapsed ? 'auto' : '155px',
                             borderRadius: isCollapsed ? '20px' : '12px',
                             border: isActive ? `1.5px solid ${SK.ruby}` : `1px solid ${SK.border}`,
                             background: isActive ? 'rgba(200, 0, 65, 0.08)' : SK.white,
