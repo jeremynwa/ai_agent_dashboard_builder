@@ -175,6 +175,8 @@ const translations = {
     appTypeDashboardDesc: 'Dashboard from your data',
     appTypeScraping: 'Scraping',
     appTypeScrapingDesc: 'Automated data collection',
+    appTypeNewsletter: 'Newsletter',
+    appTypeNewsletterDesc: 'Automated newsletter pipeline',
     appTypeOther: 'Other',
     appTypeOtherDesc: 'Custom app from description',
     landingResearch: 'I want to ANALYZE reviews',
@@ -244,6 +246,9 @@ const translations = {
       scrapePrices: 'Scrape product prices',
       scrapeListings: 'Scrape directory listings',
       scrapeCompetitors: 'Monitor competitor prices',
+      techDigest: 'Daily tech digest',
+      industryWatch: 'Industry watch newsletter',
+      aiResearch: 'AI research newsletter',
     },
   },
   fr: {
@@ -295,6 +300,9 @@ const translations = {
       scrapePrices: 'Scraper des prix produits',
       scrapeListings: 'Scraper un annuaire',
       scrapeCompetitors: 'Surveiller les prix concurrents',
+      techDigest: 'Digest tech quotidien',
+      industryWatch: 'Newsletter veille sectorielle',
+      aiResearch: 'Newsletter recherche IA',
     },
     industryLabel: 'Secteur',
     industries: {
@@ -364,6 +372,8 @@ const translations = {
     appTypeDashboardDesc: 'Dashboard depuis vos données',
     appTypeScraping: 'Scraping',
     appTypeScrapingDesc: 'Collecte de données automatisée',
+    appTypeNewsletter: 'Newsletter',
+    appTypeNewsletterDesc: 'Pipeline de newsletter automatisée',
     appTypeOther: 'Autre',
     appTypeOtherDesc: "App personnalisée sur description",
     landingResearch: 'Je veux ANALYSER des avis',
@@ -439,6 +449,12 @@ const SCRAPING_SUGGESTIONS = [
   { key: 'scrapePrices', prompt: 'Scraper les prix de produits sur un site e-commerce (catégorie chaussures) avec pagination, export Excel' },
   { key: 'scrapeListings', prompt: "Scraper un annuaire d'entreprises : nom, adresse, téléphone, note, avec pagination automatique" },
   { key: 'scrapeCompetitors', prompt: 'Surveiller les prix concurrents sur 3 sites e-commerce, comparer par produit, export Excel multi-onglets' },
+];
+
+const NEWSLETTER_SUGGESTIONS = [
+  { key: 'techDigest', prompt: 'Newsletter tech quotidienne avec actualités web (Gemini), Hacker News et papers arXiv, résumés par IA, web app Flask avec dark mode' },
+  { key: 'industryWatch', prompt: 'Newsletter hebdomadaire de veille sectorielle finance avec flux RSS custom, résumé IA en français, export PDF, automatisation cron' },
+  { key: 'aiResearch', prompt: 'Newsletter recherche IA avec arXiv (cs.AI, cs.LG, cs.CL), résumés détaillés, images OG, web app avec filtres et bookmarks' },
 ];
 
 // ============ LANG CONTEXT ============
@@ -660,7 +676,7 @@ function Factory() {
   const [costEstimate, setCostEstimate] = useState(null); // { total, currency } pre-estimate
   const [actualCost, setActualCost] = useState(null); // { total, breakdown, currency, totals } after generation
   const [clarifyState, setClarifyState] = useState(null); // null | 'loading' | { questions: [...] }
-  const [appType, setAppType] = useState(null); // null | 'dashboard' | 'scraping' | 'other'
+  const [appType, setAppType] = useState(null); // null | 'dashboard' | 'scraping' | 'newsletter' | 'other'
   const webcontainerRef = useRef(null);
   const bootedRef = useRef(false);
   const iframeRef = useRef(null);
@@ -927,11 +943,11 @@ function Factory() {
     const dataHash = excelData ? `${excelData.fileName}_${excelData.totalRows}` : dbContext ? JSON.stringify(dbContext.schema).slice(0, 100) : null;
     const hasCachedAnalysis = dataHash && dataHash === cachedDataHashRef.current && cachedAnalysisRef.current;
 
-    // Scraping apps: generate code only, no compilation/preview
-    if (effectiveAppType === 'scraping') {
+    // Scraping / Newsletter apps: generate code only, no compilation/preview
+    if (effectiveAppType === 'scraping' || effectiveAppType === 'newsletter') {
       setAgentStatus(t('generatingCode'));
       setGenerationStep(1);
-      const result = await generateApp(userPrompt, null, currentCode, null, null, { appType: 'scraping' });
+      const result = await generateApp(userPrompt, null, currentCode, null, null, { appType: effectiveAppType });
       currentCode = result.files;
       if (result._usage?.phases) allUsagePhases.push(...result._usage.phases);
       setGenerationStep(5);
@@ -1035,7 +1051,7 @@ function Factory() {
     setGenerationStep(0);
     setAgentStatus(t('starting'));
     try {
-      const skipReviewVision = appType === 'scraping';
+      const skipReviewVision = appType === 'scraping' || appType === 'newsletter';
       const result = await agentGenerate(finalPrompt, null, skipReviewVision, skipReviewVision);
       if (result.success) {
         setGenerationStep(5);
@@ -1068,7 +1084,7 @@ function Factory() {
 
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
-    if (appType !== 'scraping' && !webcontainerRef.current) return;
+    if (appType !== 'scraping' && appType !== 'newsletter' && !webcontainerRef.current) return;
     // Start clarification flow
     setClarifyState('loading');
     try {
@@ -1260,7 +1276,7 @@ function Factory() {
 
   // ============ GENERATED APP VIEW (fullscreen) ============
   // Scraping mode: no preview, show ZIP download only
-  if (generatedApp && !previewUrl && appType === 'scraping') {
+  if (generatedApp && !previewUrl && (appType === 'scraping' || appType === 'newsletter')) {
     return (
       <div style={styles.container}>
         <div style={styles.gridPattern} />
@@ -1287,10 +1303,10 @@ function Factory() {
               </svg>
             </div>
             <h2 style={{ color: SK.textPrimary, fontSize: '22px', fontWeight: 700, marginBottom: '8px' }}>
-              {t('appTypeScraping')}: {generatedApp.name}
+              {appType === 'newsletter' ? t('appTypeNewsletter') : t('appTypeScraping')}: {generatedApp.name}
             </h2>
             <p style={{ color: SK.textSecondary, fontSize: '14px', marginBottom: '24px' }}>
-              Python scraper generated. Download the ZIP to run locally.
+              {appType === 'newsletter' ? 'Newsletter pipeline generated. Download the ZIP to run locally.' : 'Python scraper generated. Download the ZIP to run locally.'}
             </p>
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
               <motion.button
@@ -1816,6 +1832,11 @@ function Factory() {
                           <circle cx="12" cy="12" r="3" /><path d="M12 2v4" /><path d="M12 18v4" /><path d="M4.93 4.93l2.83 2.83" /><path d="M16.24 16.24l2.83 2.83" /><path d="M2 12h4" /><path d="M18 12h4" /><path d="M4.93 19.07l2.83-2.83" /><path d="M16.24 7.76l2.83-2.83" />
                         </svg>
                       )},
+                      { key: 'newsletter', icon: (sz) => (
+                        <svg width={sz} height={sz} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
+                        </svg>
+                      )},
                       { key: 'other', icon: (sz) => (
                         <svg width={sz} height={sz} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                           <polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" />
@@ -1914,7 +1935,7 @@ function Factory() {
                 )}
 
                 {/* Data source — hidden for scraping */}
-                {appType !== 'scraping' && (<>
+                {appType !== 'scraping' && appType !== 'newsletter' && (<>
                 <div style={styles.dataRow}>
                   {dataSourceLabel ? (
                     <motion.div
@@ -1970,13 +1991,13 @@ function Factory() {
                     style={{
                       ...styles.generateButton,
                       width: '100%',
-                      opacity: (!appType || !prompt.trim() || (appType !== 'scraping' && !isReady) || clarifyState === 'loading') ? 0.4 : 1,
-                      cursor: (!appType || !prompt.trim() || (appType !== 'scraping' && !isReady) || clarifyState === 'loading') ? 'default' : 'pointer',
+                      opacity: (!appType || !prompt.trim() || (appType !== 'scraping' && appType !== 'newsletter' && !isReady) || clarifyState === 'loading') ? 0.4 : 1,
+                      cursor: (!appType || !prompt.trim() || (appType !== 'scraping' && appType !== 'newsletter' && !isReady) || clarifyState === 'loading') ? 'default' : 'pointer',
                     }}
                     onClick={handleGenerate}
-                    disabled={!appType || !prompt.trim() || (appType !== 'scraping' && !isReady) || clarifyState === 'loading'}
-                    whileHover={appType && prompt.trim() && (appType === 'scraping' || isReady) && clarifyState !== 'loading' ? { scale: 1.015 } : {}}
-                    whileTap={appType && prompt.trim() && (appType === 'scraping' || isReady) && clarifyState !== 'loading' ? { scale: 0.985 } : {}}
+                    disabled={!appType || !prompt.trim() || (appType !== 'scraping' && appType !== 'newsletter' && !isReady) || clarifyState === 'loading'}
+                    whileHover={appType && prompt.trim() && (appType === 'scraping' || appType === 'newsletter' || isReady) && clarifyState !== 'loading' ? { scale: 1.015 } : {}}
+                    whileTap={appType && prompt.trim() && (appType === 'scraping' || appType === 'newsletter' || isReady) && clarifyState !== 'loading' ? { scale: 0.985 } : {}}
                   >
                     <Icons.sparkle />
                     {clarifyState === 'loading' ? t('clarifyLoading') : t('generateApp')}
@@ -2059,7 +2080,7 @@ function Factory() {
                   {t('tryPrompt')}
                 </motion.div>
                 <div style={styles.suggestionsGrid}>
-                  {(appType === 'scraping' ? SCRAPING_SUGGESTIONS : DASHBOARD_SUGGESTIONS).map((s, i) => (
+                  {(appType === 'scraping' ? SCRAPING_SUGGESTIONS : appType === 'newsletter' ? NEWSLETTER_SUGGESTIONS : DASHBOARD_SUGGESTIONS).map((s, i) => (
                     <motion.button
                       key={s.key}
                       style={styles.suggestionChip}

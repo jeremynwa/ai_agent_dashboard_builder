@@ -746,6 +746,68 @@ RAPPELS CRITIQUES (en plus du skill):
       // Force JSON output in text (not in container files)
       systemPrompt += '\n\nCRITICAL OUTPUT FORMAT: Return your final answer as a JSON object directly in your text response: { "files": { "src/App.jsx": "...", ... } }. Do NOT write files to the container. Return the complete JSON as TEXT.';
 
+    } else if (effectiveAppType === 'newsletter') {
+      // ---- NEWSLETTER MODE ----
+      systemPrompt = `Tu es un expert Python senior specialise en generation de newsletters automatisees.
+Genere une application Python complete qui collecte du contenu depuis plusieurs sources, le resume avec un LLM, et produit des newsletters HTML stylees servies via une web app Flask.
+
+ARCHITECTURE OBLIGATOIRE:
+- main.py : orchestrateur pipeline (collecte -> resume -> HTML -> archive)
+- src/collectors/ : modules de collecte (un fichier par source: gemini_news.py, hackernews.py, arxiv_rss.py, rss_custom.py selon le besoin)
+- src/summarizers/huggingface_summarizer.py : resume IA via SDK OpenAI pointant vers HuggingFace Inference API (Llama-3.3-70B-Instruct)
+- src/generators/html_generator.py : generateur HTML standalone avec CSS inline complet
+- src/utils/config.py : chargement .env, validation, constantes
+- src/utils/helpers.py : logger, dates, I/O fichiers
+- src/utils/fetch_article_images.py : scraping images OG/Twitter meta tags (ThreadPoolExecutor)
+- webapp/app.py : serveur Flask (routes /, /home, /health)
+- webapp/templates/index.html : template Jinja2 feed principal
+- webapp/templates/landing_vanta.html : landing page
+- webapp/static/js/ : modules JS (main, theme, filters, tts, pdf-export, saved, share, progress, toc, fab)
+- webapp/static/css/ : styles CSS modulaires (base, main, header, articles, animations, filters, sidebar, responsive)
+- requirements.txt : dependances Python (flask, google-genai, openai, feedparser, beautifulsoup4, requests, python-dotenv, jinja2, gunicorn)
+- .env.example : template variables d'environnement (GEMINI_API_KEY, HF_API_KEY, MAX_ARTICLES_PER_SOURCE, PORT)
+- run_daily.sh + run_daily.bat : scripts d'execution quotidienne
+- setup.sh + setup.bat : scripts d'installation
+
+COLLECTEURS:
+- gemini_news.py : actualites web via Google Gemini 2.5 Flash avec Google Search grounding. Retourne titre, url, resume pre-genere.
+- hackernews.py : top stories Hacker News via Firebase (IDs) + Algolia (contenu). Retourne titre, url, score, contenu texte.
+- arxiv_rss.py : papers academiques via RSS feeds (configurable: cs.AI, cs.LG, etc). Retourne titre, url, abstract, auteurs.
+- rss_custom.py : flux RSS personnalises via feedparser.
+
+STRUCTURE ARTICLE (dict Python):
+{ "title": str, "url": str, "summary": str, "content": str, "abstract": str, "image_url": str, "authors": list, "published": str, "source": str, "score": int, "comments_url": str }
+
+RESUME IA:
+- Format standardise: "Summary: 2-3 phrases\\nWhy This Matters:\\n* point cle 1\\n* point cle 2\\n* point cle 3"
+- Rate limit: 1s entre articles. Max tokens: 300. Temperature: 0.7
+- Gemini news saute (deja resume)
+
+HTML GENERATOR:
+- HTML standalone avec CSS inline complet (pas de fichier CSS externe dans le HTML genere)
+- Sections par source avec titres, images (200px height), resumes
+- Boutons de partage: LinkedIn, Twitter, Copy Link
+- Design: gradient header (#667eea -> #764ba2), max-width 900px, fonts systeme
+- Sauvegarde dans archive/YYYY-MM-DD.html
+
+WEB APP FLASK:
+- Dark mode toggle (CSS variables dans base.css, accent cyan #06b6d4)
+- Filtres par date, type, mots-cles
+- TTS (lecture vocale), export PDF
+- Bookmarks (localStorage), barre de progression scroll
+- Table des matieres sidebar, boutons flottants FAB
+- Templates Jinja2, CSS modulaire
+
+REGLES:
+- Retourne UNIQUEMENT du JSON valide: { "files": { "main.py": "code", "src/collectors/gemini_news.py": "code", ... } }
+- Le code doit etre Python 3.11+ valide
+- Variables sensibles dans .env uniquement (JAMAIS hardcoder de cles API)
+- Toujours inclure .env.example avec les cles requises documentees
+- Web app sur port configurable via .env (defaut 8080)
+- Pipeline: collecte -> images -> resume -> HTML -> archive (4 etapes dans main.py)
+
+CRITICAL OUTPUT FORMAT: Return your final answer as a JSON object directly in your text response: { "files": { "main.py": "...", "src/collectors/gemini_news.py": "...", ... } }. Do NOT write files to the container. Return the complete JSON as TEXT.`;
+
     } else if (effectiveAppType === 'other') {
       // ---- OTHER / GENERIC MODE ----
       systemPrompt = `Tu es un developpeur full-stack senior. Genere une application web complete selon la description de l'utilisateur.
@@ -776,6 +838,8 @@ CRITICAL OUTPUT FORMAT: Return your final answer as a JSON object directly in yo
       userMessage += `\nMODIFICATION: ${prompt}${rulesContext}${dataContext}${analysisContext}\n\nRetourne le JSON complet.`;
     } else if (effectiveAppType === 'scraping') {
       userMessage = `Genere une application Python de scraping pour: ${prompt}${rulesContext}`;
+    } else if (effectiveAppType === 'newsletter') {
+      userMessage = `Genere une application Python de newsletter automatisee pour: ${prompt}${rulesContext}`;
     } else {
       userMessage = `Genere une app React dashboard pour: ${prompt}${rulesContext}${dataContext}${analysisContext}`;
     }
