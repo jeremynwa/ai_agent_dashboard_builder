@@ -466,8 +466,11 @@ function LangProvider({ children }) {
   });
 
   const t = (key) => {
+    const dict = translations[lang];
+    // Try flat key first (e.g. 'rr.title'), then nested traversal (e.g. suggestions.salesKpis)
+    if (dict[key] !== undefined) return dict[key];
     const keys = key.split('.');
-    let val = translations[lang];
+    let val = dict;
     for (const k of keys) val = val?.[k];
     return val || key;
   };
