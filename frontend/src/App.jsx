@@ -974,7 +974,13 @@ function Factory() {
   };
 
   const restoreApp = async (app) => {
-    if (!app.files || !webcontainerRef.current) return;
+    if (!app.files) return;
+    // Switch to factory view if on landing or other view
+    setAppView('factory');
+    if (!webcontainerRef.current) {
+      addLog('WebContainer not ready yet, please wait...');
+      return;
+    }
     setIsLoading(true);
     setAgentStatus(t('modifying'));
     try {
