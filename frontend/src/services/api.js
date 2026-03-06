@@ -273,12 +273,10 @@ export function computeActualCost(usage) {
 }
 
 // Quick client-side pre-estimate (no API call needed)
-// Skills + code execution add massive overhead: skill references (~30K tokens),
-// code execution tool calls (~20K), retries, etc.
+// All phases run on Sonnet. Skills + code execution add massive token overhead.
 export function estimateCostQuick({ promptLength = 0, rowCount = 0, hasData = false, industry = false }) {
   const CHARS_PER_TOKEN = 4;
   const p = getPricing('claude-sonnet-4-20250514');
-  const pH = getPricing('claude-haiku-4-5-20251001');
 
   // Generation phase (Sonnet): system + skills refs + code execution overhead
   const systemTokens = 12000;       // system prompt ~400 lines
@@ -286,25 +284,25 @@ export function estimateCostQuick({ promptLength = 0, rowCount = 0, hasData = fa
   const codeExecOverhead = 20000;   // code execution tool calls + container setup
   const promptTokens = Math.ceil(promptLength / CHARS_PER_TOKEN);
   const dataTokens = hasData ? Math.min(Math.ceil(rowCount * 50 / CHARS_PER_TOKEN), 8000) : 0;
-  const industryTokens = industry ? 5000 : 0; // industry skill refs
+  const industryTokens = industry ? 5000 : 0;
   const genInputFresh = promptTokens + dataTokens + industryTokens + codeExecOverhead;
   const genInputCached = systemTokens + skillRefTokens;
   const genOutput = 30000;          // code gen + tool use + retries
   const genCacheCost = (genInputCached / 1e6) * ((p.cacheWrite + p.cacheRead) / 2);
   const genCost = genCacheCost + (genInputFresh / 1e6) * p.input + (genOutput / 1e6) * p.output;
 
-  // Data analysis phase (Haiku, only if data uploaded)
+  // Data analysis phase (Sonnet, only if data uploaded)
   const analysisCost = hasData
-    ? (5000 / 1e6) * pH.cacheRead + ((dataTokens + promptTokens + 10000) / 1e6) * pH.input + (2000 / 1e6) * pH.output
+    ? (5000 / 1e6) * p.cacheRead + ((dataTokens + promptTokens + 10000) / 1e6) * p.input + (2000 / 1e6) * p.output
     : 0;
 
-  // Review phase (Haiku): reviewer skill + code execution
-  const reviewInput = 40000;  // skill refs + generated code + tool calls
-  const reviewCost = (reviewInput / 1e6) * pH.input + (8000 / 1e6) * pH.output;
+  // Review phase (Sonnet): reviewer skill + code execution
+  const reviewInput = 40000;
+  const reviewCost = (reviewInput / 1e6) * p.input + (8000 / 1e6) * p.output;
 
-  // Vision phase (Haiku): vision skill + screenshot + code
-  const visionInput = 30000;  // skill refs + screenshot + code context
-  const visionCost = (visionInput / 1e6) * pH.input + (5000 / 1e6) * pH.output;
+  // Vision phase (Sonnet): vision skill + screenshot + code
+  const visionInput = 30000;
+  const visionCost = (visionInput / 1e6) * p.input + (5000 / 1e6) * p.output;
 
   const total = genCost + analysisCost + reviewCost + visionCost;
   return { total: Math.round(total * 100) / 100, currency: 'USD' };

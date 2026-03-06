@@ -115,8 +115,8 @@ Resources:
           REVIEWER_SKILL_ID: "skill_01ABSnPFjpR2wUZuoKobc5vs"
           VISION_SKILL_ID: "skill_0167k41XCVLbcSksQvPsqTfi"
           SCRAPER_SKILL_ID: "skill_015tnYwBrkp8e4sYevkvqsWX"
-          REVIEW_MODEL: "claude-haiku-4-5-20251001"
-          VISION_MODEL: "claude-haiku-4-5-20251001"
+          REVIEW_MODEL: "claude-sonnet-4-20250514"
+          VISION_MODEL: "claude-sonnet-4-20250514"
       FunctionUrlConfig:
         AuthType: NONE
         Cors:
@@ -268,7 +268,7 @@ Resources:
       Environment:
         Variables:
           ANTHROPIC_API_KEY: !Ref AnthropicApiKey
-          EXPORT_MODEL: "claude-haiku-4-5-20251001"
+          EXPORT_MODEL: "claude-sonnet-4-20250514"
       FunctionUrlConfig:
         AuthType: NONE
         Cors:
