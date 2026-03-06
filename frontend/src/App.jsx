@@ -120,9 +120,9 @@ const translations = {
     exporting: 'Exporting...',
     landingTitle: 'Welcome to Edouard AI',
     landingSubtitle: 'What would you like to do?',
-    landingBuild: 'I have an idea',
+    landingBuild: 'I have an IDEA',
     landingBuildDesc: 'Describe your project. AI builds it in seconds.',
-    landingSubmit: 'I have a first version',
+    landingSubmit: 'I have a FIRST DRAFT',
     landingSubmitDesc: 'Upload your app for AI review and deployment.',
     // Upload & Review page
     uploadReview: 'Upload & Review',
@@ -251,9 +251,9 @@ const translations = {
     exporting: 'Export en cours...',
     landingTitle: 'Bienvenue sur Edouard AI',
     landingSubtitle: 'Que souhaitez-vous faire ?',
-    landingBuild: "J'ai une idée",
+    landingBuild: "J'ai une IDÉE",
     landingBuildDesc: "Décrivez votre projet. L'IA le construit en quelques secondes.",
-    landingSubmit: "J'ai une première version",
+    landingSubmit: "J'ai un PREMIER DRAFT",
     landingSubmitDesc: "Uploadez votre app pour une review et un déploiement.",
     // Upload & Review page
     uploadReview: 'Uploader & Réviser',
