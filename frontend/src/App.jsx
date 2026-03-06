@@ -925,7 +925,7 @@ function Factory() {
         setGenerationStep(5);
         setAgentStatus('');
         setGeneratedApp({ name: finalPrompt.slice(0, 30), prompt: finalPrompt, url: result.url });
-        setSavedApps(prev => [...prev, { id: Date.now(), name: finalPrompt.slice(0, 30), prompt: finalPrompt, files: result.files }].slice(-10));
+        setSavedApps(prev => [...prev, { id: Date.now(), name: finalPrompt.slice(0, 30), prompt: finalPrompt, files: injectData(result.files) }].slice(-10));
         // Compute actual cost from real token usage
         if (result._usagePhases?.length) {
           const totals = { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };

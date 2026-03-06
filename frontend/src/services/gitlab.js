@@ -1,0 +1,278 @@
+// gitlab.js — Client-side GitLab push (browser calls GitLab API directly via VPN)
+// Ported from lambda-v2/git-push/index.mjs
+
+const DEFAULT_GITLAB_URL = 'https://git.simon-kucher.com';
+const DEFAULT_GROUP_ID = '1658';
+const DEFAULT_TEAM_MEMBERS = ['antoinesauauvageSKE2', 'marwanlenenE2', 'jeremygarneauSKE2', 'victoradrienguillermSKE2'];
+const MEMBER_ACCESS_LEVEL = 40; // Developer
+
+function slugify(name) {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 100);
+}
+
+export function detectStack(files) {
+  const pkgRaw = files['package.json'] || files['./package.json'];
+  if (pkgRaw) {
+    try {
+      const pkg = JSON.parse(pkgRaw);
+      const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+      if (deps['next']) return 'next';
+      if (deps['nuxt']) return 'nuxt';
+      if (deps['@sveltejs/kit']) return 'sveltekit';
+      if (deps['svelte']) return 'svelte';
+      if (deps['@angular/core']) return 'angular';
+      if (deps['vue']) return 'vue';
+      if (deps['react']) return 'react';
+      if (deps['vite']) return 'vite';
+    } catch {}
+  }
+  const paths = Object.keys(files);
+  if (paths.some(p => p.endsWith('.vue'))) return 'vue';
+  if (paths.some(p => p.endsWith('.svelte'))) return 'svelte';
+  if (paths.some(p => p.endsWith('.jsx') || p.endsWith('.tsx'))) return 'react';
+  return 'node';
+}
+
+function getDistDir(stack) {
+  if (stack === 'next') return '.next';
+  if (stack === 'nuxt') return '.output/public';
+  if (stack === 'sveltekit') return 'build';
+  if (stack === 'angular') return 'dist';
+  return 'dist';
+}
+
+export function gitlabCiYaml(stack) {
+  const distDir = getDistDir(stack);
+
+  if (stack === 'next') {
+    return `# GitLab CI/CD — Next.js
+image: node:20-alpine
+
+variables:
+  NODE_ENV: production
+
+cache:
+  key: \${CI_COMMIT_REF_SLUG}
+  paths:
+    - node_modules/
+    - .next/cache/
+
+stages:
+  - build
+  - deploy
+
+build:
+  stage: build
+  script:
+    - npm ci
+    - npm run build
+  artifacts:
+    paths:
+      - out/
+    expire_in: 1 hour
+
+pages:
+  stage: deploy
+  script:
+    - cp -r out public
+  artifacts:
+    paths:
+      - public
+  only:
+    - main
+`;
+  }
+
+  return `# GitLab CI/CD — ${stack.charAt(0).toUpperCase() + stack.slice(1)}
+image: node:20-alpine
+
+variables:
+  NODE_ENV: production
+
+cache:
+  key: \${CI_COMMIT_REF_SLUG}
+  paths:
+    - node_modules/
+
+stages:
+  - build
+  - deploy
+
+build:
+  stage: build
+  script:
+    - npm ci
+    - npm run build
+  artifacts:
+    paths:
+      - ${distDir}/
+    expire_in: 1 hour
+
+pages:
+  stage: deploy
+  script:
+    - mv ${distDir} public
+  artifacts:
+    paths:
+      - public
+  only:
+    - main
+`;
+}
+
+export function azurePipelinesYaml(stack) {
+  const distDir = getDistDir(stack);
+
+  return `# Azure Pipelines — ${stack.charAt(0).toUpperCase() + stack.slice(1)}
+trigger:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  NODE_VERSION: '20'
+
+steps:
+  - task: NodeTool@0
+    inputs:
+      versionSpec: '\$(NODE_VERSION)'
+    displayName: 'Install Node.js'
+
+  - script: npm ci
+    displayName: 'Install dependencies'
+
+  - script: npm run build
+    displayName: 'Build application'
+
+  - task: AzureStaticWebApp@0
+    inputs:
+      app_location: '/'
+      output_location: '${distDir}'
+      azure_static_web_apps_api_token: '\$(AZURE_STATIC_WEB_APPS_API_TOKEN)'
+    displayName: 'Deploy to Azure Static Web Apps'
+`;
+}
+
+/**
+ * Push files to GitLab directly from the browser (requires VPN access).
+ */
+export async function pushToGitLab({
+  files: rawFiles,
+  projectName,
+  description = '',
+  generateCI = false,
+  token,
+  gitlabUrl = DEFAULT_GITLAB_URL,
+  groupId = DEFAULT_GROUP_ID,
+  teamMembers = DEFAULT_TEAM_MEMBERS,
+  requester = '',
+}) {
+  if (!token) throw new Error('GitLab token is required');
+  if (!projectName?.trim()) throw new Error('Project name is required');
+
+  const baseUrl = gitlabUrl.replace(/\/$/, '');
+
+  const api = async (path, method = 'GET', body = null) => {
+    const res = await fetch(`${baseUrl}/api/v4${path}`, {
+      method,
+      headers: { 'Private-Token': token, 'Content-Type': 'application/json' },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(`GitLab ${res.status}: ${JSON.stringify(data?.message || data)}`);
+    }
+    return res.json();
+  };
+
+  // Inject CI/CD files if requested
+  const files = { ...rawFiles };
+  let ciFilesAdded = [];
+  if (generateCI) {
+    const stack = detectStack(files);
+    files['.gitlab-ci.yml'] = gitlabCiYaml(stack);
+    files['azure-pipelines.yml'] = azurePipelinesYaml(stack);
+    ciFilesAdded = ['.gitlab-ci.yml', 'azure-pipelines.yml'];
+  }
+
+  const slug = slugify(projectName);
+
+  // 1. Create project
+  const projectPayload = {
+    name: projectName,
+    path: slug,
+    description: description || `Generated by Edouard AI, ${new Date().toISOString().slice(0, 10)}`,
+    visibility: 'private',
+    initialize_with_readme: false,
+    default_branch: 'main',
+  };
+  if (groupId) projectPayload.namespace_id = parseInt(groupId, 10);
+
+  let project;
+  try {
+    project = await api('/projects', 'POST', projectPayload);
+  } catch (err) {
+    if (err.message.includes('has already been taken')) {
+      projectPayload.path = `${slug}-${Date.now().toString(36)}`;
+      projectPayload.name = `${projectName} (${new Date().toISOString().slice(0, 10)})`;
+      project = await api('/projects', 'POST', projectPayload);
+    } else {
+      throw err;
+    }
+  }
+
+  // 2. Commit all files
+  const actions = Object.entries(files)
+    .filter(([, content]) => typeof content === 'string')
+    .map(([filePath, content]) => ({
+      action: 'create',
+      file_path: filePath.startsWith('/') ? filePath.slice(1) : filePath,
+      content,
+      encoding: 'text',
+    }));
+
+  if (actions.length === 0) throw new Error('No valid text files to commit');
+
+  await api(`/projects/${project.id}/repository/commits`, 'POST', {
+    branch: 'main',
+    commit_message: `Initial commit\n\nApp: ${projectName}\nSubmitted by: ${requester}\nTimestamp: ${new Date().toISOString()}`,
+    actions,
+  });
+
+  // 3. Add team members (best-effort)
+  const collaboratorsAdded = [];
+  for (const username of teamMembers) {
+    try {
+      const users = await api(`/users?username=${encodeURIComponent(username)}`);
+      if (users[0]) {
+        await api(`/projects/${project.id}/members`, 'POST', {
+          user_id: users[0].id,
+          access_level: MEMBER_ACCESS_LEVEL,
+        });
+        collaboratorsAdded.push(username);
+      }
+    } catch {
+      // Non-fatal
+    }
+  }
+
+  return {
+    success: true,
+    repoUrl: project.http_url_to_repo,
+    webUrl: project.web_url,
+    projectId: project.id,
+    projectName: project.name,
+    filesCommitted: actions.length,
+    collaboratorsAdded,
+    pendingCollaborators: teamMembers.filter(m => !collaboratorsAdded.includes(m)),
+    ciFilesAdded,
+  };
+}

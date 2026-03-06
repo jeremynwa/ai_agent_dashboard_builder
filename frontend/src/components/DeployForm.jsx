@@ -1,7 +1,8 @@
-// DeployForm.jsx — GitLab push + VM request form
+// DeployForm.jsx — GitLab push (client-side via VPN) + VM request form
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { pushToGitLab, requestVm, saveApp } from '../services/api';
+import { pushToGitLab } from '../services/gitlab';
+import { requestVm, saveApp } from '../services/api';
 import { SK } from '../services/sk-theme';
 
 const VM_SIZES = [
@@ -18,6 +19,9 @@ export default function DeployForm({ files, appName, reviewScore = 0, stack = 'r
   const [projectName, setProjectName] = useState(appName || '');
   const [description, setDescription] = useState('');
   const [generateCI, setGenerateCI] = useState(false);
+  const [gitlabToken, setGitlabToken] = useState(() => {
+    try { return localStorage.getItem('gitlab-token') || ''; } catch { return ''; }
+  });
 
   // VM fields
   const [estimatedUsers, setEstimatedUsers] = useState('10');
@@ -32,14 +36,22 @@ export default function DeployForm({ files, appName, reviewScore = 0, stack = 'r
   const [error, setError] = useState('');
 
   const handleDeploy = async () => {
-    if (!projectName.trim()) return;
+    if (!projectName.trim() || !gitlabToken.trim()) return;
+    // Persist token for next time
+    try { localStorage.setItem('gitlab-token', gitlabToken); } catch {}
     setStep('deploying');
     setError('');
 
     try {
-      // Step 1: Push to GitLab
+      // Step 1: Push to GitLab (client-side, via VPN)
       setDeployStatus('Pushing to GitLab...');
-      const gitResult = await pushToGitLab(files, projectName.trim(), description.trim(), generateCI);
+      const gitResult = await pushToGitLab({
+        files,
+        projectName: projectName.trim(),
+        description: description.trim(),
+        generateCI,
+        token: gitlabToken.trim(),
+      });
 
       let vmResult = { ticketId: null, vmSpec: null };
       if (!skipVm) {
@@ -245,6 +257,20 @@ export default function DeployForm({ files, appName, reviewScore = 0, stack = 'r
             Generate CI/CD pipelines (.gitlab-ci.yml + azure-pipelines.yml)
           </span>
         </label>
+
+        <div style={styles.formGroup}>
+          <label style={styles.label}>GitLab Personal Access Token *</label>
+          <input
+            style={styles.input}
+            type="password"
+            value={gitlabToken}
+            onChange={e => setGitlabToken(e.target.value)}
+            placeholder="glpat-xxxxxxxxxxxxxxxxxxxx"
+          />
+          <div style={styles.inputHint}>
+            Scope: api. Create at GitLab → Settings → Access Tokens. Saved locally for next time.
+          </div>
+        </div>
       </div>
 
       {/* VM Section */}
@@ -306,13 +332,13 @@ export default function DeployForm({ files, appName, reviewScore = 0, stack = 'r
       <motion.button
         style={{
           ...styles.deployBtn,
-          opacity: projectName.trim() ? 1 : 0.4,
-          cursor: projectName.trim() ? 'pointer' : 'not-allowed',
+          opacity: projectName.trim() && gitlabToken.trim() ? 1 : 0.4,
+          cursor: projectName.trim() && gitlabToken.trim() ? 'pointer' : 'not-allowed',
         }}
         onClick={handleDeploy}
-        disabled={!projectName.trim()}
-        whileHover={projectName.trim() ? { scale: 1.015 } : {}}
-        whileTap={projectName.trim() ? { scale: 0.985 } : {}}
+        disabled={!projectName.trim() || !gitlabToken.trim()}
+        whileHover={projectName.trim() && gitlabToken.trim() ? { scale: 1.015 } : {}}
+        whileTap={projectName.trim() && gitlabToken.trim() ? { scale: 0.985 } : {}}
       >
         {skipVm ? 'Deploy to GitLab' : 'Deploy to GitLab + Request VM'}
       </motion.button>
