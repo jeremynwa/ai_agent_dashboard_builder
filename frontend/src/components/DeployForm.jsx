@@ -5,10 +5,10 @@ import { pushToGitLab, requestVm, saveApp } from '../services/api';
 import { SK } from '../services/sk-theme';
 
 const VM_SIZES = [
-  { value: 'Standard_B1ms', label: 'Standard_B1ms — 1 vCPU, 2GB (Small prototype)' },
-  { value: 'Standard_B2s', label: 'Standard_B2s — 2 vCPU, 4GB (Internal tool)' },
-  { value: 'Standard_D2s_v3', label: 'Standard_D2s_v3 — 2 vCPU, 8GB (Team dashboard)' },
-  { value: 'Standard_D4s_v3', label: 'Standard_D4s_v3 — 4 vCPU, 16GB (Production)' },
+  { value: 'Standard_B1ms', label: 'Standard_B1ms, 1 vCPU, 2GB (Small prototype)' },
+  { value: 'Standard_B2s', label: 'Standard_B2s, 2 vCPU, 4GB (Internal tool)' },
+  { value: 'Standard_D2s_v3', label: 'Standard_D2s_v3, 2 vCPU, 8GB (Team app)' },
+  { value: 'Standard_D4s_v3', label: 'Standard_D4s_v3, 4 vCPU, 16GB (Production)' },
 ];
 
 const DURATIONS = ['1 month', '3 months', '6 months', '1 year', 'Indefinite'];
@@ -130,9 +130,9 @@ export default function DeployForm({ files, appName, reviewScore = 0, stack = 'r
           {!vmResult.ticketId && (
             <div style={styles.resultCard}>
               <div style={styles.resultCardLabel}>VM Spec Generated</div>
-              <div style={styles.resultCardValue}>{vmResult.vmSpec?.vmSize} — {vmResult.vmSpec?.estimatedMonthlyCost}</div>
+              <div style={styles.resultCardValue}>{vmResult.vmSpec?.vmSize}, {vmResult.vmSpec?.estimatedMonthlyCost}</div>
               <div style={{ color: SK.signalYellow, fontSize: '12px', marginTop: '6px' }}>
-                Service Desk not configured — submit manually with the spec above
+                Service Desk not configured. Submit manually with the spec above.
               </div>
             </div>
           )}
@@ -277,7 +277,7 @@ export default function DeployForm({ files, appName, reviewScore = 0, stack = 'r
         </div>
 
         <div style={styles.formGroup}>
-          <label style={styles.label}>VM size (optional — AI will recommend if blank)</label>
+          <label style={styles.label}>VM size (optional, AI will recommend if blank)</label>
           <select style={styles.select} value={vmSize} onChange={e => setVmSize(e.target.value)}>
             <option value="">Let AI recommend</option>
             {VM_SIZES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}

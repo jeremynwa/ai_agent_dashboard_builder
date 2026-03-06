@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { routeIntake } from '../services/api';
 import { SK } from '../services/sk-theme';
 
-const GREETING = "Hi! I'm here to help. Do you have an existing app you'd like to upload and have reviewed, or do you want to build something new from scratch?";
+const GREETING = "Hi! Do you have an idea to build, or a first version to review?";
 
 export default function IntakeChat({ onRoute }) {
   const [messages, setMessages] = useState([
@@ -88,11 +88,11 @@ export default function IntakeChat({ onRoute }) {
 
       <div style={styles.quickButtons}>
         <span style={styles.quickLabel}>Or choose directly:</span>
-        <button style={styles.quickBtn} onClick={() => onRoute('upload', 'Upload existing app')}>
-          Upload existing app
+        <button style={styles.quickBtn} onClick={() => onRoute('upload', 'I have a first version')}>
+          I have a first version
         </button>
-        <button style={{ ...styles.quickBtn, ...styles.quickBtnPrimary }} onClick={() => onRoute('generate', 'Build new app')}>
-          Build something new
+        <button style={{ ...styles.quickBtn, ...styles.quickBtnPrimary }} onClick={() => onRoute('generate', 'I have an idea')}>
+          I have an idea
         </button>
       </div>
     </motion.div>

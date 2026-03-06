@@ -11,7 +11,7 @@ import DbConnect from './components/DbConnect';
 import AuthProvider, { useAuth } from './components/AuthProvider';
 import Login from './components/Login';
 import MatrixRain from './components/MatrixRain';
-import logoSK from './assets/logo_SK.png';
+import logoSK from './assets/SK_Paris_logo.png';
 import UploadCode from './components/UploadCode';
 import ReviewResults from './components/ReviewResults';
 import DeployForm from './components/DeployForm';
@@ -70,8 +70,8 @@ window.addEventListener('message', function(e) {
 const translations = {
   en: {
     title: 'What do you want to build?',
-    subtitle: 'Describe your dashboard or app — AI generates it in seconds.',
-    promptPlaceholder: 'Describe your dashboard... e.g. sales KPIs with monthly trends, churn analysis by cohort...',
+    subtitle: 'Describe your app. AI generates it in seconds.',
+    promptPlaceholder: 'Describe your app... e.g. sales KPIs with monthly trends, churn analysis by cohort...',
     generateApp: 'Generate App',
     tryPrompt: 'Try a prompt',
     addDataSource: '+ Add data source',
@@ -97,7 +97,7 @@ const translations = {
     stepReview: 'Quality review',
     stepVision: 'Visual analysis',
     stepFinalize: 'Finalization',
-    factory: '← Factory',
+    factory: '← Edouard AI',
     export: 'Export',
     publish: 'Publish',
     appNamePrompt: 'App name:',
@@ -118,21 +118,21 @@ const translations = {
     exportPptx: 'Export PPTX',
     exportPdf: 'Export PDF',
     exporting: 'Exporting...',
-    landingTitle: 'Welcome to Factory',
+    landingTitle: 'Welcome to Edouard AI',
     landingSubtitle: 'What would you like to do?',
-    landingBuild: 'I want to build a NEW app',
-    landingBuildDesc: 'Describe your dashboard — AI generates it in seconds.',
-    landingSubmit: 'I created an app and I want to submit',
-    landingSubmitDesc: 'Upload your app for AI-powered code review and deployment.',
+    landingBuild: 'I have an idea',
+    landingBuildDesc: 'Describe your project. AI builds it in seconds.',
+    landingSubmit: 'I have a first version',
+    landingSubmitDesc: 'Upload your app for AI review and deployment.',
     // Upload & Review page
     uploadReview: 'Upload & Review',
     uploadReviewTitle: 'Upload & Review App',
-    uploadReviewDesc: 'Drop your app ZIP — agents will review security, code quality, and performance, then fix issues.',
+    uploadReviewDesc: 'Drop your app ZIP. Agents will review security, code quality, and performance, then fix issues.',
     reviewingCode: 'Reviewing code with agents...',
     reviewFailed: 'Review failed:',
     // UploadCode component
     dropZoneTitle: 'Drop your app ZIP here',
-    dropZoneHint: 'Any web app — React, Vue, Angular, vanilla JS',
+    dropZoneHint: 'Any web app',
     dropZoneSub: 'Click to browse or drag & drop a .zip file',
     parsingZip: 'Parsing ZIP...',
     noFilesFound: 'No readable source files found in the ZIP.',
@@ -171,9 +171,9 @@ const translations = {
     clarifySkip: 'Skip & generate now',
     clarifyLoading: 'Preparing questions...',
     appTypeDashboard: 'Dashboard',
-    appTypeDashboardDesc: 'React dashboard from your data',
+    appTypeDashboardDesc: 'Dashboard from your data',
     appTypeScraping: 'Scraping',
-    appTypeScrapingDesc: 'Python scraper with Playwright',
+    appTypeScrapingDesc: 'Automated data collection',
     appTypeOther: 'Other',
     appTypeOtherDesc: 'Custom app from description',
     suggestions: {
@@ -190,8 +190,8 @@ const translations = {
   },
   fr: {
     title: 'Que voulez-vous construire ?',
-    subtitle: "Décrivez votre dashboard ou app — l'IA le génère en quelques secondes.",
-    promptPlaceholder: 'Décrivez votre dashboard... ex: KPIs ventes avec tendances mensuelles, analyse du churn par cohorte...',
+    subtitle: "Décrivez votre app. L'IA la génère en quelques secondes.",
+    promptPlaceholder: 'Décrivez votre app... ex: KPIs ventes avec tendances mensuelles, analyse du churn par cohorte...',
     generateApp: "Générer l'App",
     tryPrompt: 'Essayez un prompt',
     addDataSource: '+ Ajouter une source de données',
@@ -217,7 +217,7 @@ const translations = {
     stepReview: 'Review qualité',
     stepVision: 'Analyse visuelle',
     stepFinalize: 'Finalisation',
-    factory: '← Factory',
+    factory: '← Edouard AI',
     export: 'Exporter',
     publish: 'Publier',
     appNamePrompt: "Nom de l'app :",
@@ -249,21 +249,21 @@ const translations = {
     exportPptx: 'Export PPTX',
     exportPdf: 'Export PDF',
     exporting: 'Export en cours...',
-    landingTitle: 'Bienvenue sur Factory',
+    landingTitle: 'Bienvenue sur Edouard AI',
     landingSubtitle: 'Que souhaitez-vous faire ?',
-    landingBuild: 'Je veux construire une NOUVELLE app',
-    landingBuildDesc: "Décrivez votre dashboard — l'IA le génère en quelques secondes.",
-    landingSubmit: "J'ai créé une app et je veux la soumettre",
-    landingSubmitDesc: "Uploadez votre app pour une review de code par IA et un déploiement.",
+    landingBuild: "J'ai une idée",
+    landingBuildDesc: "Décrivez votre projet. L'IA le construit en quelques secondes.",
+    landingSubmit: "J'ai une première version",
+    landingSubmitDesc: "Uploadez votre app pour une review et un déploiement.",
     // Upload & Review page
     uploadReview: 'Uploader & Réviser',
     uploadReviewTitle: 'Uploader & Réviser une App',
-    uploadReviewDesc: "Déposez votre ZIP — les agents vérifieront la sécurité, la qualité du code et les performances, puis corrigeront les problèmes.",
+    uploadReviewDesc: "Déposez votre ZIP. Les agents vérifieront la sécurité, la qualité du code et les performances, puis corrigeront les problèmes.",
     reviewingCode: 'Révision du code par les agents...',
     reviewFailed: 'Échec de la révision :',
     // UploadCode component
     dropZoneTitle: 'Déposez votre ZIP ici',
-    dropZoneHint: "N'importe quelle web app — React, Vue, Angular, vanilla JS",
+    dropZoneHint: "N'importe quelle web app",
     dropZoneSub: 'Cliquez pour parcourir ou glissez-déposez un fichier .zip',
     parsingZip: 'Analyse du ZIP...',
     noFilesFound: 'Aucun fichier source lisible trouvé dans le ZIP.',
@@ -302,21 +302,21 @@ const translations = {
     clarifySkip: 'Passer & générer maintenant',
     clarifyLoading: 'Préparation des questions...',
     appTypeDashboard: 'Dashboard',
-    appTypeDashboardDesc: 'Dashboard React depuis vos données',
+    appTypeDashboardDesc: 'Dashboard depuis vos données',
     appTypeScraping: 'Scraping',
-    appTypeScrapingDesc: 'Scraper Python avec Playwright',
+    appTypeScrapingDesc: 'Collecte de données automatisée',
     appTypeOther: 'Autre',
     appTypeOtherDesc: "App personnalisée sur description",
   },
 };
 
 const DASHBOARD_SUGGESTIONS = [
-  { key: 'salesKpis', prompt: 'Dashboard des ventes avec KPIs revenus, marge, panier moyen et tendances mensuelles' },
-  { key: 'churnAnalysis', prompt: "Dashboard d'analyse du churn avec cohortes, taux de rétention et prédictions" },
-  { key: 'revenueTrends', prompt: 'Dashboard revenus avec évolution MRR/ARR, segments clients et forecasting' },
-  { key: 'marketingRoi', prompt: "Dashboard marketing avec ROI par canal, funnel de conversion et coût d'acquisition" },
-  { key: 'hrAnalytics', prompt: 'Dashboard RH avec effectifs, turnover, recrutement et satisfaction employés' },
-  { key: 'supplyChain', prompt: 'Dashboard supply chain avec stocks, délais livraison et performance fournisseurs' },
+  { key: 'salesKpis', prompt: 'App de suivi des ventes avec KPIs revenus, marge, panier moyen et tendances mensuelles' },
+  { key: 'churnAnalysis', prompt: "App d'analyse du churn avec cohortes, taux de rétention et prédictions" },
+  { key: 'revenueTrends', prompt: 'App revenus avec évolution MRR/ARR, segments clients et forecasting' },
+  { key: 'marketingRoi', prompt: "App marketing avec ROI par canal, funnel de conversion et coût d'acquisition" },
+  { key: 'hrAnalytics', prompt: 'App RH avec effectifs, turnover, recrutement et satisfaction employés' },
+  { key: 'supplyChain', prompt: 'App supply chain avec stocks, délais livraison et performance fournisseurs' },
 ];
 
 const SCRAPING_SUGGESTIONS = [
@@ -1042,7 +1042,7 @@ function Factory() {
     setExportingFormat(format);
     try {
       const data = excelData?.fullData || [];
-      const title = generatedApp?.name || 'Dashboard';
+      const title = generatedApp?.name || 'App';
       const result = await exportApp(format, data, title);
       if (result.base64) {
         const mimeTypes = { xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', pdf: 'application/pdf' };
@@ -1165,7 +1165,7 @@ function Factory() {
               </svg>
             </div>
             <h2 style={{ color: SK.textPrimary, fontSize: '22px', fontWeight: 700, marginBottom: '8px' }}>
-              {t('appTypeScraping')} — {generatedApp.name}
+              {t('appTypeScraping')}: {generatedApp.name}
             </h2>
             <p style={{ color: SK.textSecondary, fontSize: '14px', marginBottom: '24px' }}>
               Python scraper generated. Download the ZIP to run locally.
@@ -1282,7 +1282,7 @@ function Factory() {
 
   // ============ DATA SOURCE INDICATOR ============
   const dataSourceLabel = excelData
-    ? `${excelData.fileName} — ${excelData.totalRows} ${t('rows')}`
+    ? `${excelData.fileName}, ${excelData.totalRows} ${t('rows')}`
     : dbData
     ? `${dbData.totalTables} ${t('tables')} (${dbData.tableNames.slice(0, 3).join(', ')}${dbData.tableNames.length > 3 ? '...' : ''})`
     : null;
@@ -1302,8 +1302,8 @@ function Factory() {
       {/* ---- SIDEBAR ---- */}
       <aside style={{ ...styles.sidebar, transform: sidebarOpen ? 'translateX(0)' : 'translateX(-100%)' }}>
         <div style={{ ...styles.logoRow, cursor: 'pointer' }} onClick={() => { setAppView('landing'); setSidebarOpen(false); }}>
-          <img src={logoSK} alt="SK Logo" style={{ width: 28, height: 28, borderRadius: 4, objectFit: 'contain' }} />
-          <span style={styles.logoText}>Factory</span>
+          <img src={logoSK} alt="Simon-Kucher Paris" style={{ width: 28, height: 28, borderRadius: 4, objectFit: 'contain' }} />
+          <span style={styles.logoText}>Edouard AI</span>
           <span style={styles.versionBadge}>beta</span>
         </div>
 
@@ -1396,7 +1396,7 @@ function Factory() {
             style={styles.landingContainer}
           >
             <div style={styles.heroSection}>
-              <img src={logoSK} alt="SK Logo" style={{ width: 56, height: 56, borderRadius: 8, objectFit: 'contain', marginBottom: 12 }} />
+              <img src={logoSK} alt="Simon-Kucher Paris" style={{ width: 56, height: 56, borderRadius: 8, objectFit: 'contain', marginBottom: 12 }} />
               <h1 style={styles.title}>{t('landingTitle')}</h1>
               <div style={{ width: '52px', height: '3px', background: SK.ruby, margin: '12px auto 0' }} />
               <p style={{ ...styles.subtitle, marginTop: '16px' }}>{t('landingSubtitle')}</p>

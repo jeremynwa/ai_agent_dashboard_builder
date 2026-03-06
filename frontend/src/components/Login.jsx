@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useAuth } from './AuthProvider';
 import { completeNewPassword } from '../services/auth';
 import { SK } from '../services/sk-theme';
-import logoSK from '../assets/logo_SK.png';
+import logoSK from '../assets/SK_Paris_logo.png';
 
 export default function Login() {
   const { login, error, clearError } = useAuth();
@@ -55,8 +55,8 @@ export default function Login() {
     <div style={styles.container}>
       <div style={styles.card}>
         <div style={{ ...styles.logoRow, display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <img src={logoSK} alt="SK Logo" style={{ height: 32, objectFit: 'contain' }} />
-          <span style={styles.logo}>FACTORY</span>
+          <img src={logoSK} alt="Simon-Kucher Paris" style={{ height: 32, objectFit: 'contain' }} />
+          <span style={styles.logo}>EDOUARD AI</span>
         </div>
         <div style={{ width: '52px', height: '2px', background: SK.ruby, borderRadius: '1px', marginBottom: '24px' }} />
 
@@ -66,7 +66,7 @@ export default function Login() {
         <p style={styles.subtitle}>
           {newPasswordMode
             ? 'Choisissez un nouveau mot de passe pour activer votre compte.'
-            : 'Connectez-vous pour accéder à la Factory.'}
+            : 'Connectez-vous pour accéder à Edouard AI.'}
         </p>
 
         {error && (
@@ -132,7 +132,7 @@ export default function Login() {
       </div>
 
       <div style={styles.footer}>
-        SK Consulting — App Factory
+        Simon-Kucher Paris
       </div>
     </div>
   );

@@ -62,7 +62,7 @@ function AppCard({ app }) {
 
       {app.vmSpec && (
         <div style={styles.vmSpec}>
-          VM: {app.vmSpec.vmSize} — {app.vmSpec.estimatedMonthlyCost || ''}
+          VM: {app.vmSpec.vmSize}, {app.vmSpec.estimatedMonthlyCost || ''}
         </div>
       )}
     </motion.div>
@@ -88,7 +88,7 @@ export default function MyApps({ onBack }) {
       animate={{ opacity: 1 }}
     >
       <div style={styles.header}>
-        <button style={styles.backBtn} onClick={onBack}>Factory</button>
+        <button style={styles.backBtn} onClick={onBack}>Edouard AI</button>
         <h2 style={styles.title}>My Apps</h2>
         <span style={styles.appCount}>{apps.length} app{apps.length !== 1 ? 's' : ''}</span>
       </div>
@@ -119,8 +119,8 @@ export default function MyApps({ onBack }) {
             </svg>
           </div>
           <div style={styles.emptyTitle}>No apps yet</div>
-          <div style={styles.emptyHint}>Deploy your first app from the factory to see it here.</div>
-          <button style={styles.backToFactoryBtn} onClick={onBack}>Go to Factory</button>
+          <div style={styles.emptyHint}>Deploy your first app to see it here.</div>
+          <button style={styles.backToFactoryBtn} onClick={onBack}>Go to Edouard AI</button>
         </div>
       )}
 
