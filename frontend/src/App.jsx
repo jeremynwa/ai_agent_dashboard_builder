@@ -121,11 +121,11 @@ const translations = {
     exportPptx: 'Export PPTX',
     exportPdf: 'Export PDF',
     exporting: 'Exporting...',
-    landingTitle: 'Welcome to Edouard AI',
+    landingTitle: 'Have you started building an App?',
     landingSubtitle: 'What would you like to do?',
-    landingBuild: 'I have an IDEA',
-    landingBuildDesc: 'Describe your project. AI builds it in seconds.',
-    landingSubmit: 'I have an APP',
+    landingBuild: 'No, I don\'t have an APP',
+    landingBuildDesc: 'Describe your idea. AI builds it for you.',
+    landingSubmit: 'YES, I have an APP',
     landingSubmitDesc: 'Upload your app for AI review and deployment.',
     // Upload & Review page
     uploadReview: 'Upload & Review',
@@ -346,11 +346,11 @@ const translations = {
     exportPptx: 'Export PPTX',
     exportPdf: 'Export PDF',
     exporting: 'Export en cours...',
-    landingTitle: 'Bienvenue sur Edouard AI',
+    landingTitle: 'Avez-vous commencé à développer une App ?',
     landingSubtitle: 'Que souhaitez-vous faire ?',
-    landingBuild: "J'ai une IDÉE",
-    landingBuildDesc: "Décrivez votre projet. L'IA le construit en quelques secondes.",
-    landingSubmit: "J'ai une APP",
+    landingBuild: "Non, je n'ai pas d'APP",
+    landingBuildDesc: "Décrivez votre idée. L'IA la construit pour vous.",
+    landingSubmit: "OUI, j'ai une APP",
     landingSubmitDesc: "Uploadez votre app pour une review et un déploiement.",
     // Upload & Review page
     uploadReview: 'Uploader & Réviser',
@@ -1667,10 +1667,8 @@ function Factory() {
         {appView === 'app-hub' && (
           <div style={styles.landingContainer}>
             <div style={styles.heroSection}>
-              <img src={logoSK} alt="Simon-Kucher Paris" style={{ width: 56, height: 56, borderRadius: 8, objectFit: 'contain', marginBottom: 12 }} />
               <h1 style={styles.title}>{t('landingTitle')}</h1>
               <div style={{ width: '52px', height: '3px', background: SK.ruby, margin: '12px auto 0' }} />
-              <p style={{ ...styles.subtitle, marginTop: '16px' }}>{t('landingSubtitle')}</p>
             </div>
 
             <div style={{ ...styles.landingCards, flexWrap: 'wrap', justifyContent: 'center' }}>
