@@ -700,7 +700,7 @@ const staggerItem = {
 // ============ MAIN FACTORY ============
 function Factory() {
   const { user, logout } = useAuth();
-  const { t } = useLang();
+  const { lang, t } = useLang();
 
   const [files, setFiles] = useState({});
   const [previewUrl, setPreviewUrl] = useState(null);
