@@ -539,6 +539,56 @@ Resources:
         Banner:
           - js=import { createRequire } from 'module'; const require = createRequire(import.meta.url);
 
+  # ============ AUTOMATION (templates + generation) ============
+  AutomationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: app-factory-automation
+      Handler: index.handler
+      CodeUri: automation/
+      Timeout: 120
+      MemorySize: 512
+      Environment:
+        Variables:
+          ANTHROPIC_API_KEY: !Ref AnthropicApiKey
+          AUTOMATION_MODEL: "claude-sonnet-4-20250514"
+      Events:
+        GetTemplates:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref AppFactoryApi
+            Path: /automation/templates
+            Method: GET
+        PostGenerate:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref AppFactoryApi
+            Path: /automation/generate
+            Method: POST
+        PostTemplates:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref AppFactoryApi
+            Path: /automation/templates
+            Method: POST
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref PublishBucket
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: false
+        Target: es2022
+        Format: esm
+        OutExtension:
+          - .js=.mjs
+        EntryPoints:
+          - index.mjs
+        External:
+          - '@aws-sdk/*'
+        Banner:
+          - js=import { createRequire } from 'module'; const require = createRequire(import.meta.url);
+
   # ============ REVIEW RESEARCH (Google Maps review analysis) ============
   ReviewResearchFunction:
     Type: AWS::Serverless::Function
@@ -605,6 +655,9 @@ Outputs:
   ReviewResearchUrl:
     Description: Review Research Function URL
     Value: !GetAtt ReviewResearchFunctionUrl.FunctionUrl
+  AutomationUrl:
+    Description: Automation API base URL
+    Value: !Sub 'https://${AppFactoryApi}.execute-api.${AWS::Region}.amazonaws.com/prod/automation'
   CognitoUserPoolId:
     Description: Cognito User Pool ID (for frontend .env)
     Value: !Ref CognitoUserPool

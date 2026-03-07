@@ -688,6 +688,7 @@ function Factory() {
   const [actualCost, setActualCost] = useState(null); // { total, breakdown, currency, totals } after generation
   const [clarifyState, setClarifyState] = useState(null); // null | 'loading' | { questions: [...] }
   const [appType, setAppType] = useState(null); // null | 'dashboard' | 'scraping' | 'newsletter' | 'other'
+  const [uploadAppType, setUploadAppType] = useState(null); // app type selected in upload & review flow
   const webcontainerRef = useRef(null);
   const bootedRef = useRef(false);
   const iframeRef = useRef(null);
@@ -1470,7 +1471,7 @@ function Factory() {
 
         <button
           style={{ ...styles.newAppButton, background: 'rgba(109, 177, 199, 0.1)', border: `1px solid rgba(109, 177, 199, 0.25)`, color: SK.aqua, marginTop: '6px' }}
-          onClick={() => { setAppView('upload-review'); setUploadedCode(null); setReviewResult(null); setShowDeployForm(false); setSidebarOpen(false); }}
+          onClick={() => { setAppView('upload-review'); setUploadedCode(null); setReviewResult(null); setShowDeployForm(false); setUploadAppType(null); setSidebarOpen(false); }}
         >
           <span style={{ marginRight: '6px', fontSize: '14px' }}>{t('uploadReview')}</span>
         </button>
@@ -1588,7 +1589,7 @@ function Factory() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4, delay: 0.25 }}
-                onClick={() => { setAppView('upload-review'); setUploadedCode(null); setReviewResult(null); setShowDeployForm(false); }}
+                onClick={() => { setAppView('upload-review'); setUploadedCode(null); setReviewResult(null); setShowDeployForm(false); setUploadAppType(null); }}
               >
                 <div style={{ ...styles.landingCardIcon, background: 'rgba(109, 177, 199, 0.1)' }}>
                   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={SK.aqua} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -1628,36 +1629,113 @@ function Factory() {
                   <h2 style={{ color: SK.textPrimary, fontSize: '20px', fontWeight: 700, margin: '0 0 6px' }}>{t('uploadReviewTitle')}</h2>
                   <p style={{ color: SK.textSecondary, fontSize: '13px', margin: 0 }}>{t('uploadReviewDesc')}</p>
                 </motion.div>
-                <UploadCode t={t} onCodeLoaded={async (codeData) => {
-                  setUploadedCode(codeData);
-                  setReviewLoading(true);
-                  setReviewError('');
-                  try {
-                    const result = await reviewCode(codeData.files, codeData.appName, codeData.stack);
-                    setReviewResult(result);
-                  } catch (err) {
-                    setReviewError(err.message);
-                  }
-                  setReviewLoading(false);
-                }} />
-                {reviewLoading && (
-                  <motion.div
-                    style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '16px', color: SK.textSecondary, fontSize: '14px' }}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                  >
-                    <motion.div
-                      style={{ width: '20px', height: '20px', border: `2px solid rgba(200,0,65,0.2)`, borderTop: `2px solid ${SK.ruby}`, borderRadius: '50%' }}
-                      animate={{ rotate: 360 }}
-                      transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}
-                    />
-                    {t('reviewingCode')}
+
+                {/* Step 1: pick app type */}
+                {!uploadAppType && (
+                  <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+                    <p style={{ color: SK.textMuted, fontSize: '13px', marginBottom: '16px' }}>
+                      {lang === 'fr' ? "Quel type d'app uploadez-vous ?" : "What type of app are you uploading?"}
+                    </p>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
+                      {[
+                        { key: 'dashboard', icon: (sz) => (
+                          <svg width={sz} height={sz} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                            <rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18" /><path d="M9 21V9" />
+                          </svg>
+                        )},
+                        { key: 'scraping', icon: (sz) => (
+                          <svg width={sz} height={sz} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="3" /><path d="M12 2v4" /><path d="M12 18v4" /><path d="M4.93 4.93l2.83 2.83" /><path d="M16.24 16.24l2.83 2.83" /><path d="M2 12h4" /><path d="M18 12h4" /><path d="M4.93 19.07l2.83-2.83" /><path d="M16.24 7.76l2.83-2.83" />
+                          </svg>
+                        )},
+                        { key: 'newsletter', icon: (sz) => (
+                          <svg width={sz} height={sz} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
+                          </svg>
+                        )},
+                        { key: 'reviewResearch', icon: (sz) => (
+                          <svg width={sz} height={sz} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /><line x1="11" y1="8" x2="11" y2="14" /><line x1="8" y1="11" x2="14" y2="11" />
+                          </svg>
+                        )},
+                        { key: 'other', icon: (sz) => (
+                          <svg width={sz} height={sz} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" />
+                          </svg>
+                        )},
+                      ].map((item) => (
+                        <motion.button
+                          key={item.key}
+                          onClick={() => setUploadAppType(item.key)}
+                          style={{
+                            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
+                            padding: '20px 28px', minWidth: '130px', borderRadius: '12px',
+                            border: `1px solid ${SK.border}`, background: SK.white,
+                            color: SK.textSecondary, cursor: 'pointer', fontFamily: 'inherit',
+                            transition: 'border 0.2s ease, background 0.2s ease, color 0.2s ease',
+                          }}
+                          whileHover={{ borderColor: SK.aqua, color: SK.aqua, y: -2 }}
+                          whileTap={{ scale: 0.97 }}
+                        >
+                          <span style={{ opacity: 0.7, display: 'flex', alignItems: 'center' }}>{item.icon(22)}</span>
+                          <span style={{ fontSize: '14px', fontWeight: 600 }}>{t(`appType${item.key.charAt(0).toUpperCase() + item.key.slice(1)}`)}</span>
+                          <span style={{ fontSize: '11px', color: SK.textMuted, fontWeight: 400 }}>{t(`appType${item.key.charAt(0).toUpperCase() + item.key.slice(1)}Desc`)}</span>
+                        </motion.button>
+                      ))}
+                    </div>
                   </motion.div>
                 )}
-                {reviewError && (
-                  <div style={{ color: SK.signalRed, fontSize: '13px', marginTop: '12px', background: 'rgba(228,84,68,0.05)', border: `1px solid rgba(228,84,68,0.2)`, borderRadius: '8px', padding: '10px 14px' }}>
-                    {t('reviewFailed')} {reviewError}
-                  </div>
+
+                {/* Step 2: upload + review */}
+                {uploadAppType && (
+                  <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+                      <button
+                        onClick={() => setUploadAppType(null)}
+                        style={{ background: 'none', border: 'none', color: SK.textMuted, cursor: 'pointer', fontSize: '13px', padding: '4px 0', display: 'flex', alignItems: 'center', gap: '4px', fontFamily: 'inherit' }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="15 18 9 12 15 6" />
+                        </svg>
+                        {lang === 'fr' ? 'Changer le type' : 'Change type'}
+                      </button>
+                      <span style={{ color: SK.textMuted, fontSize: '12px' }}>·</span>
+                      <span style={{ color: SK.aqua, fontSize: '13px', fontWeight: 600 }}>
+                        {t(`appType${uploadAppType.charAt(0).toUpperCase() + uploadAppType.slice(1)}`)}
+                      </span>
+                    </div>
+                    <UploadCode t={t} onCodeLoaded={async (codeData) => {
+                      setUploadedCode(codeData);
+                      setReviewLoading(true);
+                      setReviewError('');
+                      try {
+                        const result = await reviewCode(codeData.files, codeData.appName, uploadAppType || codeData.stack);
+                        setReviewResult(result);
+                      } catch (err) {
+                        setReviewError(err.message);
+                      }
+                      setReviewLoading(false);
+                    }} />
+                    {reviewLoading && (
+                      <motion.div
+                        style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '16px', color: SK.textSecondary, fontSize: '14px' }}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                      >
+                        <motion.div
+                          style={{ width: '20px', height: '20px', border: `2px solid rgba(200,0,65,0.2)`, borderTop: `2px solid ${SK.ruby}`, borderRadius: '50%' }}
+                          animate={{ rotate: 360 }}
+                          transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}
+                        />
+                        {t('reviewingCode')}
+                      </motion.div>
+                    )}
+                    {reviewError && (
+                      <div style={{ color: SK.signalRed, fontSize: '13px', marginTop: '12px', background: 'rgba(228,84,68,0.05)', border: `1px solid rgba(228,84,68,0.2)`, borderRadius: '8px', padding: '10px 14px' }}>
+                        {t('reviewFailed')} {reviewError}
+                      </div>
+                    )}
+                  </motion.div>
                 )}
               </>
             ) : (

@@ -7,6 +7,7 @@ export const DB_PROXY_URL = import.meta.env.VITE_DB_PROXY_URL || `${API_BASE}/db
 const EXPORT_URL = import.meta.env.VITE_EXPORT_URL || `${API_BASE}/export`;
 const REVIEW_CODE_URL = import.meta.env.VITE_REVIEW_CODE_URL || `${API_BASE}/review-code`;
 const GIT_PUSH_URL = import.meta.env.VITE_GIT_PUSH_URL || `${API_BASE}/git-push`;
+const AUTOMATION_URL = import.meta.env.VITE_AUTOMATION_URL || `${API_BASE}/automation`;
 
 // ============ AUTH HEADERS ============
 async function authHeaders() {
@@ -344,6 +345,43 @@ export async function saveApp(payload) {
   if (!res.ok) {
     const errBody = await res.json().catch(() => ({}));
     throw new Error(errBody.error || 'Failed to save app');
+  }
+  return res.json();
+}
+
+// ============ AUTOMATION (templates + generation) ============
+export async function listAutomationTemplates() {
+  const headers = await authHeaders();
+  const res = await fetch(`${AUTOMATION_URL}/templates`, { headers });
+  if (!res.ok) throw new Error('Failed to load templates');
+  return res.json();
+}
+
+export async function generateAutomation(prompt) {
+  const headers = await authHeaders();
+  const res = await fetch(`${AUTOMATION_URL}/generate`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ prompt }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    if (res.status === 401) throw new Error('Session expirée. Reconnectez-vous.');
+    throw new Error(err.error || 'Automation generation failed');
+  }
+  return res.json();
+}
+
+export async function saveAutomationTemplate(template) {
+  const headers = await authHeaders();
+  const res = await fetch(`${AUTOMATION_URL}/templates`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(template),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Save template failed');
   }
   return res.json();
 }
