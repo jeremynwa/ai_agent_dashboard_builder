@@ -2,22 +2,26 @@
 
 ## 1. Overview
 
-App Factory is an AI-powered dashboard generator. Users provide data (CSV/Excel or database connection) and a prompt describing the dashboard they want. An AI agent generates, compiles, reviews, and visually analyzes a complete React dashboard in real-time using WebContainers.
+App Factory is an AI-powered platform for SK consultants. It covers four main scenarios:
+1. **Dashboard generation** — Upload data (CSV/Excel or DB) + write a prompt → AI generates a full React dashboard with live preview
+2. **App review & deploy** — Drop a ZIP of any web app → AI reviews security/quality → push to GitLab + request Azure VM
+3. **Review Research** — Analyze Google Maps reviews for brands/competitors using Claude + Outscraper API
+4. **Automation Builder** — Describe a process → Claude generates a step-by-step automation workflow
 
 ## 2. System Architecture
 
 ### 2.1 Frontend (React + Vite)
 
-The frontend runs on `localhost:5173` during development. It consists of:
+The frontend runs on Azure Static Web Apps in production. It consists of:
 
-- **Factory UI** — The main interface where users input prompts, upload data, and view generated dashboards. Includes i18n (FR/EN), Motion.dev animations, suggestion chips, collapsible data source panel.
+- **Factory UI** — Two-level navigation: Landing (APP vs AUTOMATION) → App Hub (Build Idea / Upload App / Review Research). Includes i18n (FR/EN), Motion.dev animations, suggestion chips.
 - **WebContainer** — A browser-based Node.js environment (StackBlitz) that compiles and previews generated React code in real-time
 - **Auth Layer** — Cognito-based authentication with JWT tokens
 
 Key files:
 
-- `App.jsx` — Main application component with auth wrapper, generation logic, and UI
-- `services/api.js` — API client with JWT injection on all requests
+- `App.jsx` — 2956-line main component: all navigation, generation logic, flows, and UI orchestration
+- `services/api.js` — API client with JWT injection on all requests (20+ functions)
 - `services/auth.js` — Cognito authentication service
 - `services/files-template.js` — Base file structure for WebContainer projects (includes ds.css design system)
 - `services/export.js` — Export source files as zip
@@ -25,32 +29,44 @@ Key files:
 - `components/Login.jsx` — Login page with password change flow
 - `components/MatrixRain.jsx` — Generation screen animation
 
+**Navigation states (`appView`):**
+
+| State | Description |
+|-------|-------------|
+| `landing` | Top-level: APP vs AUTOMATION |
+| `app-hub` | Secondary: Build Idea / Upload App / Review Research |
+| `factory` | Dashboard/scraping/newsletter generation |
+| `upload-review` | ZIP upload + AI review |
+| `review-research` | Google Maps review analysis |
+| `my-apps` | DynamoDB app history |
+| `automation` | Automation workflow builder |
+
+**App types (in factory):** `dashboard` | `scraping` | `newsletter` | `reviewResearch` | `other`
+
 ### 2.2 Backend (AWS Lambda + SAM)
 
-Ten Lambda functions deployed via SAM (Serverless Application Model):
+Twelve Lambda functions deployed via SAM (Serverless Application Model):
 
-| Function         | Trigger                          | Timeout | Purpose                              |
-| ---------------- | -------------------------------- | ------- | ------------------------------------ |
-| GenerateFunction | Function URL (no API GW timeout) | 600s    | AI code generation + vision analysis (supports Agent Skills beta) |
-| PublishFunction  | API Gateway                      | 30s     | Publish built apps to S3             |
-| RulesFunction    | API Gateway                      | 30s     | Load business rules from S3          |
-| DbFunction       | Function URL                     | 60s     | Database proxy (PostgreSQL/MySQL)    |
-| ExportFunction   | API Gateway                      | 120s    | Export dashboard data as XLSX/PPTX/PDF |
-| IntakeFunction   | API Gateway POST /intake         | 15s     | AI routing chat (upload vs generate) |
-| ReviewCodeFunction | Function URL                   | 120s    | Web app quality review (web-app-reviewer skill) |
-| GitPushFunction  | Function URL                     | 30s     | Create GitLab repo + push files + add members |
-| VmRequestFunction | API Gateway POST /vm-request    | 60s     | Generate VM spec + Teams notification |
-| AppsFunction     | API Gateway GET+POST /apps       | 15s     | DynamoDB app registry per user        |
+| Function | Trigger | Timeout | Purpose |
+|----------|---------|---------|---------|
+| GenerateFunction | Function URL (no API GW timeout) | 600s | AI code generation + vision analysis (Agent Skills beta) |
+| PublishFunction | API Gateway | 30s | Publish built apps to S3 |
+| RulesFunction | API Gateway | 30s | Load business rules from S3 |
+| DbFunction | Function URL | 60s | Database proxy (PostgreSQL/MySQL) |
+| ExportFunction | Function URL | 120s | Export dashboard data as XLSX/PPTX/PDF |
+| IntakeFunction | API Gateway POST /intake | 15s | AI routing chat + clarification mode |
+| ReviewCodeFunction | Function URL | 120s | Web app quality review (web-app-reviewer skill) |
+| GitPushFunction | Function URL | 30s | Create GitLab repo + push files + add members |
+| VmRequestFunction | API Gateway POST /vm-request | 60s | Generate VM spec + Teams notification |
+| AppsFunction | API Gateway GET+POST /apps | 15s | DynamoDB app registry per user |
+| EstimateCostFunction | API Gateway POST /estimate-cost | 5s | Token/cost estimation (no Claude call) |
+| ReviewResearchFunction | Function URL | 300s | Google Maps review analysis via Outscraper + Claude |
 
 ### 2.3 Authentication (AWS Cognito)
 
-- **User Pool** : `eu-north-1_ydkpTfIdO`
-- **App Client** : `76kjpidgqhtba39kjdj9epftj0` (no client secret)
-- **Auth flows** : USER_PASSWORD_AUTH, ALLOW_REFRESH_TOKEN_AUTH
-- **Token expiration** : 60min access, 30 day refresh
-- **Password policy** : min 8 chars, uppercase required, number required
-
-JWT verification in Lambda uses Web Crypto API against Cognito JWKS endpoint. JWKS is cached for 1 hour.
+- **Auth flows**: USER_PASSWORD_AUTH, ALLOW_REFRESH_TOKEN_AUTH
+- **Token expiration**: 60min access, 30 day refresh
+- JWT verification in Lambda uses Web Crypto API against Cognito JWKS endpoint. JWKS is cached for 1 hour.
 
 ## 3. AI Agent Pipeline
 
@@ -112,29 +128,21 @@ User Prompt + Data + Industry (optional)
      (full-screen preview)
 ```
 
+**Special cases:**
+- `appType === 'scraping' | 'newsletter'` → code-only, no WebContainer preview, phases 2-4 skipped
+- `appType === 'reviewResearch'` → routes to ReviewResearch component directly
+
 ### 3.2 System Prompt — Two Modes
 
-The generate Lambda (`generate/index.mjs`) supports two modes for delivering the system prompt, controlled by `USE_BETA_API` and `DASHBOARD_SKILL_ID` environment variables.
+The generate Lambda (`generate/index.mjs`) supports two modes controlled by `USE_BETA_API` and `DASHBOARD_SKILL_ID`.
 
 #### Standard Mode (fallback, `USE_BETA_API=false`)
 
-A monolithic ~2700 token `SYSTEM_PROMPT` string embedded in `index.mjs` defines all rules inline. This is the original approach and remains as a safe fallback.
+A monolithic ~2700 token `SYSTEM_PROMPT` string embedded in `index.mjs`. Safe fallback.
 
 #### Skill Mode (`USE_BETA_API=true` + `DASHBOARD_SKILL_ID` set)
 
-Uses the Anthropic Agent Skills beta API. The system prompt is replaced by a modular **dashboard-generator** skill uploaded to Anthropic's platform. Claude reads skill files on-demand from a code execution container.
-
-**How it works:**
-
-1. A minimal system prompt (`"Use the dashboard-generator skill. MODE: Excel/Database."`) is sent instead of the full prompt
-2. The skill ID is passed via `container.skills` in the beta API call
-3. Claude reads the skill's `SKILL.md` (core rules) + reference files as needed
-4. Claude returns JSON in its text response (explicitly instructed, not via container files)
-
-**Benefits:**
-- Edit prompt rules without Lambda redeployment (update skill files, re-upload)
-- Modular: each concern (KPIs, charts, filters, etc.) in its own file
-- Progressive loading: Claude only reads references it needs
+Uses the Anthropic Agent Skills beta API. The system prompt is replaced by a modular **dashboard-generator** skill.
 
 **API call (skill mode):**
 ```javascript
@@ -153,43 +161,39 @@ const response = await anthropic.beta.messages.create({
 
 #### Prompt Rules (both modes)
 
-1. **Rules** — JSON output format, no emojis, compile-safe code
-2. **Styling** — Design system CSS classes (`className=""`) + inline styles for dynamic values. No Tailwind, no cn(), no clsx
-3. **Structure** — Drawer navigation (hamburger menu), header with tabs, full-width content
-4. **KPIs** — Rich cards with sparklines, unique colors per KPI, no invented data
-5. **Zero fabricated data** — All values must be computed from real data. No fake "Previous", "Objective", or variation percentages if no comparable data exists in the dataset
-6. **Page rules** :
-   - **Vue d'ensemble** : KPIs + charts + key takeaways
-   - **Analyses / Rapports** : Minimum 2 Recharts + 1 table + mandatory filter bar (dynamic selects from data columns, useState + useMemo for filtering)
-   - **Parametres** : Enforced JSX template (label + description left with gap-1, toggle/value right, data info grid 2 cols)
-7. **Charts** — Min 3 types, CartesianGrid, labeled axes, tooltips, Cell colors for PieChart
-8. **Key Takeaways** — 3-5 auto-calculated observations, computed from real data, never invented
-9. **Data Formatting** — `fmt()`, `fmtCur()`, `fmtPct()` utility functions mandatory
+1. JSON output format, no emojis, compile-safe code
+2. Design system CSS classes (`className=""`) + inline styles for dynamic values. No Tailwind, no cn(), no clsx
+3. Drawer navigation (hamburger menu), header with tabs, full-width content
+4. Rich KPI cards with sparklines, unique colors per KPI, no invented data
+5. **Zero fabricated data** — All values must be computed from real data
+6. Page rules:
+   - **Vue d'ensemble**: KPIs + charts + key takeaways
+   - **Analyses / Rapports**: Min 2 Recharts + 1 table + mandatory filter bar (dynamic selects, useState + useMemo)
+   - **Paramètres**: Enforced JSX template
+7. Charts: Min 3 types, CartesianGrid, labeled axes, tooltips, Cell colors for PieChart
+8. Key Takeaways: 3-5 auto-calculated observations from real data
+9. Data Formatting: `fmt()`, `fmtCur()`, `fmtPct()` mandatory
 
 ### 3.3 Design System (ds.css)
 
-Tailwind CSS doesn't work in WebContainer (PostCSS build fails, CDN blocked by COEP/COOP headers). Solution: a self-contained `ds.css` file embedded in `files-template.js`.
+Tailwind CSS doesn't work in WebContainer (PostCSS build fails, CDN blocked by COEP/COOP headers). Solution: a self-contained `ds.css` embedded in `files-template.js`.
 
 **Contents:**
-
 - CSS reset + base styles (Inter font, antialiased)
 - CSS variables for all design tokens (--base, --card, --accent, etc.)
-- ~120 utility classes (flex, grid, gap, padding, margin, colors, typography, etc.)
-- ~15 component classes (card, kpi-card, app-header, drawer, tab-btn, insight-item, table-\*, etc.)
-- Responsive grid helpers (grid-kpis with auto-fit, grid-charts-2, grid-charts-3 with media queries)
-- Hover helpers, skeleton loading, pulse animations
+- ~120 utility classes (flex, grid, gap, padding, margin, colors, typography)
+- ~15 component classes (card, kpi-card, app-header, drawer, tab-btn, insight-item, table-*, etc.)
+- Responsive grid helpers + hover helpers + skeleton loading
 
-**Imported in** `main.jsx` (not in App.jsx — Claude is instructed not to import it).
+### 3.4 Agent Skills (10 total)
 
-### 3.4 Agent Skills (Beta)
+All skills are uploaded to Anthropic's platform via the Skills API and managed via `manage-skills.mjs`.
 
-The dashboard-generator skill is an Anthropic Agent Skill that encapsulates all prompt rules in modular files. It lives in `lambda-v2/skills/dashboard-generator/` and is uploaded to Anthropic's platform via the Skills API.
-
-#### Skill Structure
+#### dashboard-generator (`skill_01RPpTMLicWFr96R3kLV3YDW`)
 
 ```
 skills/dashboard-generator/
-├── SKILL.md                     ← Entry point (frontmatter + core rules)
+├── SKILL.md                     ← Entry point (frontmatter + core rules + 7 critical rules)
 ├── references/
 │   ├── design-system.md         ← CSS classes + component classes
 │   ├── structure.md             ← Drawer, header, content-area JSX templates
@@ -199,231 +203,152 @@ skills/dashboard-generator/
 │   ├── charts.md                ← Recharts config, COLORS, PieChart Cell rule
 │   ├── tables.md                ← Table structure, alternating rows
 │   ├── formatting.md            ← fmt(), fmtCur(), fmtPct() definitions
-│   ├── insights.md              ← Key takeaways (points cles)
+│   ├── insights.md              ← Key takeaways (points clés)
+│   ├── data-intelligence.md     ← BI rules: zero raw IDs, aggregation, Top 10-15 tables
 │   ├── mode-excel.md            ← Excel mode: __INJECT_DATA__ placeholder
 │   └── mode-database.md         ← DB mode: __DB_PROXY_URL__ + __DB_CREDENTIALS__
 └── scripts/
     └── validate_output.py       ← JSON output validation script
 ```
 
-#### Loading Levels
+#### data-analyzer (`skill_01TJ4sKM6v5aWiBfUCpE7aaM`)
 
-- **Level 1 (always)**: SKILL.md frontmatter (`name`, `description`) — ~100 tokens
-- **Level 2 (on trigger)**: SKILL.md body (core rules + pointers to references)
-- **Level 3 (as needed)**: Reference files — Claude reads only what it needs via code execution
-
-#### Management CLI
-
-```bash
-cd lambda-v2
-node manage-skills.mjs list                              # List all skills
-node manage-skills.mjs upload skills/dashboard-generator  # Upload/update skill
-node manage-skills.mjs get skill_01XkRdUeca25kPFLF3DM4b2Y  # Get skill details
-node manage-skills.mjs delete skill_01XkRdUeca25kPFLF3DM4b2Y  # Delete skill
-```
-
-#### Validation Script
-
-```bash
-python skills/dashboard-generator/scripts/validate_output.py output.json
-```
-
-Checks: valid JSON, App.jsx exists, React imports, no emojis, PieChart has Cell, COLORS defined, no ds.css import, unique gradient IDs, correct placeholders.
-
-#### Key Implementation Notes
-
-- **File upload format**: Files must include a top-level directory prefix (e.g., `dashboard-generator/SKILL.md`), matching the Python SDK convention
-- **JSON output**: Claude must be explicitly told to return JSON as text, not write files to the container. The system prompt includes: `"CRITICAL OUTPUT FORMAT: Return your final answer as a JSON object directly in your text response"`
-- **Betas required**: `code-execution-2025-08-25` + `skills-2025-10-02`
-- **SDK version**: `@anthropic-ai/sdk@^0.74.0`
-- **Current skill ID**: `skill_01XkRdUeca25kPFLF3DM4b2Y`
-
-### 3.5 Data Analyzer Skill (Beta)
-
-The data-analyzer skill pre-analyzes uploaded data using Python scripts in the code execution container **before** dashboard generation. This provides Claude with factual statistics and chart recommendations, eliminating data fabrication.
-
-#### Two-Call Strategy
-
-```
-User uploads data
-       │
-       ▼
-┌─── Call 1: DATA ANALYSIS ──────┐
-│ data-analyzer skill             │
-│ Python scripts run in container │
-│ → Column types, periods, stats  │
-│ → Chart recommendations         │
-│ Returns: analysis JSON          │
-└──────────┬──────────────────────┘
-           ▼
-┌─── Call 2: DASHBOARD GENERATION ┐
-│ dashboard-generator skill        │
-│ + analysis context injected      │
-│ → Uses real stats for KPIs       │
-│ → Follows chart recommendations  │
-│ Returns: { files: {...} } JSON   │
-└──────────────────────────────────┘
-```
-
-#### Skill Structure
+Two-call strategy: Call 1 (data-analyzer → analysis JSON) → Call 2 (dashboard-generator + context injected).
 
 ```
 skills/data-analyzer/
-├── SKILL.md                        ← Instructions + output format
+├── SKILL.md
 ├── scripts/
 │   ├── analyze_columns.py          ← Column types (numeric, date, categorical, currency, %)
 │   ├── detect_periods.py           ← Temporal columns, period type, comparability
 │   ├── compute_stats.py            ← Min/max/mean/sum/quartiles + period values + variations
-│   └── suggest_charts.py           ← Chart type recommendations (AreaChart, BarChart, PieChart, etc.)
+│   └── suggest_charts.py           ← Chart type recommendations
 └── references/
-    └── chart-selection-guide.md    ← When to use which chart type
+    └── chart-selection-guide.md
 ```
 
-#### Python Scripts Pipeline
+- **Latency**: +10-15s per generation (analysis call maxTokens 8192)
+- **Graceful degradation**: if `DATA_ANALYZER_SKILL_ID` is empty, `analyzeData()` returns null
 
-Scripts execute sequentially, each writing results to `/tmp/`:
-
-1. **analyze_columns.py** — Detects types per column: `numeric`, `categorical`, `date`, `currency`, `percentage`, `text`. Uses pandas type inference, regex for currency/percentage patterns, month name detection (FR+EN).
-
-2. **detect_periods.py** — Finds temporal columns. Detects: month names (Janvier, January...), quarters (Q1-Q4, T1-T4), datetime parsing. Returns `hasPeriods`, `periodType` (monthly/quarterly/yearly/daily/weekly), `canCompare`.
-
-3. **compute_stats.py** — For numeric columns: min, max, mean, median, sum, stddev, quartiles. If periods exist: per-period values (for sparklines) and variation %. For categorical columns: value counts (for PieChart data).
-
-4. **suggest_charts.py** — Recommends chart types based on data shape:
-   - Numeric + period → AreaChart/LineChart
-   - Categorical + numeric → BarChart
-   - Categorical ≤6 values → PieChart
-   - Period + category + numeric → StackedBarChart
-
-#### Lambda Integration (`analyzeData()`)
-
-```javascript
-async function analyzeData(dataContext) {
-  if (!USE_BETA_API || !DATA_ANALYZER_SKILL_ID) return null;
-  // Calls Claude with data-analyzer skill, maxTokens: 8192
-  // Returns parsed analysis JSON or null on failure (graceful degradation)
-}
-```
-
-The analysis result is injected into the generation user message:
-```
-DATA ANALYSIS (factual — computed by Python scripts, use these values):
-{ "analysis": { "columns": [...], "periods": {...}, "stats": {...}, "chartRecommendations": [...] } }
-IMPORTANT: Use the statistics and chart recommendations above. Do NOT invent values.
-```
-
-#### Key Details
-
-- **Skill ID**: `skill_01DAnrjyQM5eAJYiCvhMK7Du`
-- **Latency**: +10-15s per generation (analysis call uses maxTokens 8192)
-- **Graceful degradation**: If `DATA_ANALYZER_SKILL_ID` is empty, `analyzeData()` returns null — flow continues without pre-analysis
-- **Rollback**: Set `DATA_ANALYZER_SKILL_ID: ""` in template.yaml
-
-### 3.6 Industry Skills (x4)
-
-Four industry-specific skills inject sector KPIs, vocabulary (French), and chart recommendations into dashboard generation. The user selects an industry via chips in the frontend; the corresponding skill is added dynamically to the `skills[]` array alongside `dashboard-generator`.
-
-#### Skill IDs
-
-| Industry | Skill ID | Key KPIs |
-|----------|----------|----------|
-| Finance/Comptabilité | `skill_013h9deHQb7CaA47xd59Uytd` | EBITDA, Marge brute/nette, BFR, ROE, ROA, DSO, DPO |
-| E-commerce/Retail | `skill_014PUPgrYoGE8BRDwiDhZDMP` | Panier moyen, Taux de conversion, Abandon panier, CAC, Repeat purchase |
-| SaaS/Tech | `skill_01Ekuh6H7ZKBkA2qzdXYzr1y` | MRR, ARR, Churn rate, LTV/CAC, NPS, ARPU, Trial conversion |
-| Logistique/Supply Chain | `skill_011zy4TbPD7jcWEfiMKfi4jN` | OTIF, Lead time, Taux de rupture, Couverture stock, Taux de remplissage |
-
-#### Skill Structure (same for all 4)
-
-```
-skills/industry-<name>/
-├── SKILL.md              ← Frontmatter + sector context instructions
-└── references/
-    ├── kpis.md           ← KPI definitions, formulas, format, badge direction
-    ├── charts.md         ← Recommended chart types for this sector
-    └── vocabulary.md     ← Industry terminology (French labels)
-```
-
-#### Lambda Integration
-
-In `generate/index.mjs`:
-
-```javascript
-const INDUSTRY_SKILL_IDS = {
-  finance: process.env.INDUSTRY_FINANCE_SKILL_ID || null,
-  ecommerce: process.env.INDUSTRY_ECOMMERCE_SKILL_ID || null,
-  saas: process.env.INDUSTRY_SAAS_SKILL_ID || null,
-  logistics: process.env.INDUSTRY_LOGISTICS_SKILL_ID || null,
-};
-
-// In skill mode, after pushing dashboard-generator:
-if (industry && INDUSTRY_SKILL_IDS[industry]) {
-  skills.push(INDUSTRY_SKILL_IDS[industry]);
-  systemPrompt += ` INDUSTRY: ${industry} — see the industry skill references...`;
-}
-```
-
-#### Frontend
-
-Industry selector chips displayed between the prompt textarea and the data source row. 5 options: Généraliste (default, sends no industry), Finance, E-commerce, SaaS, Logistique. Selected chip highlighted in accent color (#06B6D4).
-
-- **Rollback**: Set `INDUSTRY_*_SKILL_ID: ""` in template.yaml → no industry skill injected
-- **Cost**: +$0.03-0.05 per generation (~2K extra context tokens)
-
-### 3.7 Review & Vision Skills
-
-Two skills replace the hardcoded review/vision prompts with modular, testable components.
-
-#### Dashboard Reviewer (`skill_01G3LJaHUFQn9WTbcrmTFCrB`)
+#### dashboard-reviewer (`skill_01ABSnPFjpR2wUZuoKobc5vs`)
 
 ```
 skills/dashboard-reviewer/
-├── SKILL.md                    ← Instructions: run check_code.py, review, fix, return JSON
+├── SKILL.md
 ├── scripts/
 │   └── check_code.py           ← 15 static checks on App.jsx
 └── references/
-    └── checklist.md            ← Visual quality checklist (manual review)
+    └── checklist.md
 ```
 
-**check_code.py** runs these static checks:
-1. React import present
-2. Recharts import (if charts used)
-3. ResponsiveContainer import (if charts used)
-4. COLORS array defined (if charts used)
-5. PieChart has `<Cell>` elements
-6. Formatting functions (fmt/fmtCur/fmtPct) defined
-7. No emojis in code
-8. No ds.css import (already in main.jsx)
-9. SVG gradient IDs unique
-10. Insight/key takeaways section present
-11. Filter `<select>` has dark background styling
-12. No raw ID columns as chart dataKey
-13. `content-area` wrapper class present
-14. Drawer/hamburger pattern present
-15. Fabrication keyword detection (warning)
+**check_code.py** checks: React import, Recharts import, COLORS array, PieChart Cell, fmt functions, no emojis, no ds.css import, unique SVG gradient IDs, insights section, filter styling, no raw ID dataKeys, content-area class, drawer pattern, fabrication keywords.
 
-Returns JSON: `{ "errors": [...], "warnings": [...], "passed": N, "failed": N }`
-
-**Lambda integration**: When `modelHint === 'review'` AND `REVIEWER_SKILL_ID` is set, the Lambda routes to a dedicated review block that calls `callClaude()` with the reviewer skill. If the skill is not configured, the request falls through to the standard generate path (backward compatible).
-
-#### Vision Analyzer (`skill_016hJRgXdpBiDrcbknvQYQLW`)
+#### vision-analyzer (`skill_0167k41XCVLbcSksQvPsqTfi`)
 
 ```
 skills/vision-analyzer/
-├── SKILL.md                     ← Instructions: analyze screenshot, fix code, return JSON
+├── SKILL.md
 └── references/
     └── common-issues.md         ← 12 common visual bug patterns + fixes
 ```
 
 **common-issues.md** covers: overlapping elements, empty space, unreadable text, charts cut off, grey PieChart, misaligned KPIs, broken filter selects, invisible table headers, sparklines too large, content behind header, drawer issues, invisible tooltips.
 
-**Lambda integration**: The vision block in `generate/index.mjs` checks `VISION_SKILL_ID`. If set, uses `callClaude()` with the skill (Claude gets common-issues.md as reference). If not set, falls back to the existing direct `anthropic.messages.create()` call with hardcoded prompts.
+#### web-app-reviewer (`skill_01NGUU66Q3PCWWX5RgAbD7bz`)
 
-#### Key Details
+General-purpose code reviewer for any uploaded web app (not dashboard-specific):
 
-- **Env vars**: `REVIEWER_SKILL_ID`, `VISION_SKILL_ID` in template.yaml
-- **Models**: Both use `REVIEW_MODEL` / `VISION_MODEL` (default Haiku for cost, Sonnet for quality)
-- **Fallback**: Empty skill ID → graceful degradation to previous behavior
-- **Test**: `REVIEWER_SKILL_ID=... VISION_SKILL_ID=... node test-review-vision.mjs`
+```
+skills/web-app-reviewer/
+├── SKILL.md
+├── scripts/
+│   └── check_web_app.py             ← 15 static checks
+└── references/
+    └── web-quality-checklist.md
+```
+
+**check_web_app.py** checks: hardcoded secrets, eval(), innerHTML, dangerouslySetInnerHTML, document.write, console.log, debugger, alert, TODO comments, large files, missing React key props, XSS vectors.
+
+**Output**: `{ score: 0-100, issues: [{severity, rule, file, line, message}], fixedFiles: {}, summary }`. Score ≥ 70 = approved for deployment.
+
+#### scraper-generator (`skill_015tnYwBrkp8e4sYevkvqsWX`)
+
+Generates Python web scraper code. Used when `appType === 'scraping'`.
+
+#### Industry Skills (x4)
+
+Four skills inject sector KPIs, vocabulary (French), and chart recommendations. Added dynamically to `skills[]` when user selects a sector.
+
+| Industry | Skill ID | Key KPIs |
+|----------|----------|----------|
+| Finance | `skill_01XhrMpqBzw5CoeqGp9dLYTy` | EBITDA, Marge brute/nette, BFR, ROE, DSO |
+| E-commerce | `skill_01BdUH8nfrq5o3PhtL4jmrXv` | Panier moyen, Taux de conversion, Abandon panier, CAC |
+| SaaS | `skill_01KSiWWfDMqT619dvHe9bwLR` | MRR, ARR, Churn rate, LTV/CAC, NPS |
+| Logistique | `skill_01J4e3c46T3wrdtuRBRcRyGU` | OTIF, Lead time, Taux de rupture, Couverture stock |
+
+**Structure** (same for all 4): `SKILL.md` + `references/kpis.md` + `references/charts.md` + `references/vocabulary.md`
+
+### 3.5 Skill Upload & Management
+
+```bash
+# CLI
+node manage-skills.mjs list
+node manage-skills.mjs upload skills/<name>    # auto-replaces if display_title already exists
+node manage-skills.mjs get <skill-id>
+node manage-skills.mjs delete <skill-id>
+```
+
+**Key constraints:**
+- Filenames must include top-level dir prefix (e.g. `dashboard-generator/SKILL.md`)
+- `display_title` must be unique — CLI auto-deletes old version before upload
+- SDK version: `@anthropic-ai/sdk@^0.78.0`
+- Betas required: `code-execution-2025-08-25` + `skills-2025-10-02`
+
+### 3.6 Intake Routing + Clarification
+
+**IntakeFunction** (`POST /intake`) routes users using Claude Haiku:
+
+```json
+// Mode: routing (default)
+{ "message": "J'ai une app React à déployer", "history": [] }
+→ { "route": "upload|generate|clarify", "question": "...", "summary": "..." }
+
+// Mode: clarify
+{ "message": "...", "mode": "clarify", "industry": "finance", "hasData": true }
+→ { "questions": ["Q1 ?", "Q2 ?", "Q3 ?"] }
+```
+
+**ClarificationChat.jsx** component handles the clarify flow:
+- Displays 2-3 AI-generated questions sequentially
+- User answers each question
+- `buildEnrichedPrompt()` appends Q&A to original prompt
+- Skip button available to jump directly to generation
+
+### 3.7 Web App Review Flow
+
+```
+User drops ZIP
+       │
+       ▼
+UploadCode.jsx → POST {REVIEW_CODE_URL}
+  { files: { path: content }, appName, stackHint }
+       │
+       ▼
+ReviewCodeFunction
+  → Detects stack (next/nuxt/svelte/angular/vue/react/vite)
+  → web-app-reviewer skill: check_web_app.py + AI review
+  → Returns: { score, issues, fixedFiles, approved }
+       │
+       ▼
+ReviewResults.jsx
+  → Score circle + severity breakdown
+  → Issue list (first 5 shown, expandable)
+  → "Apply AI Fixes" button → onApplyFixes(fixedFiles)
+  → "Proceed to Deploy" (disabled if score < 70)
+       │
+       ▼
+DeployForm.jsx (if approved)
+```
 
 ### 3.8 GitLab + VM Deployment Flow
 
@@ -436,40 +361,13 @@ Prompt + Data → Generate Dashboard → (optional Review) → Deploy button →
 
 #### Workflow 2 — Upload & Review
 ```
-Drop ZIP → Parse files → web-app-reviewer skill → Score ≥ 70? → Deploy → GitLab + VM
+Drop ZIP → Parse files → web-app-reviewer skill → Score ≥ 70 → Deploy → GitLab + VM
 ```
 
 #### Workflow 3 — My Apps
 ```
 GET /apps → DynamoDB AppRegistry → list per user
 ```
-
-#### AI Intake Routing (`intake` Lambda)
-
-Claude Haiku receives the user's first message and returns routing:
-```json
-{ "route": "upload|generate|clarify", "question": "...", "summary": "..." }
-```
-- `generate` → existing factory (prompt + data)
-- `upload` → Upload & Review flow
-- `clarify` → follow-up question (max 2-3 turns)
-
-#### Web App Reviewer Skill (`web-app-reviewer`)
-
-General-purpose code reviewer for any uploaded web app (not dashboard-specific):
-
-```
-skills/web-app-reviewer/
-├── SKILL.md                         ← Instructions + output format
-├── scripts/
-│   └── check_web_app.py             ← 15 static checks
-└── references/
-    └── web-quality-checklist.md     ← Manual review checklist
-```
-
-**check_web_app.py** checks: hardcoded secrets, eval(), innerHTML, dangerouslySetInnerHTML, document.write, console.log, debugger, alert, TODO comments, files >500KB, missing React key props.
-
-**Output**: `{ score: 0-100, issues: [{severity, rule, file, line, message}], fixedFiles: {}, summary }`. Score ≥ 70 = approved for deployment.
 
 #### GitLab Push (`git-push` Lambda)
 
@@ -480,69 +378,97 @@ Uses GitLab API v4 with a service account token (scope: `api`):
 3. `POST /api/v4/projects/:id/members` — add `GITLAB_TEAM_MEMBERS` as Developers
 4. If `generateCI: true` — injects `.gitlab-ci.yml` + `azure-pipelines.yml` before commit
 
-**CI/CD YAML** is stack-aware (detected from `package.json` deps):
+**CI/CD YAML** is stack-aware:
 - `.gitlab-ci.yml` → builds with `npm ci + npm run build`, deploys to GitLab Pages
-- `azure-pipelines.yml` → deploys to Azure Static Web Apps via `AzureStaticWebApp@0` task
+- `azure-pipelines.yml` → deploys to Azure Static Web Apps via `AzureStaticWebApp@0`
 - Dist dirs: `next→out/`, `nuxt→.output/public`, `sveltekit→build/`, others→`dist/`
+- Slug collision: appends timestamp suffix if project name taken
+
+**Team members auto-added**: `antoinesauauvageSKE2, marwanlenenE2, jeremygarneauSKE2, victoradrienguillermSKE2`
 
 #### VM Request (`vm-request` Lambda)
 
-1. Claude Haiku generates a structured VM spec (Azure size, estimated monthly cost)
-2. Teams webhook → `TEAMS_WEBHOOK_URL` (best-effort, non-fatal if missing)
-3. Service Desk API → `SERVICEDESK_URL` (best-effort, deferred — returns payload for manual submit if not configured)
+1. Claude Haiku generates a structured Azure VM spec (size, estimated monthly cost)
+2. Sizing guide: B1ms (prototype), B2s (internal), D2s_v3 (team), D4s_v3 (production)
+3. Teams webhook → `TEAMS_WEBHOOK_URL` (best-effort, non-fatal if missing)
+4. Service Desk API → `SERVICEDESK_URL` (best-effort, deferred)
 
 #### App Registry (`apps` Lambda + DynamoDB)
 
 Table `AppRegistry` (PK: `userId` Cognito sub, SK: `appId` UUID):
 ```json
-{ "userId", "appId", "appName", "createdAt", "source", "reviewScore", "repoUrl", "webUrl", "ticketId", "stack", "status", "vmSpec" }
+{
+  "userId": "cognito-sub",
+  "appId": "uuid",
+  "appName": "dashboard-sales-q1",
+  "createdAt": "ISO timestamp",
+  "source": "generated|uploaded",
+  "reviewScore": 82,
+  "repoUrl": "https://git.simon-kucher.com/...",
+  "webUrl": null,
+  "ticketId": "INC0012345",
+  "stack": "react",
+  "status": "deployed|pending|failed",
+  "requester": "user@email.com",
+  "vmSpec": { "vmSize": "Standard_B2s", "estimatedMonthlyCost": "~$35" },
+  "collaboratorsAdded": ["user1", "user2"]
+}
 ```
 
-#### New Frontend Components
+### 3.9 Review Research Flow
 
-| Component | File | Purpose |
-|-----------|------|---------|
-| IntakeChat | `IntakeChat.jsx` | AI routing chat (upload vs generate) |
-| UploadCode | `UploadCode.jsx` | ZIP drop + file tree + Review button |
-| ReviewResults | `ReviewResults.jsx` | Score circle + issues list + Apply fixes |
-| DeployForm | `DeployForm.jsx` | GitLab project name + CI/CD toggle + VM form |
-| MyApps | `MyApps.jsx` | App history grid per user |
-
-### 3.9 Multi-Format Export (XLSX, PPTX, PDF)
-
-The export feature generates professional XLSX, PPTX, or PDF files from dashboard data using **Anthropic pre-built skills** (no custom skills needed).
-
-#### Architecture
+Google Maps review analysis using Outscraper API + Claude:
 
 ```
-Frontend (export button click)
+ReviewResearch.jsx
+  Step 1 (Scope): industry, brands, competitors, location, maxReviews
+  Step 2 (Criteria): select/customize evaluation criteria per industry
+  Step 3 (Source): scrape GMaps via Outscraper OR upload CSV/Excel
+  Step 4 (Confirm): review config + cost estimate
        │
        ▼
-POST /prod/export  (API Gateway, 120s timeout)
-  { format: "pptx", data: [...], title: "Mon Dashboard", kpis: [...] }
+POST {REVIEW_RESEARCH_URL}/start
+  → { jobId }
        │
        ▼
-Lambda export/index.mjs
-  → Claude with pre-built skill (type: "anthropic", skill_id: "pptx")
-  → Code execution generates file in container
-  → Extract file_id from bash_code_execution_tool_result
-  → Download via Files API (client.beta.files.download)
-  → Return { base64, filename, mimeType }
+Poll GET {REVIEW_RESEARCH_URL}/status/:jobId
+  → { status: "running|completed|failed", progress: 0-100 }
        │
        ▼
-Frontend
-  → Decode base64 → Blob → URL.createObjectURL → auto-download
+GET {REVIEW_RESEARCH_URL}/results/:jobId
+  → { reviews: [...], scores: { brand: { criterion: score } }, analysis: "..." }
 ```
 
-#### Pre-built Skills
+**ReviewResearchFunction architecture:**
+- **Async job-based**: jobs stored as JSON in S3 (`review-research/jobs/<jobId>.json`)
+- **Outscraper integration**: fetches Google Maps reviews via external API
+- **Claude analysis**: evaluates each review against custom criteria (1-100, 1-10, 1-5, or binary scale)
+- **Prevents fabrication**: only scores on actual review text
+- **Industries**: restaurant, hotel, saas, retail — each with preset criteria
 
-| Format | Skill ID | MIME Type |
-|--------|----------|-----------|
-| XLSX | `xlsx` | `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` |
-| PPTX | `pptx` | `application/vnd.openxmlformats-officedocument.presentationml.presentation` |
-| PDF | `pdf` | `application/pdf` |
+**Env vars**: `OUTSCRAPER_API_KEY` (optional, SAM parameter), `REVIEW_RESEARCH_MODEL: claude-sonnet-4-20250514`
 
-#### API Call
+### 3.10 Automation Builder Flow
+
+```
+AutomationChat.jsx
+  → User describes process in natural language
+  → Searches existing templates OR generates new automation
+  → POST {AUTOMATION_URL}/generate
+       │
+       ▼
+AutomationBuilder.jsx
+  → Display generated steps (label, action type, details)
+  → Edit / reorder / add / remove steps
+  → Save as template: POST {AUTOMATION_URL}/templates
+       │
+       ▼
+Templates accessible via: GET {AUTOMATION_URL}/templates
+```
+
+### 3.11 Multi-Format Export (XLSX, PPTX, PDF)
+
+Uses **Anthropic pre-built skills** (no custom skills needed):
 
 ```javascript
 const response = await anthropic.beta.messages.create({
@@ -555,76 +481,71 @@ const response = await anthropic.beta.messages.create({
   tools: [{ type: 'code_execution_20250825', name: 'code_execution' }],
   messages: [{ role: 'user', content: prompt }],
 });
-```
 
-#### File Retrieval
-
-```javascript
-// Extract file_id from response
-function extractFileId(response) {
-  for (const block of response.content) {
-    if (block.type === 'bash_code_execution_tool_result') {
-      const result = block.content;
-      if (result.type === 'bash_code_execution_result' && result.content) {
-        for (const item of result.content) {
-          if (item.file_id) return item.file_id;
-        }
-      }
-    }
-  }
-  return null;
-}
-
-// Download file
+// Extract file_id → download via Files API
 const fileContent = await anthropic.beta.files.download(fileId, {
   betas: ['files-api-2025-04-14'],
 });
 ```
 
-#### Key Details
+| Format | Skill ID | MIME Type |
+|--------|----------|-----------|
+| XLSX | `xlsx` | `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` |
+| PPTX | `pptx` | `application/vnd.openxmlformats-officedocument.presentationml.presentation` |
+| PDF | `pdf` | `application/pdf` |
 
-- **Container pre-installed**: openpyxl, xlsxwriter, python-pptx, python-docx, reportlab, pypdf, pandas, numpy
-- **Cost**: ~$0.10-0.15 per export
-- **Timeout**: 120s (file generation typically takes 30-60s)
-- **Payload limit**: API Gateway 10MB — sufficient for most exports
+- **Container pre-installed**: openpyxl, xlsxwriter, python-pptx, reportlab, pandas, numpy
+- **Cost**: ~$0.10-0.15 per export | **Timeout**: 120s
 
-### 3.10 Cost Optimization
+### 3.12 Cost Estimation (estimate-cost Lambda)
 
-Several optimizations reduce API costs without impacting output quality:
+Pure server-side calculation (no Claude call), returns breakdown per phase:
+
+```json
+{
+  "total": 0.42,
+  "breakdown": {
+    "generation": 0.30,
+    "analysis": 0.05,
+    "review": 0.04,
+    "vision": 0.03
+  },
+  "currency": "USD"
+}
+```
+
+**Pricing used**: Sonnet (input $3/MTok, output $15/MTok, cached $0.30/MTok) | Haiku (input $0.80/MTok, output $4/MTok, cached $0.08/MTok)
+
+### 3.13 Cost Optimization
 
 #### Prompt Caching
 
-System prompts are sent with `cache_control: { type: 'ephemeral' }`. Cached tokens cost 90% less on input ($0.30/MTok vs $3/MTok). The cache lasts 5 minutes, covering typical multi-call pipelines (data analysis → generation → review → vision).
+System prompts sent with `cache_control: { type: 'ephemeral' }`. Cached tokens cost 90% less ($0.30/MTok vs $3/MTok). Cache lasts 5 minutes.
 
 #### Configurable Model per Phase
 
-Three environment variables control which model is used for non-creative phases:
-
 ```yaml
 # template.yaml
-REVIEW_MODEL: "claude-haiku-4-5-20251001"   # Quality review (checklist verification)
-VISION_MODEL: "claude-haiku-4-5-20251001"   # Screenshot analysis (visual corrections)
-EXPORT_MODEL: "claude-haiku-4-5-20251001"   # File generation (XLSX/PPTX/PDF)
+REVIEW_MODEL: "claude-haiku-4-5-20251001"   # Quality review
+VISION_MODEL: "claude-haiku-4-5-20251001"   # Screenshot analysis
+EXPORT_MODEL: "claude-haiku-4-5-20251001"   # File generation
 ```
-
-- **Current config (test)**: Haiku (`claude-haiku-4-5-20251001`) — configured in template.yaml for cost testing
-- **Production**: Sonnet (`claude-sonnet-4-20250514`) — the default fallback when env vars are removed or changed back
-- Toggle: Change in AWS Lambda console (immediate effect) or template.yaml (requires deploy)
-- Main generation always uses Sonnet (creative code generation)
 
 #### Conditional Review Skip
 
-The review phase is automatically skipped for simple prompts:
-- Prompt < 50 words AND dataset < 100 rows AND no DB mode
-- Saves ~$0.02-0.15 per generation depending on model
+Automatically skipped if: prompt < 50 words AND dataset < 100 rows AND no DB mode.
 
 #### Data Analysis Caching
 
-The frontend caches the `_analysisResult` returned by the first generation call. Subsequent calls with the same dataset (same fileName + totalRows) reuse the cached analysis instead of calling the data-analyzer skill again. Cache is cleared when a new file is uploaded or a new DB is connected.
+Frontend caches `_analysisResult` + data hash. Same dataset = skip `analyzeData()` call.
 
 #### Minimal Code for Review/Vision
 
-`stripToAppOnly()` sends only `src/App.jsx` (the only file that changes) instead of all source files. Saves ~500-1000 input tokens per review/vision call.
+`stripToAppOnly()` sends only `src/App.jsx` — saves ~500-1000 input tokens per call.
+
+#### Data Payload Trimming
+
+`trimDataToFit()` in api.js: binary search to limit payload to 4.5MB (Lambda Function URL hard limit 6MB).
 
 #### Cost Summary
 
@@ -638,16 +559,16 @@ The frontend caches the `_analysisResult` returned by the first generation call.
 | Conditional review | -$0.145 (simple prompts) | Low |
 | stripToAppOnly | -$0.01 (-2%) | None |
 
-### 3.11 Monitoring
+### 3.14 Monitoring
 
 All `callClaude()` calls log structured JSON to CloudWatch:
 
 ```json
 {
   "event": "claude_call",
-  "label": "generate",          // generate, data-analyze, review, vision, review-fallback, vision-fallback
+  "label": "generate",
   "model": "claude-sonnet-4-20250514",
-  "skills": ["skill_01GMx6ta9DNWD6wDmX4S6PhN"],
+  "skills": ["skill_01RPpTMLicWFr96R3kLV3YDW"],
   "input_tokens": 12345,
   "output_tokens": 6789,
   "cache_creation_input_tokens": 0,
@@ -657,127 +578,104 @@ All `callClaude()` calls log structured JSON to CloudWatch:
 }
 ```
 
-**Labels**: `generate` (main generation), `data-analyze` (pre-analysis), `review` (skill-based review), `vision` (skill-based vision), `review-fallback` (standard prompt review), `vision-fallback` (direct API vision).
+**Labels**: `generate`, `data-analyze`, `review`, `vision`, `review-fallback`, `vision-fallback`
 
-**Queryable** via CloudWatch Logs Insights:
+**Query via CloudWatch Logs Insights:**
 ```
 filter event = "claude_call"
 | stats avg(elapsed_ms) as avg_latency, sum(input_tokens) as total_input, sum(output_tokens) as total_output by label
 ```
 
-### 3.12 Data Injection
-
-Two modes for data:
+### 3.15 Data Injection
 
 **Excel/CSV mode:**
-
 - Frontend reads file → sends headers + sample (30 rows) + fullData to Lambda
 - Lambda tells Claude to use `"__INJECT_DATA__"` placeholder in `src/data.js`
 - Frontend replaces placeholder with actual `JSON.stringify(fullData)` before mounting
-- Published app contains a static snapshot of the data (NOT live)
+- Published app contains a static snapshot
 
 **Database mode:**
-
 - Frontend connects via db proxy Lambda → gets schema + sample data
 - Lambda tells Claude to use `queryDb()` with SQL queries
 - Frontend replaces `"__DB_PROXY_URL__"` and `"__DB_CREDENTIALS__"` placeholders
 - Published app makes live fetch() calls → data updates on each page load
-- ⚠️ Security risk: DB credentials are in the bundled JS (see Section 5)
+- ⚠️ Security risk: DB credentials are in the bundled JS
 
 ## 4. Export vs Publish
 
 ### 4.1 Export (Source Code Zip)
 
-The Export button calls `exportToZip(files)` which downloads a zip of the WebContainer source files:
-
+Downloads a zip of the WebContainer source files:
 - `package.json`, `vite.config.js`, `index.html`
 - `src/App.jsx`, `src/ds.css`, `src/main.jsx`
 - `src/data.js` (if Excel mode), `src/db.js` (if DB mode)
 
-The recipient can `unzip → npm install → npm run dev` to continue development.
+Recipient can `unzip → npm install → npm run dev` to continue development.
 
 ### 4.2 Publish (Static Site to S3)
 
-The Publish button:
-
 1. Runs `npm run build` in WebContainer → creates `dist/` folder
-2. Recursively reads `dist/` directory (index.html, assets/_.js, assets/_.css)
+2. Recursively reads `dist/` directory
 3. Uses `flattenFiles()` helper to convert WebContainer file tree to flat `{ path: content }` map
-4. Sends built files to `publishApp()` API
+4. Sends built files to `publishApp()` API → S3
 5. Opens the published URL in a new tab
 
-**S3 structure after publish:**
-
-```
-{app-name}/
-  index.html          ← HTML with <script src="./assets/index-xxx.js">
-  assets/
-    index-abc123.js   ← Bundled JS (React + app code, minified)
-    index-def456.css  ← Bundled CSS (ds.css compiled)
-```
-
-**URL:** `http://ai-app-builder-sk-2026.s3-website.eu-north-1.amazonaws.com/{app-name}/`
-
-**Previous bug (fixed):** handlePublish was sending source files (package.json, vite.config.js, src/) instead of built files, causing blank pages.
+**URL**: `http://ai-app-builder-sk-2026.s3-website.eu-north-1.amazonaws.com/{app-name}/`
 
 ## 5. Security
 
 ### 5.1 Current State
 
-| Layer           | Protection                                                  |
-| --------------- | ----------------------------------------------------------- |
-| API calls       | JWT (Cognito) on all Lambda endpoints                       |
-| Published sites | Public URL, not indexed, not listed (security by obscurity) |
-| Excel data      | Embedded in JS bundle — static snapshot, no risk            |
-| DB credentials  | In JS bundle — readable via browser DevTools                |
-| DB proxy        | Accepts arbitrary SQL — no query filtering                  |
+| Layer | Protection |
+|-------|------------|
+| API calls | JWT (Cognito) on all Lambda endpoints |
+| Published sites | Public URL, not indexed (security by obscurity) |
+| Excel data | Embedded in JS bundle — static snapshot, no risk |
+| DB credentials | In JS bundle — readable via browser DevTools |
+| DB proxy | Accepts arbitrary SQL — no query filtering |
+| GitLab token | Lambda env var via SAM param (Secrets Manager recommended) |
 
-### 5.2 Risk Assessment
+### 5.2 Security Roadmap
 
-**Internal use (dashboard for self/team):** Acceptable. The URL is only shared internally, not crawled by search engines.
-
-**Client-facing use (dashboard built for a third party using their DB):** NOT secure. Anyone with the URL could extract DB credentials from the minified JS and execute arbitrary queries.
-
-### 5.3 Security Roadmap
-
-| Priority    | Action                | Description                                                                        |
-| ----------- | --------------------- | ---------------------------------------------------------------------------------- |
-| Short term  | Warning on DB publish | Display a warning when publishing an app in DB mode                                |
-| Short term  | Read-only DB user     | Recommend/enforce a read-only database user                                        |
-| Medium term | API key per app       | Generate unique token at publish; proxy validates token instead of raw credentials |
-| Medium term | Pre-defined queries   | Published app calls named endpoints, not raw SQL                                   |
-| Long term   | CloudFront + Auth     | Published site behind Cognito login                                                |
-| Long term   | Auto-polling          | `setInterval(loadData, 30000)` for live DB dashboards                              |
+| Priority | Action | Description |
+|----------|--------|-------------|
+| Short term | Warning on DB publish | Display warning when publishing in DB mode |
+| Short term | Read-only DB user | Recommend/enforce read-only database user |
+| Medium term | API key per app | Generate unique token at publish; proxy validates token |
+| Medium term | Pre-defined queries | Published app calls named endpoints, not raw SQL |
+| Long term | CloudFront + Auth | Published site behind Cognito login |
 
 ## 6. Deployment
 
 ### 6.1 Prerequisites
 
 - AWS CLI configured with `eu-north-1` region
-- SAM CLI installed
+- SAM CLI installed (or AWS CloudShell)
 - Node.js 20+
-- IAM user with: Lambda, S3, API Gateway, CloudFormation, Cognito permissions
+- IAM user with: Lambda, S3, API Gateway, CloudFormation, Cognito, DynamoDB permissions
 
 ### 6.2 Deploy Script (deploy.ps1)
 
-The PowerShell script:
-
 1. Uploads business rules to S3 (`rules/` prefix)
 2. Runs `sam build`
-3. Runs `sam deploy` with parameters (API key, bucket, region)
-4. Optionally uploads/updates all 8 Agent Skills via `manage-skills.mjs`
-5. Fetches CloudFormation outputs (API URL, Generate URL, DB Proxy URL, Cognito IDs)
+3. Runs `sam deploy` with parameters (API key, bucket, region, GitLab token, Outscraper API key)
+4. Optionally uploads/updates all 10 Agent Skills via `manage-skills.mjs`
+5. Fetches CloudFormation outputs (API URL, all Function URLs, Cognito IDs)
 6. Auto-writes `frontend/.env` with all values
 7. Optionally creates first Cognito user
 
 ### 6.3 Environment Variables
 
-**Frontend (.env):**
+**Frontend (.env — auto-written by deploy.ps1):**
 
 ```
 VITE_API_URL=https://xxx.execute-api.eu-north-1.amazonaws.com/prod
 VITE_GENERATE_URL=https://xxx.lambda-url.eu-north-1.on.aws/
 VITE_DB_PROXY_URL=https://xxx.lambda-url.eu-north-1.on.aws/
+VITE_EXPORT_URL=https://xxx.lambda-url.eu-north-1.on.aws/
+VITE_REVIEW_CODE_URL=https://xxx.lambda-url.eu-north-1.on.aws/
+VITE_GIT_PUSH_URL=https://xxx.lambda-url.eu-north-1.on.aws/
+VITE_REVIEW_RESEARCH_URL=https://xxx.lambda-url.eu-north-1.on.aws/
 VITE_COGNITO_USER_POOL_ID=eu-north-1_xxx
 VITE_COGNITO_CLIENT_ID=xxx
 ```
@@ -785,72 +683,92 @@ VITE_COGNITO_CLIENT_ID=xxx
 **Lambda (via SAM template):**
 
 ```
-ANTHROPIC_API_KEY (parameter)
+ANTHROPIC_API_KEY                 (SAM parameter, required)
 RULES_BUCKET=ai-app-builder-sk-2026
-MY_REGION=eu-north-1
 PUBLISH_BUCKET=ai-app-builder-sk-2026
-COGNITO_USER_POOL_ID (from Cognito resource)
+COGNITO_USER_POOL_ID              (from Cognito resource)
 COGNITO_REGION=eu-north-1
-USE_BETA_API="true"               ← Set "true" to enable Agent Skills mode
-DASHBOARD_SKILL_ID="skill_01XkRdUeca25kPFLF3DM4b2Y"
-DATA_ANALYZER_SKILL_ID="skill_01DAnrjyQM5eAJYiCvhMK7Du"
-INDUSTRY_FINANCE_SKILL_ID="skill_013h9deHQb7CaA47xd59Uytd"
-INDUSTRY_ECOMMERCE_SKILL_ID="skill_014PUPgrYoGE8BRDwiDhZDMP"
-INDUSTRY_SAAS_SKILL_ID="skill_01Ekuh6H7ZKBkA2qzdXYzr1y"
-INDUSTRY_LOGISTICS_SKILL_ID="skill_011zy4TbPD7jcWEfiMKfi4jN"
-REVIEWER_SKILL_ID="skill_01G3LJaHUFQn9WTbcrmTFCrB"    ← Review skill (empty = fallback to standard prompt)
-VISION_SKILL_ID="skill_016hJRgXdpBiDrcbknvQYQLW"       ← Vision skill (empty = fallback to direct API)
-REVIEW_MODEL="claude-haiku-4-5-20251001"     ← TEST: Haiku for review (PROD: remove or set claude-sonnet-4-20250514)
-VISION_MODEL="claude-haiku-4-5-20251001"     ← TEST: Haiku for vision (PROD: remove or set claude-sonnet-4-20250514)
-EXPORT_MODEL="claude-haiku-4-5-20251001"     ← TEST: Haiku for export (PROD: remove or set claude-sonnet-4-20250514)
+MY_REGION=eu-north-1
+USE_BETA_API="true"               ← Set "false" for standard prompt mode
+
+# Agent Skills
+DASHBOARD_SKILL_ID="skill_01RPpTMLicWFr96R3kLV3YDW"
+DATA_ANALYZER_SKILL_ID="skill_01TJ4sKM6v5aWiBfUCpE7aaM"
+INDUSTRY_FINANCE_SKILL_ID="skill_01XhrMpqBzw5CoeqGp9dLYTy"
+INDUSTRY_ECOMMERCE_SKILL_ID="skill_01BdUH8nfrq5o3PhtL4jmrXv"
+INDUSTRY_SAAS_SKILL_ID="skill_01KSiWWfDMqT619dvHe9bwLR"
+INDUSTRY_LOGISTICS_SKILL_ID="skill_01J4e3c46T3wrdtuRBRcRyGU"
+REVIEWER_SKILL_ID="skill_01ABSnPFjpR2wUZuoKobc5vs"
+VISION_SKILL_ID="skill_0167k41XCVLbcSksQvPsqTfi"
+WEB_APP_REVIEWER_SKILL_ID="skill_01NGUU66Q3PCWWX5RgAbD7bz"
+SCRAPER_SKILL_ID="skill_015tnYwBrkp8e4sYevkvqsWX"
+
+# Models (Haiku for test, Sonnet for prod)
+REVIEW_MODEL="claude-haiku-4-5-20251001"
+VISION_MODEL="claude-haiku-4-5-20251001"
+EXPORT_MODEL="claude-haiku-4-5-20251001"
+REVIEW_RESEARCH_MODEL="claude-sonnet-4-20250514"
 
 # GitLab + VM deployment
-GITLAB_URL="https://git.simon-kucher.com"             ← GitLab root URL (NOT a repo path)
-GITLAB_TOKEN (parameter, scope: api)                   ← Service account token
-GITLAB_GROUP_ID="1658"                                 ← elevate-paris-apps group ID
-GITLAB_TEAM_MEMBERS="user1, user2, user3"              ← Auto-added as Developer on each new repo
-TEAMS_WEBHOOK_URL=""                                   ← Teams incoming webhook (optional)
-SERVICEDESK_URL=""                                     ← Service Desk API endpoint (deferred)
-SERVICEDESK_TOKEN (parameter)                          ← Service Desk auth token
-WEB_APP_REVIEWER_SKILL_ID=""                           ← Fill after: node manage-skills.mjs upload skills/web-app-reviewer
-REVIEW_PASS_THRESHOLD="70"                             ← Min score to enable Deploy button
-APP_REGISTRY_TABLE="AppRegistry"                       ← DynamoDB table name
+GITLAB_URL="https://git.simon-kucher.com"
+GITLAB_TOKEN                      (SAM parameter, scope: api)
+GITLAB_GROUP_ID="1658"
+GITLAB_TEAM_MEMBERS="antoinesauauvageSKE2, marwanlenenE2, jeremygarneauSKE2, victoradrienguillermSKE2"
+TEAMS_WEBHOOK_URL=""              ← Teams incoming webhook (optional)
+SERVICEDESK_URL=""                ← Service Desk API endpoint (deferred)
+SERVICEDESK_TOKEN                 (SAM parameter, optional)
+REVIEW_PASS_THRESHOLD="70"
+APP_REGISTRY_TABLE="AppRegistry"
+
+# Review Research
+OUTSCRAPER_API_KEY                (SAM parameter, optional)
+BUCKET_NAME=ai-app-builder-sk-2026
 ```
 
-**Frontend (.env) — additional vars auto-written by deploy.ps1:**
-```
-VITE_REVIEW_CODE_URL=https://xxx.lambda-url.eu-north-1.on.aws/
-VITE_GIT_PUSH_URL=https://xxx.lambda-url.eu-north-1.on.aws/
-```
+## 7. Frontend Components Reference
 
-## 7. Known Issues & Solutions
+| Component | File | Props / Purpose |
+|-----------|------|-----------------|
+| AuthProvider | `AuthProvider.jsx` | React Context: `{ user, loading, logout }` |
+| Login | `Login.jsx` | Sign in / Sign up + first-login password change |
+| MatrixRain | `MatrixRain.jsx` | Animated generation screen |
+| FileUpload | `FileUpload.jsx` | CSV/Excel drop → `{ fileName, headers, data, fullData, totalRows }` |
+| DbConnect | `DbConnect.jsx` | DB credentials form → schema fetch |
+| IntakeChat | `IntakeChat.jsx` | AI routing: upload \| generate \| clarify |
+| ClarificationChat | `ClarificationChat.jsx` | 2-3 AI questions → `onComplete(enrichedPrompt)` |
+| UploadCode | `UploadCode.jsx` | ZIP drop + file tree + Review button |
+| ReviewResults | `ReviewResults.jsx` | Score circle + issues + Apply Fixes + Proceed to Deploy |
+| DeployForm | `DeployForm.jsx` | GitLab project name + CI/CD toggle + VM form |
+| MyApps | `MyApps.jsx` | Grid of AppCard from DynamoDB |
+| ReviewResearch | `ReviewResearch.jsx` | 4-step wizard: scope → criteria → source → confirm → results |
+| AutomationChat | `AutomationChat.jsx` | Natural language automation description |
+| AutomationBuilder | `AutomationBuilder.jsx` | Step editor + reorder + save template |
+| AutomationStep | `AutomationStep.jsx` | Individual step component |
 
-### 7.1 Cognito SDK + Vite
+## 8. Known Issues & Solutions
+
+### 8.1 Cognito SDK + Vite
 
 `amazon-cognito-identity-js` requires Node.js `global`. Fix in `vite.config.js`:
-
 ```js
-define: {
-  global: "globalThis";
-}
+define: { global: 'globalThis' }
 ```
 
-### 7.2 SAM Build — Shared Code
+### 8.2 SAM Build — Shared Code
 
 SAM builds each Lambda from its own `CodeUri` directory. Shared files (like `auth.mjs`) must be copied into each function's folder. Import as `./auth.mjs`, not `../shared/auth.mjs`.
 
-### 7.3 Double CORS Headers
+### 8.3 Double CORS Headers
 
 Function URLs add CORS headers automatically via template.yaml config. Lambda code must NOT add CORS headers in response — only `Content-Type: application/json`.
 
-### 7.4 Vision Phase Timeout
+### 8.4 Vision Phase Timeout
 
-The vision phase (screenshot + Claude analysis) can take 100s+. Total pipeline can exceed 300s. Set GenerateFunction timeout to 600s in template.yaml.
+The vision phase (screenshot + Claude analysis) can take 100s+. Total pipeline can exceed 300s. GenerateFunction timeout set to 600s.
 
-### 7.5 WebContainer Missing Dependencies
+### 8.5 WebContainer Missing Dependencies
 
 Ensure `files-template.js` includes all needed dependencies:
-
 ```js
 dependencies: {
   react: "^18.2.0",
@@ -859,136 +777,102 @@ dependencies: {
 }
 ```
 
-### 7.6 PieChart All Grey
+### 8.6 PieChart All Grey
 
-Claude sometimes forgets `<Cell fill={color} />` in PieCharts. The system prompt explicitly requires Cell components with COLORS array.
+Claude sometimes forgets `<Cell fill={color} />`. System prompt explicitly requires Cell components with COLORS array. dashboard-reviewer skill's `check_code.py` also catches this.
 
-### 7.7 Tailwind CSS in WebContainer
+### 8.7 Tailwind CSS in WebContainer
 
 Tailwind does NOT work in WebContainer:
+- **PostCSS build**: Fails during npm install in the browser sandbox
+- **CDN**: Blocked by WebContainer's COEP/COOP security headers
 
-- **PostCSS build**: Fails during npm install/compilation in the browser sandbox
-- **CDN (`cdn.tailwindcss.com`)**: Blocked by WebContainer's COEP/COOP security headers
+**Solution**: Self-contained `ds.css` embedded in `files-template.js`.
 
-**Solution**: Self-contained `ds.css` with utility classes and component classes. No build step, no external dependencies.
+### 8.8 Invented Data
 
-### 7.8 Invented Data / Fake Comparisons
+Two defenses:
+1. **System prompt** — Explicitly forbids fabricated data
+2. **Data analyzer skill** — Pre-analyzes data with Python to provide factual statistics
 
-Claude tends to invent "Previous Year", "Objective", or variation percentages. Two defenses:
+### 8.9 Data Payload Too Large
 
-1. **System prompt** — Explicitly forbids fabricated data (both standard and skill modes)
-2. **Data analyzer skill** — Pre-analyzes data with Python scripts to provide factual statistics. The analysis context tells Claude exactly which columns have periods, what the real stats are, and which chart types are appropriate. This dramatically reduces fabrication.
+Lambda Function URLs have a 6MB hard limit. `trimDataToFit()` in `api.js` uses binary search to find the largest data slice that fits under 4.5MB.
 
-### 7.9 Publish Blank Page
+### 8.10 Publish Blank Page
 
 **Fixed.** handlePublish now runs `npm run build` in WebContainer and sends `dist/` files instead of source files.
 
-## 8. API Reference
+## 9. API Reference
 
-### 8.1 Generate App
+### 9.1 Generate App
 
 ```
 POST {GENERATE_URL}
 Authorization: Bearer {JWT}
-Content-Type: application/json
 
 {
-  "prompt": "Dashboard des ventes avec KPIs et graphiques",
+  "prompt": "Dashboard des ventes avec KPIs",
   "useRules": true,
   "excelData": { "headers": [...], "data": [...], "fullData": [...], "fileName": "...", "totalRows": N },
   "existingCode": { "src/App.jsx": "..." },
   "dbContext": { "type": "postgresql", "schema": {...} },
   "screenshot": "base64...",
-  "industry": "finance"  // optional: finance, ecommerce, saas, logistics
+  "industry": "finance",
+  "appType": "dashboard",
+  "cachedAnalysis": null
 }
 
-Response: { "files": { "src/App.jsx": "...", "src/data.js": "..." } }
+Response: { "files": { "src/App.jsx": "...", "src/data.js": "..." }, "_usage": {...}, "_analysisResult": {...} }
 ```
 
-When `USE_BETA_API=true` and `DATA_ANALYZER_SKILL_ID` is set, the Lambda makes two Claude API calls: first to analyze the data (data-analyzer skill), then to generate the dashboard (dashboard-generator skill with analysis context injected). If `industry` is provided, the corresponding industry skill is added to the skills array.
-
-### 8.2 Publish App
+### 9.2 Publish App
 
 ```
 POST {API_URL}/prod/publish
 Authorization: Bearer {JWT}
-Content-Type: application/json
 
-{
-  "files": {
-    "index.html": "<!DOCTYPE html>...",
-    "assets/index-abc123.js": "...",
-    "assets/index-def456.css": "..."
-  },
-  "appName": "my-dashboard"
-}
+{ "files": { "index.html": "...", "assets/index-abc.js": "..." }, "appName": "my-dashboard" }
 
 Response: { "url": "http://ai-app-builder-sk-2026.s3-website.eu-north-1.amazonaws.com/my-dashboard/" }
 ```
 
-Note: Files sent to publish must be the **built** output from `dist/`, not source files.
-
-### 8.3 Get Rules
-
-```
-GET {API_URL}/prod/rules
-Authorization: Bearer {JWT}
-
-Response: { "rule-name": { ...rule config... } }
-```
-
-### 8.4 DB Proxy
-
-```
-POST {DB_PROXY_URL}
-Authorization: Bearer {JWT}
-Content-Type: application/json
-
-{
-  "credentials": { "host": "...", "port": 5432, "user": "...", "password": "...", "database": "..." },
-  "sql": "SELECT * FROM table LIMIT 5"
-}
-
-Response: { "rows": [...] }
-```
-
-⚠️ The proxy currently accepts arbitrary SQL with no filtering. See Security section for planned improvements.
-
-### 8.5 Intake Routing
+### 9.3 Intake Routing + Clarify
 
 ```
 POST {API_URL}/prod/intake
 Authorization: Bearer {JWT}
-Content-Type: application/json
 
-{ "message": "J'ai une app React que je veux déployer", "history": [] }
+// Routing mode (default)
+{ "message": "J'ai une app React", "history": [] }
+→ { "route": "upload|generate|clarify", "question": "...", "summary": "..." }
 
-Response: { "route": "upload|generate|clarify", "question": "...", "summary": "..." }
+// Clarify mode
+{ "message": "...", "mode": "clarify", "industry": "finance", "hasData": true }
+→ { "questions": ["Q1 ?", "Q2 ?", "Q3 ?"] }
 ```
 
-### 8.6 Review Code
+### 9.4 Review Code
 
 ```
-POST {REVIEW_CODE_URL}          ← Function URL (VITE_REVIEW_CODE_URL)
+POST {REVIEW_CODE_URL}
 Authorization: Bearer {JWT}
-Content-Type: application/json
 
 { "files": { "src/App.jsx": "...", "package.json": "..." }, "appName": "my-app", "stackHint": "react" }
 
 Response: { "score": 82, "issues": [...], "fixedFiles": { "src/App.jsx": "..." }, "approved": true, "stack": "react" }
 ```
 
-### 8.7 Push to GitLab
+### 9.5 Push to GitLab
 
 ```
-POST {GIT_PUSH_URL}             ← Function URL (VITE_GIT_PUSH_URL)
+POST {GIT_PUSH_URL}
 Authorization: Bearer {JWT}
-Content-Type: application/json
 
 {
-  "files": { "src/App.jsx": "...", "package.json": "..." },
+  "files": { "src/App.jsx": "..." },
   "projectName": "dashboard-sales-q1",
-  "description": "Analytics dashboard for finance team",
+  "description": "Analytics dashboard",
   "generateCI": true
 }
 
@@ -996,20 +880,19 @@ Response: {
   "success": true,
   "repoUrl": "https://git.simon-kucher.com/elevate-paris-apps/dashboard-sales-q1.git",
   "webUrl": "https://git.simon-kucher.com/elevate-paris-apps/dashboard-sales-q1",
-  "projectId": 456,
-  "filesCommitted": 8,
+  "projectId": 123,
+  "commitSha": "abc123",
   "collaboratorsAdded": ["user1", "user2"],
   "pendingCollaborators": [],
   "ciFilesAdded": [".gitlab-ci.yml", "azure-pipelines.yml"]
 }
 ```
 
-### 8.8 Request VM
+### 9.6 Request VM
 
 ```
 POST {API_URL}/prod/vm-request
 Authorization: Bearer {JWT}
-Content-Type: application/json
 
 {
   "appName": "dashboard-sales-q1",
@@ -1018,104 +901,75 @@ Content-Type: application/json
   "estimatedUsers": 20,
   "justification": "Finance team analytics dashboard",
   "vmSize": "Standard_B2s",
-  "duration": "3 months",
-  "reviewScore": 82
+  "duration": "3 months"
 }
 
-Response: { "ticketId": "INC0012345", "vmSpec": { "vmSize": "Standard_B2s", "estimatedMonthlyCost": "~$60/mo" }, "teamsMessageSent": true }
+Response: { "ticketId": "INC0012345", "vmSpec": {...}, "teamsMessageSent": true, "ticketPayload": {...} }
 ```
 
-### 8.9 My Apps
+### 9.7 Apps Registry
 
 ```
 GET {API_URL}/prod/apps
 Authorization: Bearer {JWT}
-
-Response: { "apps": [{ "appId", "appName", "createdAt", "source", "reviewScore", "repoUrl", "status", ... }] }
+→ { "apps": [...sorted by createdAt DESC...] }
 
 POST {API_URL}/prod/apps
 Authorization: Bearer {JWT}
-Content-Type: application/json
-
-{ "appName": "...", "source": "generated|uploaded", "reviewScore": 82, "repoUrl": "...", "ticketId": "...", "stack": "react", "status": "deployed" }
-
-Response: { "appId": "uuid", "saved": true }
+{ "appName": "...", "source": "generated|uploaded", "reviewScore": 82, "repoUrl": "...", "status": "deployed" }
+→ { "appId": "uuid", ...payload }
 ```
 
-### 8.10 Export (XLSX/PPTX/PDF)
+### 9.8 Estimate Cost
 
 ```
-POST {API_URL}/prod/export
+POST {API_URL}/prod/estimate-cost
 Authorization: Bearer {JWT}
-Content-Type: application/json
 
-{
-  "format": "xlsx",              // xlsx, pptx, or pdf
-  "data": [{ ... }, { ... }],   // dashboard data rows
-  "title": "Mon Dashboard",     // export title
-  "kpis": [...],                // optional: KPI definitions
-  "chartDescriptions": [...]    // optional: chart descriptions
-}
+{ "prompt": "Dashboard des ventes", "rowCount": 1000, "hasData": true, "industry": "finance", "dbMode": false }
 
-Response: {
-  "base64": "UEsDBBQAAAA...",   // file content (base64-encoded)
-  "filename": "Mon Dashboard.xlsx",
-  "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-}
+Response: { "total": 0.42, "breakdown": { "generation": 0.30, "analysis": 0.05, "review": 0.04, "vision": 0.03 }, "currency": "USD" }
 ```
 
-The frontend decodes base64 → Blob → `URL.createObjectURL` → triggers browser download.
+### 9.9 Review Research
 
-## 9. Design System Reference
+```
+POST {REVIEW_RESEARCH_URL}/start
+{ "industry": "restaurant", "brands": ["A", "B"], "location": "Paris", "maxReviewsPerBrand": 100,
+  "criteria": [{ "id": "food", "label": "Food quality", "question": "..." }], "scale": "1-100", "source": "scrape_gmaps" }
+→ { "jobId": "uuid", "status": "started" }
 
-### 9.1 Generated Dashboards — ds.css
+GET {REVIEW_RESEARCH_URL}/status/:jobId
+→ { "status": "running|completed|failed", "progress": 45 }
 
-| Token          | Value   | CSS Variable    | Usage                         |
-| -------------- | ------- | --------------- | ----------------------------- |
-| bg-base        | #0B1120 | --base          | Page background               |
-| bg-card        | #111827 | --card          | Cards, drawer                 |
-| bg-card-hover  | #1A2332 | --card-hover    | Hover states, overlays        |
-| bg-card-alt    | #0D1526 | --card-alt      | Header, table alt rows        |
-| border         | #1E293B | --border        | Card borders                  |
-| border-active  | #2A3A50 | --border-active | Active/hover borders          |
-| text-primary   | #F1F5F9 | --text-1        | Headings, values              |
-| text-secondary | #94A3B8 | --text-2        | Descriptions                  |
-| text-tertiary  | #64748B | --text-3        | Labels, axes                  |
-| accent         | #06B6D4 | --accent        | Primary charts, active states |
-| magenta        | #EC4899 | --magenta       | Secondary series              |
-| violet         | #8B5CF6 | --violet        | Tertiary series               |
-| amber          | #F59E0B | --amber         | Quaternary series             |
-| up             | #10B981 | --up            | Growth, success               |
-| down           | #EF4444 | --down          | Decline, error                |
+GET {REVIEW_RESEARCH_URL}/results/:jobId
+→ { "reviews": [...], "scores": { "brandA": { "food": 78 } }, "analysis": "..." }
 
-### 9.2 Component Classes
+POST {REVIEW_RESEARCH_URL}/estimate
+{ ...config... }
+→ { "cost": 2.50, "breakdown": { "scraping": 0.50, "analysis": 2.00 } }
+```
 
-| Class                                              | Description                                       |
-| -------------------------------------------------- | ------------------------------------------------- |
-| `card`                                             | Standard card (bg-card, rounded-xl, border, p-24) |
-| `kpi-card`                                         | KPI card (card + flex-col + gap-6)                |
-| `kpi-label`                                        | KPI label (11px uppercase tertiary)               |
-| `kpi-value`                                        | KPI value (28px bold primary)                     |
-| `badge-up` / `badge-down`                          | Variation badges (green/red)                      |
-| `section-title`                                    | Section heading (15px semibold mb-16)             |
-| `app-header`                                       | Fixed header (60px, bg-card-alt)                  |
-| `tab-btn` / `tab-btn-active`                       | Header tab buttons                                |
-| `hamburger` / `hamburger-line`                     | Menu button                                       |
-| `drawer` / `drawer-open` / `drawer-closed`         | Side panel                                        |
-| `overlay`                                          | Dark overlay (fixed, bg black 50%)                |
-| `content-area`                                     | Main content (padding + scroll)                   |
-| `insight-item` / `insight-bar-*` / `insight-text`  | Key takeaways                                     |
-| `table-header-cell` / `table-cell` / `table-row-*` | Table styling                                     |
-| `grid-kpis`                                        | Auto-fit KPI grid (minmax 220px)                  |
-| `grid-charts-2` / `grid-charts-3`                  | Responsive chart grids                            |
-| `skeleton`                                         | Loading placeholder (pulse animation)             |
+### 9.10 Export
 
-### 9.3 Factory UI
+```
+POST {EXPORT_URL}
+Authorization: Bearer {JWT}
 
-| Token          | Value   | Usage                  |
-| -------------- | ------- | ---------------------- |
-| bg-base        | #09090B | Page background        |
-| bg-card        | #0F0F12 | Cards, sidebar         |
-| accent         | #06B6D4 | Buttons, active states |
-| text-primary   | #FAFAFA | Headings               |
-| text-secondary | #A1A1AA | Descriptions           |
+{ "format": "pptx", "data": [...], "title": "Mon Dashboard", "kpis": [...], "chartDescriptions": [...] }
+
+Response: { "base64": "...", "filename": "Mon Dashboard.pptx", "mimeType": "application/..." }
+```
+
+### 9.11 DB Proxy
+
+```
+POST {DB_PROXY_URL}
+Authorization: Bearer {JWT}
+
+{ "credentials": { "host": "...", "port": 5432, "user": "...", "password": "...", "database": "..." }, "sql": "SELECT * FROM table LIMIT 5" }
+
+Response: { "rows": [...] }
+```
+
+⚠️ The proxy currently accepts arbitrary SQL with no filtering. See Security section.
