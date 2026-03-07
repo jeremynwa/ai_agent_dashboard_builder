@@ -121,8 +121,9 @@ const translations = {
     exportPptx: 'Export PPTX',
     exportPdf: 'Export PDF',
     exporting: 'Exporting...',
-    landingTitle: 'Have you started building an App?',
+    landingTitle: 'Welcome to Edouard AI',
     landingSubtitle: 'What would you like to do?',
+    appHubTitle: 'Have you started building an App?',
     landingBuild: 'NO, I don\'t have an APP',
     landingBuildDesc: 'Describe your idea. AI builds it for you.',
     landingSubmit: 'YES, I have an APP',
@@ -346,8 +347,9 @@ const translations = {
     exportPptx: 'Export PPTX',
     exportPdf: 'Export PDF',
     exporting: 'Export en cours...',
-    landingTitle: 'Avez-vous commencé à développer une App ?',
+    landingTitle: 'Bienvenue sur Edouard AI',
     landingSubtitle: 'Que souhaitez-vous faire ?',
+    appHubTitle: 'Avez-vous commencé à développer une App ?',
     landingBuild: "NON, je n'ai pas d'APP",
     landingBuildDesc: "Décrivez votre idée. L'IA la construit pour vous.",
     landingSubmit: "OUI, j'ai une APP",
@@ -1667,7 +1669,7 @@ function Factory() {
         {appView === 'app-hub' && (
           <div style={styles.landingContainer}>
             <div style={styles.heroSection}>
-              <h1 style={styles.title}>{t('landingTitle')}</h1>
+              <h1 style={styles.title}>{t('appHubTitle')}</h1>
               <div style={{ width: '52px', height: '3px', background: SK.ruby, margin: '12px auto 0' }} />
             </div>
 
