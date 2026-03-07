@@ -18,6 +18,8 @@ import DeployForm from './components/DeployForm';
 import MyApps from './components/MyApps';
 import ClarificationChat from './components/ClarificationChat';
 import ReviewResearch from './components/ReviewResearch';
+import AutomationChat from './components/AutomationChat';
+import AutomationBuilder from './components/AutomationBuilder';
 
 // Configure WebContainer API key at module level (MUST be before any .boot() call)
 const _wcClientId = import.meta.env.VITE_WEBCONTAINER_CLIENT_ID;
@@ -183,6 +185,30 @@ const translations = {
     appTypeOtherDesc: 'Custom app from description',
     landingResearch: 'I want to ANALYZE reviews',
     landingResearchDesc: 'Scrape & score Google Maps reviews with AI.',
+    // Landing top-level
+    landingApp: 'I want to work on an APP',
+    landingAppDesc: 'Build, upload, review, or deploy a web application.',
+    landingAutomation: 'I want to AUTOMATE a process',
+    landingAutomationDesc: 'Describe your workflow. AI builds an automation pipeline.',
+    // Automation
+    automationTitle: 'Automation Builder',
+    automationSubtitle: 'Describe the process you want to automate. AI will search for existing templates or create one from scratch.',
+    automationPromptPlaceholder: 'Describe the process you want to automate...',
+    automationGenerate: 'Generate Automation',
+    automationGenerating: 'Generating...',
+    automationSearching: 'Searching templates & generating workflow...',
+    automationGenerateError: 'Failed to generate automation',
+    automationSaveTemplate: 'Save as Template',
+    automationSave: 'Save',
+    automationTemplateName: 'Template name',
+    automationTemplateDesc: 'Short description',
+    automationTemplateTags: 'Tags (comma-separated)',
+    automationAddStep: 'Add Step',
+    automationNewStep: 'New step',
+    automationDeleteStep: 'Delete step',
+    automationStepDetail: 'Step details',
+    automationStepLabel: 'Label',
+    automationEmpty: 'No steps yet. Click "Add Step" to start.',
     'rr.title': 'Review Research',
     'rr.subtitle': 'Analyze customer reviews (Google Maps or your own data) with AI-powered scoring.',
     'rr.scopeTitle': 'Define your scope',
@@ -384,6 +410,30 @@ const translations = {
     appTypeOtherDesc: "App personnalisée sur description",
     landingResearch: 'Je veux ANALYSER des avis',
     landingResearchDesc: "Scrapez et notez des avis Google Maps avec l'IA.",
+    // Landing top-level
+    landingApp: 'Je veux travailler sur une APP',
+    landingAppDesc: 'Construire, uploader, réviser ou déployer une application web.',
+    landingAutomation: 'Je veux AUTOMATISER un processus',
+    landingAutomationDesc: "Décrivez votre workflow. L'IA construit un pipeline d'automatisation.",
+    // Automation
+    automationTitle: "Constructeur d'Automatisations",
+    automationSubtitle: "Décrivez le processus à automatiser. L'IA cherchera des templates existants ou en créera un de zéro.",
+    automationPromptPlaceholder: 'Décrivez le processus que vous voulez automatiser...',
+    automationGenerate: "Générer l'Automatisation",
+    automationGenerating: 'Génération...',
+    automationSearching: 'Recherche de templates & génération du workflow...',
+    automationGenerateError: "Échec de la génération de l'automatisation",
+    automationSaveTemplate: 'Sauvegarder comme Template',
+    automationSave: 'Sauvegarder',
+    automationTemplateName: 'Nom du template',
+    automationTemplateDesc: 'Description courte',
+    automationTemplateTags: 'Tags (séparés par des virgules)',
+    automationAddStep: 'Ajouter une étape',
+    automationNewStep: 'Nouvelle étape',
+    automationDeleteStep: "Supprimer l'étape",
+    automationStepDetail: "Détails de l'étape",
+    automationStepLabel: 'Libellé',
+    automationEmpty: 'Aucune étape. Cliquez sur "Ajouter une étape" pour commencer.',
     'rr.title': 'Review Research',
     'rr.subtitle': "Analysez les avis clients (Google Maps ou vos propres donnees) avec un scoring IA.",
     'rr.scopeTitle': 'Definir le perimetre',
@@ -676,7 +726,9 @@ function Factory() {
   const [selectedIndustry, setSelectedIndustry] = useState('');
   const [exportingFormat, setExportingFormat] = useState(null);
   // ---- New: Upload & Review + Deploy flow ----
-  const [appView, setAppView] = useState('landing'); // 'landing' | 'factory' | 'upload-review' | 'my-apps' | 'review-research'
+  const [appView, setAppView] = useState('landing'); // 'landing' | 'app-hub' | 'factory' | 'upload-review' | 'my-apps' | 'review-research' | 'automation'
+  const [automationData, setAutomationData] = useState(null);
+  const [automationLoading, setAutomationLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [uploadedCode, setUploadedCode] = useState(null); // { files, appName, stack }
   const [reviewResult, setReviewResult] = useState(null); // { score, issues, fixedFiles, approved }
@@ -1484,6 +1536,13 @@ function Factory() {
         </button>
 
         <button
+          style={{ ...styles.newAppButton, background: 'rgba(158, 22, 73, 0.08)', border: '1px solid rgba(158, 22, 73, 0.25)', color: SK.cranberry, marginTop: '6px' }}
+          onClick={() => { setAppView('automation'); setAutomationData(null); setSidebarOpen(false); }}
+        >
+          <span style={{ marginRight: '6px', fontSize: '14px' }}>Automations</span>
+        </button>
+
+        <button
           style={{ ...styles.newAppButton, background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.12)', color: SK.iceBlue, marginTop: '4px' }}
           onClick={() => { setAppView('my-apps'); setSidebarOpen(false); }}
         >
@@ -1551,11 +1610,9 @@ function Factory() {
       {/* ---- MAIN CONTENT ---- */}
       <main style={styles.main}>
 
-        {/* ---- LANDING VIEW ---- */}
+        {/* ---- LANDING VIEW (top-level: APP vs AUTOMATION) ---- */}
         {appView === 'landing' && (
-          <div
-            style={styles.landingContainer}
-          >
+          <div style={styles.landingContainer}>
             <div style={styles.heroSection}>
               <img src={logoSK} alt="Simon-Kucher Paris" style={{ width: 56, height: 56, borderRadius: 8, objectFit: 'contain', marginBottom: 12 }} />
               <h1 style={styles.title}>{t('landingTitle')}</h1>
@@ -1564,6 +1621,60 @@ function Factory() {
             </div>
 
             <div style={styles.landingCards}>
+              {/* Card 1: APP */}
+              <motion.div
+                style={styles.landingCard}
+                whileHover={{ borderColor: SK.ruby, boxShadow: '0 8px 32px rgba(200, 0, 65, 0.12)', y: -2 }}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.15 }}
+                onClick={() => setAppView('app-hub')}
+              >
+                <div style={styles.landingCardIcon}>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={SK.ruby} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                    <path d="M3 9h18" />
+                    <path d="M9 21V9" />
+                  </svg>
+                </div>
+                <h2 style={styles.landingCardTitle}>{t('landingApp')}</h2>
+                <p style={styles.landingCardDesc}>{t('landingAppDesc')}</p>
+              </motion.div>
+
+              {/* Card 2: AUTOMATION */}
+              <motion.div
+                style={{ ...styles.landingCard, borderColor: 'rgba(158, 22, 73, 0.3)' }}
+                whileHover={{ borderColor: SK.cranberry, boxShadow: '0 8px 32px rgba(158, 22, 73, 0.12)', y: -2 }}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.25 }}
+                onClick={() => { setAppView('automation'); setAutomationData(null); }}
+              >
+                <div style={{ ...styles.landingCardIcon, background: 'rgba(158, 22, 73, 0.08)' }}>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={SK.cranberry} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                  </svg>
+                </div>
+                <h2 style={{ ...styles.landingCardTitle, color: SK.cranberry }}>{t('landingAutomation')}</h2>
+                <p style={styles.landingCardDesc}>{t('landingAutomationDesc')}</p>
+              </motion.div>
+            </div>
+          </div>
+        )}
+
+        {/* ---- APP HUB VIEW (sub-landing: IDEA / APP / Review Research) ---- */}
+        {appView === 'app-hub' && (
+          <div style={styles.landingContainer}>
+            <div style={styles.heroSection}>
+              <img src={logoSK} alt="Simon-Kucher Paris" style={{ width: 56, height: 56, borderRadius: 8, objectFit: 'contain', marginBottom: 12 }} />
+              <h1 style={styles.title}>{t('landingTitle')}</h1>
+              <div style={{ width: '52px', height: '3px', background: SK.ruby, margin: '12px auto 0' }} />
+              <p style={{ ...styles.subtitle, marginTop: '16px' }}>{t('landingSubtitle')}</p>
+            </div>
+
+            <div style={{ ...styles.landingCards, flexWrap: 'wrap', justifyContent: 'center' }}>
+              {/* IDEA card */}
               <motion.div
                 style={styles.landingCard}
                 whileHover={{ borderColor: SK.ruby, boxShadow: '0 8px 32px rgba(200, 0, 65, 0.12)', y: -2 }}
@@ -1583,8 +1694,9 @@ function Factory() {
                 <p style={styles.landingCardDesc}>{t('landingBuildDesc')}</p>
               </motion.div>
 
+              {/* APP card */}
               <motion.div
-                style={{ ...styles.landingCard, borderColor: `rgba(109, 177, 199, 0.3)` }}
+                style={{ ...styles.landingCard, borderColor: 'rgba(109, 177, 199, 0.3)' }}
                 whileHover={{ borderColor: SK.aqua, boxShadow: '0 8px 32px rgba(109, 177, 199, 0.12)', y: -2 }}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -1601,19 +1713,36 @@ function Factory() {
                 <h2 style={{ ...styles.landingCardTitle, color: SK.aqua }}>{t('landingSubmit')}</h2>
                 <p style={styles.landingCardDesc}>{t('landingSubmitDesc')}</p>
               </motion.div>
-
             </div>
           </div>
         )}
 
+        {/* ---- AUTOMATION VIEW ---- */}
+        {appView === 'automation' && !automationData && (
+          <AutomationChat
+            onGenerated={setAutomationData}
+            loading={automationLoading}
+            setLoading={setAutomationLoading}
+            t={t}
+          />
+        )}
+        {appView === 'automation' && automationData && (
+          <AutomationBuilder
+            data={automationData}
+            setData={setAutomationData}
+            onBack={() => setAutomationData(null)}
+            t={t}
+          />
+        )}
+
         {/* ---- MY APPS VIEW ---- */}
         {appView === 'my-apps' && (
-          <MyApps onBack={() => setAppView('factory')} />
+          <MyApps onBack={() => setAppView('app-hub')} />
         )}
 
         {/* ---- REVIEW RESEARCH VIEW ---- */}
         {appView === 'review-research' && (
-          <ReviewResearch onBack={() => setAppView('landing')} t={t} />
+          <ReviewResearch onBack={() => setAppView('app-hub')} t={t} />
         )}
 
         {/* ---- UPLOAD & REVIEW VIEW ---- */}
