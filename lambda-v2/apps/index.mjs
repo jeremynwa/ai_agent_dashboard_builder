@@ -1,5 +1,5 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, QueryCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, QueryCommand, PutCommand, GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { authenticateRequest } from './auth.mjs';
 import { randomUUID } from 'crypto';
 
@@ -7,6 +7,7 @@ const ddb = DynamoDBDocumentClient.from(
   new DynamoDBClient({ region: process.env.MY_REGION || 'eu-north-1' })
 );
 const TABLE = process.env.APP_REGISTRY_TABLE || 'AppRegistry';
+const PREFS_TABLE = process.env.USER_PREFERENCES_TABLE || 'UserPreferences';
 
 const HEADERS = {
   'Content-Type': 'application/json',
@@ -26,16 +27,70 @@ export const handler = async (event) => {
   if (authError) return reply(statusCode, { error: authError });
 
   const method = event.requestContext?.http?.method;
+  const path = event.requestContext?.http?.path || '';
   const userId = user.sub;
 
   try {
+    // ============ /preferences endpoints ============
+    if (path.includes('/preferences')) {
+      if (method === 'GET') {
+        const result = await ddb.send(new GetCommand({
+          TableName: PREFS_TABLE,
+          Key: { userId },
+        }));
+        return reply(200, { preferences: result.Item || { userId } });
+
+      } else if (method === 'PUT') {
+        const body = JSON.parse(event.body || '{}');
+
+        // Build update expression dynamically from provided fields
+        const allowedFields = ['industry', 'language', 'chartPreferences', 'feedbackHistory', 'lastUsed'];
+        const updates = [];
+        const names = {};
+        const values = {};
+
+        for (const field of allowedFields) {
+          if (body[field] !== undefined) {
+            updates.push(`#${field} = :${field}`);
+            names[`#${field}`] = field;
+            values[`:${field}`] = body[field];
+          }
+        }
+
+        // Always increment generationCount if requested
+        if (body.incrementGeneration) {
+          updates.push('#generationCount = if_not_exists(#generationCount, :zero) + :one');
+          names['#generationCount'] = 'generationCount';
+          values[':zero'] = 0;
+          values[':one'] = 1;
+        }
+
+        if (updates.length === 0) {
+          return reply(400, { error: 'No fields to update' });
+        }
+
+        await ddb.send(new UpdateCommand({
+          TableName: PREFS_TABLE,
+          Key: { userId },
+          UpdateExpression: `SET ${updates.join(', ')}`,
+          ExpressionAttributeNames: names,
+          ExpressionAttributeValues: values,
+        }));
+        return reply(200, { success: true });
+
+      } else {
+        return reply(405, { error: 'Method not allowed' });
+      }
+    }
+
+    // ============ /apps endpoints ============
     if (method === 'GET') {
       // List all apps for the authenticated user, sorted by most recent
       const result = await ddb.send(new QueryCommand({
         TableName: TABLE,
         KeyConditionExpression: 'userId = :uid',
         ExpressionAttributeValues: { ':uid': userId },
-        ScanIndexForward: false, // Most recent first (requires GSI on createdAt for true sort — for now sort client-side)
+        ScanIndexForward: false,
       }));
 
       const apps = (result.Items || []).sort((a, b) =>

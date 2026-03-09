@@ -39,7 +39,7 @@ function trimDataToFit(allData, maxBytes) {
   return allData.slice(0, lo);
 }
 
-export async function generateApp(prompt, excelData = null, existingCode = null, dbContext = null, industry = null, { modelHint, cachedAnalysis, appType } = {}) {
+export async function generateApp(prompt, excelData = null, existingCode = null, dbContext = null, industry = null, { modelHint, cachedAnalysis, appType, userPreferences } = {}) {
   const headers = await authHeaders();
 
   // Send as many rows as possible for accurate local stats (computed in Lambda).
@@ -62,6 +62,7 @@ export async function generateApp(prompt, excelData = null, existingCode = null,
   if (modelHint) body.modelHint = modelHint;
   if (cachedAnalysis) body.cachedAnalysis = cachedAnalysis;
   if (appType && appType !== 'dashboard') body.appType = appType;
+  if (userPreferences) body.userPreferences = userPreferences;
   let res = await fetch(GENERATE_URL, {
     method: 'POST',
     headers,
@@ -85,6 +86,36 @@ export async function generateApp(prompt, excelData = null, existingCode = null,
     }
     if (res.status === 401) throw new Error('Session expirée. Reconnectez-vous.');
     throw new Error(errMsg || 'Generation failed');
+  }
+  return res.json();
+}
+
+// ============ PLAN DASHBOARD ============
+export async function planDashboard(prompt, excelData = null, dbContext = null, industry = null) {
+  const headers = await authHeaders();
+
+  let excelPayload = null;
+  if (excelData) {
+    const allData = excelData.fullData || excelData.data || [];
+    excelPayload = {
+      fileName: excelData.fileName,
+      headers: excelData.headers,
+      data: allData.slice(0, 5), // Only need a few rows for planning (schema understanding)
+      totalRows: excelData.totalRows,
+    };
+  }
+
+  const body = { prompt, modelHint: 'plan', excelData: excelPayload, dbContext };
+  if (industry) body.industry = industry;
+
+  const res = await fetch(GENERATE_URL, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    throw new Error(errBody.error || 'Planning failed');
   }
   return res.json();
 }
@@ -337,6 +368,33 @@ export async function saveApp(payload) {
     throw new Error(errBody.error || 'Failed to save app');
   }
   return res.json();
+}
+
+// ============ USER PREFERENCES (persistent memory) ============
+export async function getUserPreferences() {
+  try {
+    const headers = await authHeaders();
+    const res = await fetch(`${API_BASE}/preferences`, { headers });
+    if (!res.ok) return { preferences: {} };
+    return res.json();
+  } catch {
+    return { preferences: {} };
+  }
+}
+
+export async function saveUserPreferences(updates) {
+  try {
+    const headers = await authHeaders();
+    const res = await fetch(`${API_BASE}/preferences`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify(updates),
+    });
+    if (!res.ok) console.warn('Failed to save preferences');
+    return res.ok;
+  } catch {
+    return false;
+  }
 }
 
 // ============ AUTOMATION (templates + generation) ============

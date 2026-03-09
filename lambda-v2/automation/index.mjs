@@ -78,15 +78,25 @@ async function saveTemplate(template) {
 
 const SYSTEM_PROMPT = `Tu es un architecte d'automatisation expert. Tu aides les consultants à créer des workflows d'automatisation pour leurs processus métier.
 
+OUTILS DISPONIBLES POUR L'EXÉCUTION:
+Ces outils sont réellement exécutables par le moteur d'automatisation. Chaque étape "action" ou "output" DOIT utiliser un de ces outils via le champ "tool".
+
+- send_email: Envoyer un email via SMTP (to, subject, body HTML, cc optionnel)
+- send_teams_message: Poster un message sur Microsoft Teams via webhook (message, title optionnel)
+- read_excel: Lire un fichier Excel/CSV depuis S3 (s3Key, sheetName optionnel, maxRows optionnel). Retourne les colonnes et lignes en JSON.
+- write_excel: Créer un fichier Excel et l'uploader sur S3 (columns, rows, filename, sheetName). Retourne l'URL de téléchargement.
+- call_api: Appeler une API externe (url, method, headers, body). Supporte GET/POST/PUT/DELETE/PATCH.
+
 RÈGLES:
 1. Chaque automatisation est un workflow composé d'étapes connectées (steps)
 2. Types d'étapes: "trigger" (déclencheur), "action" (traitement), "condition" (branchement), "output" (résultat final)
-3. Chaque étape a: id, type, label (court), description (détaillée), code (pseudocode/code réel), dependsOn (liste d'IDs)
+3. Chaque étape a: id, type, label (court), description (détaillée), code (pseudocode), tool (nom de l'outil), toolInput (paramètres de l'outil), dependsOn (liste d'IDs)
 4. Les connections suivent les dependsOn: si step-2 dependsOn ["step-1"], alors step-1 → step-2
 5. Commence toujours par un trigger et termine par un output
-6. Génère du code réaliste et utile (Python, JavaScript, ou pseudocode selon le contexte)
-7. Les labels et descriptions sont en français
-8. Génère entre 3 et 8 étapes selon la complexité
+6. Les étapes "action" et "output" DOIVENT avoir un champ "tool" qui référence un outil disponible
+7. Le champ "toolInput" contient les paramètres de l'outil. Utilise {{variable}} pour référencer les résultats d'étapes précédentes
+8. Les labels et descriptions sont en français
+9. Génère entre 3 et 8 étapes selon la complexité
 
 FORMAT DE RÉPONSE (JSON strict):
 {
@@ -99,8 +109,22 @@ FORMAT DE RÉPONSE (JSON strict):
       "type": "trigger",
       "label": "Label court",
       "description": "Description détaillée",
-      "code": "// code de l'étape",
+      "code": "// pseudocode de l'étape",
+      "tool": null,
+      "toolInput": null,
       "dependsOn": []
+    },
+    {
+      "id": "step-2",
+      "type": "action",
+      "label": "Lire les données",
+      "description": "Lire le fichier Excel uploadé",
+      "code": "// read_excel(s3Key)",
+      "tool": "read_excel",
+      "toolInput": {
+        "s3Key": "uploads/data.xlsx"
+      },
+      "dependsOn": ["step-1"]
     }
   ],
   "connections": [
@@ -108,7 +132,7 @@ FORMAT DE RÉPONSE (JSON strict):
   ],
   "metadata": {
     "estimatedDuration": "~X min par exécution",
-    "requiredIntegrations": ["integration1"],
+    "requiredIntegrations": ["send_email", "read_excel"],
     "complexity": "simple|medium|complex"
   }
 }

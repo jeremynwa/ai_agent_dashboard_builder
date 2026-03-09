@@ -315,6 +315,19 @@ Resources:
         - AttributeName: appId
           KeyType: RANGE
 
+  # ============ DYNAMODB — User Preferences ============
+  UserPreferencesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: UserPreferences
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+
   # ============ INTAKE (AI routing) ============
   IntakeFunction:
     Type: AWS::Serverless::Function
@@ -508,6 +521,7 @@ Resources:
       Environment:
         Variables:
           APP_REGISTRY_TABLE: AppRegistry
+          USER_PREFERENCES_TABLE: UserPreferences
       Events:
         Get:
           Type: HttpApi
@@ -521,9 +535,23 @@ Resources:
             ApiId: !Ref AppFactoryApi
             Path: /apps
             Method: POST
+        GetPreferences:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref AppFactoryApi
+            Path: /preferences
+            Method: GET
+        PutPreferences:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref AppFactoryApi
+            Path: /preferences
+            Method: PUT
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref AppRegistryTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UserPreferencesTable
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
@@ -574,6 +602,54 @@ Resources:
       Policies:
         - S3CrudPolicy:
             BucketName: !Ref PublishBucket
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: false
+        Target: es2022
+        Format: esm
+        OutExtension:
+          - .js=.mjs
+        EntryPoints:
+          - index.mjs
+        External:
+          - '@aws-sdk/*'
+        Banner:
+          - js=import { createRequire } from 'module'; const require = createRequire(import.meta.url);
+
+  # ============ AUTOMATION EXECUTE (tool-based workflow runner) ============
+  AutomationExecuteFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: app-factory-automation-execute
+      Handler: index.handler
+      CodeUri: automation-execute/
+      Timeout: 300
+      MemorySize: 1024
+      Environment:
+        Variables:
+          ANTHROPIC_API_KEY: !Ref AnthropicApiKey
+          AUTOMATION_EXECUTE_MODEL: "claude-sonnet-4-20250514"
+          SECRETS_ID: "app-factory/automation-secrets"
+      FunctionUrlConfig:
+        AuthType: NONE
+        Cors:
+          AllowOrigins:
+            - '*'
+          AllowHeaders:
+            - Content-Type
+            - Authorization
+          AllowMethods:
+            - GET
+            - POST
+            - OPTIONS
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref PublishBucket
+        - Statement:
+            - Effect: Allow
+              Action: secretsmanager:GetSecretValue
+              Resource: !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:app-factory/automation-secrets-*'
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
@@ -658,6 +734,9 @@ Outputs:
   AutomationUrl:
     Description: Automation API base URL
     Value: !Sub 'https://${AppFactoryApi}.execute-api.${AWS::Region}.amazonaws.com/prod/automation'
+  AutomationExecuteUrl:
+    Description: Automation Execute Function URL
+    Value: !GetAtt AutomationExecuteFunctionUrl.FunctionUrl
   CognitoUserPoolId:
     Description: Cognito User Pool ID (for frontend .env)
     Value: !Ref CognitoUserPool

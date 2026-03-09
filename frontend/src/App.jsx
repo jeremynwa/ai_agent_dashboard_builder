@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, createContext, useContext } from 'r
 import { motion, AnimatePresence } from 'motion/react';
 import { WebContainer, configureAPIKey } from '@webcontainer/api';
 import { baseFiles } from './services/files-template';
-import { generateApp, visionAnalyze, publishApp, exportApp, reviewCode, estimateCostQuick, computeActualCost, clarifyPrompt, API_BASE, DB_PROXY_URL } from './services/api';
+import { generateApp, visionAnalyze, publishApp, exportApp, reviewCode, estimateCostQuick, computeActualCost, clarifyPrompt, planDashboard, getUserPreferences, saveUserPreferences, API_BASE, DB_PROXY_URL } from './services/api';
 import { exportToZip } from './services/export';
 import { SK } from './services/sk-theme';
 import FileUpload from './components/FileUpload';
@@ -20,6 +20,7 @@ import ClarificationChat from './components/ClarificationChat';
 import ReviewResearch from './components/ReviewResearch';
 import AutomationChat from './components/AutomationChat';
 import AutomationBuilder from './components/AutomationBuilder';
+import DashboardPlan from './components/DashboardPlan';
 
 // Configure WebContainer API key at module level (MUST be before any .boot() call)
 const _wcClientId = import.meta.env.VITE_WEBCONTAINER_CLIENT_ID;
@@ -726,6 +727,7 @@ function Factory() {
   const [currentFiles, setCurrentFiles] = useState({});
   const [showDataSource, setShowDataSource] = useState(false);
   const [selectedIndustry, setSelectedIndustry] = useState('');
+  const [userPreferences, setUserPreferences] = useState(null);
   const [exportingFormat, setExportingFormat] = useState(null);
   // ---- New: Upload & Review + Deploy flow ----
   const [appView, setAppView] = useState('landing'); // 'landing' | 'app-hub' | 'factory' | 'upload-review' | 'my-apps' | 'review-research' | 'automation'
@@ -742,6 +744,8 @@ function Factory() {
   const [actualCost, setActualCost] = useState(null); // { total, breakdown, currency, totals } after generation
   const [clarifyState, setClarifyState] = useState(null); // null | 'loading' | { questions: [...] }
   const [appType, setAppType] = useState(null); // null | 'dashboard' | 'scraping' | 'newsletter' | 'other'
+  const [dashboardPlan, setDashboardPlan] = useState(null); // { pages, filters, ignoredColumns, summary }
+  const [planLoading, setPlanLoading] = useState(false);
   const [uploadAppType, setUploadAppType] = useState(null); // app type selected in upload & review flow
   const webcontainerRef = useRef(null);
   const bootedRef = useRef(false);
@@ -793,6 +797,16 @@ function Factory() {
       console.warn('Failed to save apps to localStorage:', e);
     }
   }, [savedApps]);
+
+  // Load user preferences on mount
+  useEffect(() => {
+    getUserPreferences().then(({ preferences }) => {
+      setUserPreferences(preferences);
+      if (preferences?.industry && !selectedIndustry) {
+        setSelectedIndustry(preferences.industry);
+      }
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (bootedRef.current) return;
@@ -1032,6 +1046,7 @@ function Factory() {
         const result = await generateApp(userPrompt, excelData, currentCode, dbContext, selectedIndustry || null, {
           cachedAnalysis: hasCachedAnalysis ? cachedAnalysisRef.current : undefined,
           appType: effectiveAppType,
+          userPreferences: userPreferences || undefined,
         });
         currentCode = result.files;
         if (result._usage?.phases) allUsagePhases.push(...result._usage.phases);
@@ -1102,6 +1117,15 @@ function Factory() {
         }
 
         setCurrentFiles(currentCode);
+
+        // Save user preferences after successful generation (non-blocking)
+        saveUserPreferences({
+          industry: selectedIndustry || undefined,
+          language: lang,
+          lastUsed: new Date().toISOString(),
+          incrementGeneration: true,
+        }).catch(() => {});
+
         return { success: true, url: latestUrl, files: currentCode, _usagePhases: allUsagePhases };
       }
 
@@ -1152,6 +1176,48 @@ function Factory() {
     }
   };
 
+  // Plan phase: request a dashboard plan from Haiku, show to user for validation
+  const requestPlan = async (finalPrompt) => {
+    // Only plan for dashboards with data
+    const isDashboard = !appType || appType === 'dashboard';
+    const hasData = !!(excelData || dbData);
+    if (!isDashboard || !hasData) {
+      startGeneration(finalPrompt);
+      return;
+    }
+
+    setPlanLoading(true);
+    try {
+      const dbContext = dbData ? { type: dbData.type, schema: dbData.schema } : null;
+      const result = await planDashboard(finalPrompt, excelData, dbContext, selectedIndustry || null);
+      if (result.plan) {
+        setDashboardPlan({ ...result.plan, _prompt: finalPrompt });
+        setPlanLoading(false);
+        return; // wait for user to confirm plan
+      }
+    } catch (err) {
+      console.warn('[plan] failed, proceeding to generation:', err.message);
+    }
+    setPlanLoading(false);
+    startGeneration(finalPrompt);
+  };
+
+  // When user confirms the plan
+  const handleConfirmPlan = () => {
+    const plan = dashboardPlan;
+    setDashboardPlan(null);
+    // Enrich prompt with the validated plan
+    const planContext = `\n\n## PLAN VALIDE PAR L'UTILISATEUR (suivre ce plan EXACTEMENT)\n${JSON.stringify(plan, null, 2)}`;
+    startGeneration(plan._prompt + planContext);
+  };
+
+  // When user skips the plan
+  const handleSkipPlan = () => {
+    const planPrompt = dashboardPlan?._prompt || prompt;
+    setDashboardPlan(null);
+    startGeneration(planPrompt);
+  };
+
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
     if (appType !== 'scraping' && appType !== 'newsletter' && !webcontainerRef.current) return;
@@ -1166,13 +1232,13 @@ function Factory() {
         setClarifyState({ questions: result.questions });
         return; // wait for user to answer questions
       }
-      console.log('[clarify] no questions returned, skipping to generation');
+      console.log('[clarify] no questions returned, skipping to plan/generation');
     } catch (err) {
       console.error('[clarify] failed:', err);
       // clarify failed — proceed directly
     }
     setClarifyState(null);
-    startGeneration(prompt);
+    requestPlan(prompt);
   };
 
   const restoreApp = async (app) => {
@@ -2270,10 +2336,42 @@ function Factory() {
                     <ClarificationChat
                       questions={clarifyState.questions}
                       originalPrompt={prompt}
-                      onComplete={(enrichedPrompt) => startGeneration(enrichedPrompt)}
-                      onSkip={() => { setClarifyState(null); startGeneration(prompt); }}
+                      onComplete={(enrichedPrompt) => { setClarifyState(null); requestPlan(enrichedPrompt); }}
+                      onSkip={() => { setClarifyState(null); requestPlan(prompt); }}
                       t={t}
                     />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Dashboard Plan — shown after clarification, before generation */}
+              <AnimatePresence>
+                {dashboardPlan && !isLoading && (
+                  <motion.div
+                    key="plan"
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    transition={{ duration: 0.3 }}
+                    style={{ marginBottom: '32px', display: 'flex', justifyContent: 'center' }}
+                  >
+                    <DashboardPlan
+                      plan={dashboardPlan}
+                      onConfirm={handleConfirmPlan}
+                      onSkip={handleSkipPlan}
+                      t={t}
+                    />
+                  </motion.div>
+                )}
+                {planLoading && (
+                  <motion.div
+                    key="plan-loading"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    style={{ marginBottom: '24px', textAlign: 'center', color: SK.textSecondary, fontSize: '14px' }}
+                  >
+                    {t('planLoading') || 'Planification du dashboard...'}
                   </motion.div>
                 )}
               </AnimatePresence>

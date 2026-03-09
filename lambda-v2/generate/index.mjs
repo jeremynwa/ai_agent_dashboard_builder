@@ -516,6 +516,113 @@ async function loadRules() {
   return rules;
 }
 
+// ============================================================================
+// Parallel Review — 4 specialized Haiku agents review in parallel, then merge
+// ============================================================================
+const REVIEW_AGENTS = [
+  {
+    label: 'review-security',
+    system: `Tu es un expert en securite web. Analyse ce code React et identifie UNIQUEMENT les problemes de securite.
+Cherche: XSS (dangerouslySetInnerHTML), injection, eval/Function, secrets/cles API hardcodes, window.location manipulation non securisee.
+Retourne un JSON: { "issues": [{ "severity": "critical|high|medium", "rule": "SEC-XXX", "message": "description", "line_hint": "code concerne", "confidence": 0-100 }] }
+Si aucun probleme: { "issues": [] }. Sois precis, pas de faux positifs.`,
+  },
+  {
+    label: 'review-perf',
+    system: `Tu es un expert React performance. Analyse ce code et identifie UNIQUEMENT les problemes de performance.
+Cherche: calculs couteux dans le render (sans useMemo/useCallback), re-renders inutiles, inline objects/arrays dans JSX (creent de nouvelles refs a chaque render), large lists sans virtualisation, useEffect sans deps array.
+Retourne un JSON: { "issues": [{ "severity": "high|medium|low", "rule": "PERF-XXX", "message": "description", "line_hint": "code concerne", "confidence": 0-100 }] }
+Si aucun probleme: { "issues": [] }. Ignore les petites optimisations non impactantes.`,
+  },
+  {
+    label: 'review-quality',
+    system: `Tu es un expert code quality React. Analyse ce code et identifie UNIQUEMENT les problemes de qualite.
+Cherche: code duplique (DRY), error handling manquant, nommage peu clair, composants trop gros (>300 lignes sans decoupe), logique metier melee au JSX, imports inutilises.
+Retourne un JSON: { "issues": [{ "severity": "high|medium|low", "rule": "QUAL-XXX", "message": "description", "line_hint": "code concerne", "confidence": 0-100 }] }
+Si aucun probleme: { "issues": [] }. Ne signale que les vrais problemes, pas les preferences stylistiques.`,
+  },
+  {
+    label: 'review-dataviz',
+    system: `Tu es un expert data visualization et Recharts. Analyse ce code React dashboard et identifie UNIQUEMENT les problemes lies aux donnees et graphiques.
+Cherche: donnees inventees/hardcodees (nombres en dur au lieu de DATA.reduce), IDs bruts sur axes (order_id, customer_id), PieChart sans <Cell fill={COLORS}>, PieChart sans <Legend>, tableaux non agreges (lignes brutes au lieu de Top 10), Points Cles (takeaways) avec chiffres en dur au lieu de template literals, filtres <select> sans style background sombre, ResponsiveContainer manquant, gradients avec IDs dupliques.
+Retourne un JSON: { "issues": [{ "severity": "critical|high|medium", "rule": "VIZ-XXX", "message": "description", "line_hint": "code concerne", "confidence": 0-100 }] }
+Si aucun probleme: { "issues": [] }. Ce sont des dashboards sur fond sombre (#0B1120) — verifie que les couleurs sont lisibles.`,
+  },
+];
+
+const HAIKU_MODEL = 'claude-haiku-4-5-20251001';
+
+async function parallelReview(appCode) {
+  console.log('Running parallel review with 4 Haiku agents...');
+  const startMs = Date.now();
+
+  const results = await Promise.all(
+    REVIEW_AGENTS.map(agent =>
+      callClaude({
+        system: agent.system,
+        messages: [{ role: 'user', content: `Analyse ce code React:\n\n${appCode}` }],
+        maxTokens: 4096,
+        model: HAIKU_MODEL,
+        temperature: 0,
+        label: agent.label,
+      }).then(resp => {
+        const text = extractResponseText(resp);
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) return { issues: [] };
+        try { return JSON.parse(jsonMatch[0]); } catch { return { issues: [] }; }
+      }).catch(err => {
+        console.warn(`Review agent ${agent.label} failed:`, err.message);
+        return { issues: [] };
+      })
+    )
+  );
+
+  // Merge results: collect all issues, dedupe by similar message, filter by confidence
+  const allIssues = [];
+  for (let i = 0; i < results.length; i++) {
+    const agentLabel = REVIEW_AGENTS[i].label;
+    for (const issue of (results[i].issues || [])) {
+      allIssues.push({ ...issue, agent: agentLabel });
+    }
+  }
+
+  // Keep only issues with confidence >= 80
+  const confidentIssues = allIssues.filter(i => (i.confidence || 0) >= 80);
+
+  // Dedupe: if two issues have very similar messages (same rule prefix), keep higher confidence
+  const deduped = [];
+  const seen = new Set();
+  for (const issue of confidentIssues.sort((a, b) => (b.confidence || 0) - (a.confidence || 0))) {
+    const key = `${issue.rule || ''}-${(issue.message || '').slice(0, 50)}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      deduped.push(issue);
+    }
+  }
+
+  // Score: start at 100, subtract by severity
+  let score = 100;
+  for (const issue of deduped) {
+    if (issue.severity === 'critical') score -= 15;
+    else if (issue.severity === 'high') score -= 8;
+    else if (issue.severity === 'medium') score -= 3;
+    else score -= 1;
+  }
+  score = Math.max(0, Math.min(100, score));
+
+  const elapsedMs = Date.now() - startMs;
+  console.log(JSON.stringify({
+    event: 'parallel_review_complete',
+    total_issues: allIssues.length,
+    confident_issues: confidentIssues.length,
+    deduped_issues: deduped.length,
+    score,
+    elapsed_ms: elapsedMs,
+  }));
+
+  return { issues: deduped, score, agentCount: 4 };
+}
+
 export const handler = async (event) => {
   if (event.requestContext?.http?.method === 'OPTIONS') return reply(200, {});
 
@@ -527,30 +634,50 @@ export const handler = async (event) => {
 
   try {
     const body = JSON.parse(event.body || '{}');
-    const { prompt, useRules, excelData, existingCode, existingFiles, dbContext, screenshot, industry, modelHint, cachedAnalysis, appType } = body;
+    const { prompt, useRules, excelData, existingCode, existingFiles, dbContext, screenshot, industry, modelHint, cachedAnalysis, appType, userPreferences } = body;
     const existingApp = existingCode || existingFiles || null;
 
-    // ============ REVIEW (skill-based) ============
-    if (modelHint === 'review' && USE_BETA_API && REVIEWER_SKILL_ID && existingApp) {
-      console.log('Running skill-based review...');
+    // ============ REVIEW (parallel multi-agent + skill-based fix) ============
+    if (modelHint === 'review' && existingApp) {
       const appCode = existingApp['src/App.jsx'] || '';
 
-      const reviewMessage = await callClaude({
-        system: 'Use the dashboard-reviewer skill. Run check_code.py on the provided code, then review for visual quality using references/checklist.md. Fix all errors and return the complete fixed code as JSON: { "files": { "src/App.jsx": "..." } }. Return JSON in your TEXT response, NOT as a file.',
-        messages: [{ role: 'user', content: `Review and fix this React dashboard code:\n\n${appCode}` }],
-        skills: [REVIEWER_SKILL_ID],
-        maxTokens: 16384,
-        model: REVIEW_MODEL,
-        label: 'review',
-      });
+      // Phase 1: Parallel diagnostic with 4 Haiku agents (fast, cheap, specialized)
+      const reviewResult = await parallelReview(appCode);
 
-      const reviewContent = extractResponseText(reviewMessage);
-      const reviewJsonMatch = reviewContent.match(/\{[\s\S]*\}/);
-      if (!reviewJsonMatch) throw new Error('No JSON from reviewer');
-      const reviewParsed = JSON.parse(reviewJsonMatch[0]);
-      for (const [fp, code] of Object.entries(reviewParsed.files)) reviewParsed.files[fp] = fixJsxCode(code);
-      reviewParsed._usage = getAccumulatedUsage();
-      return reply(200, reviewParsed);
+      // Phase 2: If critical/high issues found AND skill available → fix code with Sonnet
+      const hasCritical = reviewResult.issues.some(i => i.severity === 'critical' || i.severity === 'high');
+      let fixedFiles = null;
+
+      if (hasCritical && USE_BETA_API && REVIEWER_SKILL_ID) {
+        console.log(`Found ${reviewResult.issues.length} issues (${reviewResult.issues.filter(i=>i.severity==='critical').length} critical). Running skill-based fix...`);
+        const issuesSummary = reviewResult.issues
+          .map(i => `[${i.severity}] ${i.rule}: ${i.message}`)
+          .join('\n');
+
+        const reviewMessage = await callClaude({
+          system: 'Use the dashboard-reviewer skill. Run check_code.py on the provided code, then review for visual quality using references/checklist.md. Fix all errors and return the complete fixed code as JSON: { "files": { "src/App.jsx": "..." } }. Return JSON in your TEXT response, NOT as a file.',
+          messages: [{ role: 'user', content: `Review and fix this React dashboard code. Focus on these issues found by automated review:\n\n${issuesSummary}\n\nCODE:\n${appCode}` }],
+          skills: [REVIEWER_SKILL_ID],
+          maxTokens: 16384,
+          model: REVIEW_MODEL,
+          label: 'review-fix',
+        });
+
+        const reviewContent = extractResponseText(reviewMessage);
+        const reviewJsonMatch = reviewContent.match(/\{[\s\S]*\}/);
+        if (reviewJsonMatch) {
+          const reviewParsed = JSON.parse(reviewJsonMatch[0]);
+          for (const [fp, code] of Object.entries(reviewParsed.files)) reviewParsed.files[fp] = fixJsxCode(code);
+          fixedFiles = reviewParsed.files;
+        }
+      }
+
+      const result = {
+        files: fixedFiles || existingApp,
+        _review: { issues: reviewResult.issues, score: reviewResult.score, agentCount: reviewResult.agentCount },
+        _usage: getAccumulatedUsage(),
+      };
+      return reply(200, result);
     }
 
     // ============ VISION ============
@@ -608,6 +735,67 @@ export const handler = async (event) => {
       for (const [fp, code] of Object.entries(parsed.files)) parsed.files[fp] = fixJsxCode(code);
       parsed._usage = getAccumulatedUsage();
       return reply(200, parsed);
+    }
+
+    // ============ PLAN (pre-generation planning phase) ============
+    if (modelHint === 'plan') {
+      if (!prompt) return reply(400, { error: 'Prompt is required' });
+
+      // Build a summary of available data for the planner
+      let dataSummary = '';
+      if (excelData) {
+        const headers = excelData.headers || (excelData.data?.length > 0 ? Object.keys(excelData.data[0]) : []);
+        const sampleRow = excelData.data?.[0] || {};
+        dataSummary = `\nDonnees disponibles:\n- Fichier: ${excelData.fileName || 'data'}\n- Colonnes (${headers.length}): ${headers.join(', ')}\n- Total: ${excelData.totalRows || excelData.data?.length || 0} lignes\n- Exemple 1ere ligne: ${JSON.stringify(sampleRow)}`;
+      } else if (dbContext) {
+        const tables = Object.entries(dbContext.schema).map(([t, info]) => `${t} (${info.rowCount} lignes, colonnes: ${info.columns.map(c => c.name).join(', ')})`);
+        dataSummary = `\nBase de donnees (${dbContext.type}):\n${tables.join('\n')}`;
+      }
+
+      const planPrompt = `Tu es un architecte de dashboards data. L'utilisateur veut creer un dashboard.
+Analyse sa demande et les donnees disponibles, puis propose un plan de dashboard structure.
+
+REGLES:
+- 3-4 pages max (Vue d'ensemble obligatoire, + 1-2 pages d'analyse, + Parametres)
+- 4 KPIs max sur la page Vue d'ensemble
+- Chaque KPI doit indiquer la colonne source et le calcul (sum, count, avg, etc.)
+- Chaque graphique doit indiquer le type (AreaChart, BarChart, PieChart, LineChart), les colonnes x/y, et le titre
+- Les filtres doivent indiquer la colonne source
+- Lister les colonnes ignorees (IDs, colonnes techniques)
+- JAMAIS d'identifiants bruts (order_id, customer_id) dans les KPIs ou graphiques
+- Si les donnees n'ont pas de colonne temporelle, pas d'AreaChart/LineChart temporel
+- PieChart max 6 categories
+
+Retourne UNIQUEMENT un JSON valide:
+{
+  "pages": [
+    {
+      "name": "Vue d'ensemble",
+      "kpis": [{ "label": "Nom", "column": "col", "calculation": "sum|count|avg|max", "format": "currency|number|percent" }],
+      "charts": [{ "type": "AreaChart|BarChart|PieChart|LineChart", "x": "col", "y": "col", "title": "Titre" }],
+      "hasInsights": true
+    }
+  ],
+  "filters": [{ "column": "col", "label": "Nom du filtre" }],
+  "ignoredColumns": ["order_id", "customer_id"],
+  "summary": "Description en 1-2 phrases du plan"
+}`;
+
+      const planMessage = await callClaude({
+        system: planPrompt,
+        messages: [{ role: 'user', content: `Dashboard demande: ${prompt}${dataSummary}` }],
+        maxTokens: 4096,
+        model: HAIKU_MODEL,
+        temperature: 0,
+        label: 'plan',
+      });
+
+      const planText = extractResponseText(planMessage);
+      const planJsonMatch = planText.match(/\{[\s\S]*\}/);
+      if (!planJsonMatch) throw new Error('No JSON from planner');
+      const plan = JSON.parse(planJsonMatch[0]);
+      plan._usage = getAccumulatedUsage();
+      return reply(200, { plan });
     }
 
     // ============ GENERATE / REFINE ============
@@ -832,17 +1020,32 @@ CRITICAL OUTPUT FORMAT: Return your final answer as a JSON object directly in yo
       else if (excelData) systemPrompt += DATA_INJECTION_PROMPT;
     }
 
+    // Build user preferences context (if available)
+    let prefsContext = '';
+    if (userPreferences && Object.keys(userPreferences).length > 1) { // >1 because userId is always there
+      const parts = [];
+      if (userPreferences.chartPreferences) parts.push(`Chart preferences: ${userPreferences.chartPreferences}`);
+      if (userPreferences.feedbackHistory && userPreferences.feedbackHistory.length > 0) {
+        const recentFeedback = userPreferences.feedbackHistory.slice(-5);
+        parts.push(`Previous feedback: ${recentFeedback.join('; ')}`);
+      }
+      if (userPreferences.language) parts.push(`Language: ${userPreferences.language}`);
+      if (parts.length > 0) {
+        prefsContext = `\n\n## User Context (from previous sessions)\n${parts.join('\n')}`;
+      }
+    }
+
     let userMessage = '';
     if (existingApp) {
       userMessage = `Code actuel:\n\n`;
       for (const [p, c] of Object.entries(existingApp)) userMessage += `--- ${p} ---\n${c}\n\n`;
-      userMessage += `\nMODIFICATION: ${prompt}${rulesContext}${dataContext}${analysisContext}\n\nRetourne le JSON complet.`;
+      userMessage += `\nMODIFICATION: ${prompt}${rulesContext}${dataContext}${analysisContext}${prefsContext}\n\nRetourne le JSON complet.`;
     } else if (effectiveAppType === 'scraping') {
-      userMessage = `Genere une application Python de scraping pour: ${prompt}${rulesContext}`;
+      userMessage = `Genere une application Python de scraping pour: ${prompt}${rulesContext}${prefsContext}`;
     } else if (effectiveAppType === 'newsletter') {
-      userMessage = `Genere une application Python de newsletter automatisee pour: ${prompt}${rulesContext}`;
+      userMessage = `Genere une application Python de newsletter automatisee pour: ${prompt}${rulesContext}${prefsContext}`;
     } else {
-      userMessage = `Genere une app React dashboard pour: ${prompt}${rulesContext}${dataContext}${analysisContext}`;
+      userMessage = `Genere une app React dashboard pour: ${prompt}${rulesContext}${dataContext}${analysisContext}${prefsContext}`;
     }
 
     // Determine model: review/vision use their own model, else default Sonnet
