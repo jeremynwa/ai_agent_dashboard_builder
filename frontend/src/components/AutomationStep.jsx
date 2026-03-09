@@ -10,11 +10,11 @@ const TYPE_STYLES = {
   output:  { color: SK.ruby, bg: 'rgba(200, 0, 65, 0.06)', icon: '📤', badge: null },
 };
 
-// Card dimensions (square)
-const NODE_WIDTH = 110;
-const NODE_HEIGHT = 110;
-const LABEL_HEIGHT = 40;   // space below card for label
-const PORT_SIZE = 10;
+// Card dimensions (square, compact to fit horizontally)
+const NODE_WIDTH = 84;
+const NODE_HEIGHT = 84;
+const LABEL_HEIGHT = 36;   // space below card for label
+const PORT_SIZE = 8;
 
 export { NODE_WIDTH, NODE_HEIGHT, LABEL_HEIGHT, PORT_SIZE };
 
@@ -46,7 +46,7 @@ export default function AutomationStep({ step, isSelected, onSelect, position, e
   const toolIcon = step.tool ? TOOL_ICONS[step.tool] : null;
   // Show tool icon if available, otherwise type icon
   const displayIcon = toolIcon || ts.icon;
-  const displayIconSize = toolIcon ? 34 : 30;
+  const displayIconSize = toolIcon ? 28 : 24;
 
   return (
     <div
@@ -66,7 +66,7 @@ export default function AutomationStep({ step, isSelected, onSelect, position, e
         height: NODE_HEIGHT,
         background: SK.white,
         border: `1.5px solid ${execStyle?.borderColor || (isSelected ? ts.color : '#E2E8F0')}`,
-        borderRadius: 14,
+        borderRadius: 12,
         boxShadow: execStyle?.shadow || (isSelected
           ? `0 0 0 3px ${ts.color}20, ${SK.shadowMd}`
           : '0 1px 4px rgba(50, 63, 72, 0.06), 0 4px 12px rgba(50, 63, 72, 0.04)'),
@@ -93,16 +93,16 @@ export default function AutomationStep({ step, isSelected, onSelect, position, e
         {ts.badge && (
           <div style={{
             position: 'absolute',
-            top: -6,
-            left: -6,
-            width: 22,
-            height: 22,
+            top: -5,
+            left: -5,
+            width: 18,
+            height: 18,
             borderRadius: '50%',
             background: ts.color,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: 11,
+            fontSize: 9,
             boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
           }}>
             {ts.badge}
@@ -127,12 +127,12 @@ export default function AutomationStep({ step, isSelected, onSelect, position, e
           </div>
         )}
 
-        {/* Input port (top center) */}
+        {/* Input port (left center) */}
         {step.type !== 'trigger' && (
           <div style={{
             position: 'absolute',
-            top: -(PORT_SIZE / 2) - 1,
-            left: NODE_WIDTH / 2 - PORT_SIZE / 2,
+            left: -(PORT_SIZE / 2) - 1,
+            top: NODE_HEIGHT / 2 - PORT_SIZE / 2,
             width: PORT_SIZE,
             height: PORT_SIZE,
             borderRadius: '50%',
@@ -142,14 +142,27 @@ export default function AutomationStep({ step, isSelected, onSelect, position, e
           }} />
         )}
 
-        {/* Output port (bottom center) — hidden, line connects below label */}
+        {/* Output port (right center) */}
+        {step.type !== 'output' && (
+          <div style={{
+            position: 'absolute',
+            right: -(PORT_SIZE / 2) - 1,
+            top: NODE_HEIGHT / 2 - PORT_SIZE / 2,
+            width: PORT_SIZE,
+            height: PORT_SIZE,
+            borderRadius: '50%',
+            background: execStyle?.borderColor || '#CBD5DB',
+            border: `2px solid ${execStyle?.borderColor || '#CBD5DB'}`,
+            transition: 'background 0.2s, border-color 0.2s',
+          }} />
+        )}
 
         {/* Execution status pulse */}
         {executionStatus === 'running' && (
           <div style={{
             position: 'absolute',
             inset: -4,
-            borderRadius: 18,
+            borderRadius: 16,
             border: `2px solid ${EXEC_STATUS_STYLES.running.borderColor}`,
             animation: 'pulse-ring 1.5s ease-in-out infinite',
             pointerEvents: 'none',
@@ -159,9 +172,9 @@ export default function AutomationStep({ step, isSelected, onSelect, position, e
 
       {/* Label below the card */}
       <div style={{
-        marginTop: 8,
+        marginTop: 6,
         textAlign: 'center',
-        fontSize: 12,
+        fontSize: 11,
         fontWeight: 500,
         color: SK.textPrimary,
         lineHeight: 1.3,

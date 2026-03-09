@@ -13,11 +13,11 @@ const STEP_TYPES = [
   { value: 'condition', label: 'Condition' },
   { value: 'output', label: 'Sortie' },
 ];
-const ROW_GAP = 80;         // vertical gap between depth rows
-const COL_GAP = 60;         // horizontal gap between siblings at same depth
-const CANVAS_PADDING = 50;  // padding around canvas
+const H_GAP = 50;           // horizontal gap between depth columns
+const V_GAP = 40;           // vertical gap between siblings at same depth
+const CANVAS_PADDING = 30;  // padding around canvas
 
-// ============ AUTO-LAYOUT (top-to-bottom, BFS) ============
+// ============ AUTO-LAYOUT (left-to-right, BFS) ============
 function computeLayout(steps, connections) {
   if (!steps.length) return {};
 
@@ -58,23 +58,23 @@ function computeLayout(steps, connections) {
     levels[d].push(s.id);
   });
 
-  // Vertical layout: depth = row (y), siblings = columns (x centered)
-  const SLOT_H = NODE_HEIGHT + LABEL_HEIGHT + ROW_GAP;
-  const SLOT_W = NODE_WIDTH + COL_GAP;
+  // Horizontal layout: depth = column (x), siblings = rows (y centered)
+  const SLOT_W = NODE_WIDTH + H_GAP;
+  const SLOT_H = NODE_HEIGHT + LABEL_HEIGHT + V_GAP;
   const positions = {};
 
-  // Find the widest level to center everything
-  const maxCols = Math.max(...Object.values(levels).map(ids => ids.length));
-  const totalWidth = maxCols * SLOT_W - COL_GAP;
+  // Find tallest column to center everything vertically
+  const maxRows = Math.max(...Object.values(levels).map(ids => ids.length));
+  const totalHeight = maxRows * SLOT_H - V_GAP;
 
   Object.entries(levels).forEach(([depth, ids]) => {
     const d = Number(depth);
-    const rowWidth = ids.length * SLOT_W - COL_GAP;
-    const offsetX = (totalWidth - rowWidth) / 2; // center this row
+    const colHeight = ids.length * SLOT_H - V_GAP;
+    const offsetY = (totalHeight - colHeight) / 2; // center this column
     ids.forEach((id, idx) => {
       positions[id] = {
-        x: CANVAS_PADDING + offsetX + idx * SLOT_W,
-        y: CANVAS_PADDING + d * SLOT_H,
+        x: CANVAS_PADDING + d * SLOT_W,
+        y: CANVAS_PADDING + offsetY + idx * SLOT_H,
       };
     });
   });
@@ -82,15 +82,14 @@ function computeLayout(steps, connections) {
   return positions;
 }
 
-// ============ SVG CONNECTION (top-to-bottom) ============
+// ============ SVG CONNECTION (left-to-right) ============
 function ConnectionLine({ fromPos, toPos, label }) {
-  // From bottom-center of source card to top-center of target card
-  const x1 = fromPos.x + NODE_WIDTH / 2;
-  const y1 = fromPos.y + NODE_HEIGHT + LABEL_HEIGHT + 4; // below label
-  const x2 = toPos.x + NODE_WIDTH / 2;
-  const y2 = toPos.y - 4; // above card top
-  const dy = Math.abs(y2 - y1);
-  const cy = dy * 0.4;
+  // From right-center of source card to left-center of target card
+  const x1 = fromPos.x + NODE_WIDTH + 4;
+  const y1 = fromPos.y + NODE_HEIGHT / 2;
+  const x2 = toPos.x - 4;
+  const y2 = toPos.y + NODE_HEIGHT / 2;
+  const cx = Math.abs(x2 - x1) * 0.4;
 
   const midX = (x1 + x2) / 2;
   const midY = (y1 + y2) / 2;
@@ -98,7 +97,7 @@ function ConnectionLine({ fromPos, toPos, label }) {
   return (
     <g>
       <path
-        d={`M ${x1} ${y1} C ${x1} ${y1 + cy}, ${x2} ${y2 - cy}, ${x2} ${y2}`}
+        d={`M ${x1} ${y1} C ${x1 + cx} ${y1}, ${x2 - cx} ${y2}, ${x2} ${y2}`}
         fill="none"
         stroke="#CBD5DB"
         strokeWidth={1.5}
@@ -108,9 +107,9 @@ function ConnectionLine({ fromPos, toPos, label }) {
       {/* Branch label (for conditions) */}
       {label && (
         <text
-          x={midX + 12}
-          y={midY}
-          textAnchor="start"
+          x={midX}
+          y={midY - 8}
+          textAnchor="middle"
           fontSize={10}
           fontWeight={500}
           fill="#A8B9C3"
