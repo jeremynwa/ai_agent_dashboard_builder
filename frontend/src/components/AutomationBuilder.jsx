@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { SK } from '../services/sk-theme';
-import { saveAutomationTemplate, startAutomationExecution } from '../services/api';
+import { saveAutomationTemplate, startAutomationExecution, generateAutomation } from '../services/api';
 import AutomationStep, { NODE_WIDTH, NODE_HEIGHT, PORT_SIZE } from './AutomationStep';
 import ExecutionPanel from './ExecutionPanel';
 import IntegrationSettings from './IntegrationSettings';
@@ -252,6 +252,8 @@ export default function AutomationBuilder({ data, setData, onBack, t }) {
   const [executing, setExecuting] = useState(false);
   const [stepStatuses, setStepStatuses] = useState({});
   const [showSettings, setShowSettings] = useState(false);
+  const [refinePrompt, setRefinePrompt] = useState('');
+  const [refining, setRefining] = useState(false);
 
   const { steps, connections } = data;
   const positions = useMemo(() => computeLayout(steps, connections), [steps, connections]);
@@ -342,6 +344,27 @@ export default function AutomationBuilder({ data, setData, onBack, t }) {
     setStepStatuses(prev => ({ ...prev, [stepName]: status }));
   }, []);
 
+  const handleRefine = async () => {
+    if (!refinePrompt.trim() || refining) return;
+    setRefining(true);
+    try {
+      const context = `Workflow actuel "${data.name}" avec ${data.steps.length} étapes: ${data.steps.map(s => s.label).join(' → ')}.\n\nModification demandée: ${refinePrompt.trim()}`;
+      const result = await generateAutomation(context);
+      if (result.automation) {
+        setData(prev => ({
+          ...prev,
+          ...result.automation,
+          matchedTemplateId: result.matchedTemplateId,
+        }));
+        setRefinePrompt('');
+        setSelectedId(null);
+      }
+    } catch (err) {
+      console.error('Refine failed:', err);
+    }
+    setRefining(false);
+  };
+
   return (
     <div style={{
       display: 'flex',
@@ -353,36 +376,41 @@ export default function AutomationBuilder({ data, setData, onBack, t }) {
       <div style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 12,
-        padding: '12px 20px',
+        gap: 10,
+        padding: '10px 16px',
         background: SK.white,
         borderBottom: `1px solid ${SK.border}`,
+        flexWrap: 'wrap',
+        minHeight: 48,
       }}>
-        <button onClick={onBack} style={btnSecondary}>← {t('back')}</button>
-        <div style={{ flex: 1 }}>
-          <h2 style={{ margin: 0, fontSize: 18, color: SK.textPrimary }}>{data.name}</h2>
+        <button onClick={onBack} style={{ ...btnSecondary, padding: '6px 12px' }}>← {t('back')}</button>
+        <div style={{ flex: 1, minWidth: 120 }}>
+          <h2 style={{ margin: 0, fontSize: 16, color: SK.textPrimary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{data.name}</h2>
           {data.description && (
-            <p style={{ margin: '2px 0 0', fontSize: 12, color: SK.textSecondary }}>{data.description}</p>
+            <p style={{ margin: '2px 0 0', fontSize: 11, color: SK.textSecondary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{data.description}</p>
           )}
         </div>
-        <button onClick={addStep} style={btnSecondary}>+ {t('automationAddStep')}</button>
-        <button onClick={() => setShowSettings(true)} style={btnSecondary} title="Mes intégrations">
-          ⚙ Intégrations
-        </button>
-        <button
-          onClick={handleExecute}
-          disabled={executing || !data.steps.length}
-          style={{
-            ...btnPrimary,
-            background: executing ? SK.textMuted : `linear-gradient(135deg, ${SK.signalGreen}, ${SK.aqua})`,
-            opacity: (!data.steps.length || executing) ? 0.5 : 1,
-          }}
-        >
-          {executing ? '...' : `▶ ${t('automationExecute') || 'Exécuter'}`}
-        </button>
-        <button onClick={() => setShowSaveModal(true)} style={btnPrimary}>
-          {t('automationSaveTemplate')}
-        </button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button onClick={addStep} style={{ ...btnSecondary, padding: '6px 12px' }}>+ {t('automationAddStep')}</button>
+          <button onClick={() => setShowSettings(true)} style={{ ...btnSecondary, padding: '6px 12px' }}>
+            ⚙ {t('automationIntegrations')}
+          </button>
+          <button
+            onClick={handleExecute}
+            disabled={executing || !data.steps.length}
+            style={{
+              ...btnPrimary,
+              padding: '6px 14px',
+              background: executing ? SK.textMuted : `linear-gradient(135deg, ${SK.signalGreen}, ${SK.aqua})`,
+              opacity: (!data.steps.length || executing) ? 0.5 : 1,
+            }}
+          >
+            {executing ? '...' : `▶ ${t('automationExecute')}`}
+          </button>
+          <button onClick={() => setShowSaveModal(true)} style={{ ...btnPrimary, padding: '6px 14px' }}>
+            {t('automationSaveTemplate')}
+          </button>
+        </div>
       </div>
 
       {/* Main area */}
@@ -454,16 +482,82 @@ export default function AutomationBuilder({ data, setData, onBack, t }) {
         </AnimatePresence>
       </div>
 
+      {/* Refinement chat bar */}
+      <div style={{
+        padding: '10px 16px',
+        background: SK.white,
+        borderTop: `1px solid ${SK.border}`,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+      }}>
+        <div style={{
+          flex: 1,
+          position: 'relative',
+          display: 'flex',
+          alignItems: 'center',
+          background: SK.bgSecondary,
+          borderRadius: SK.radiusMd,
+          border: `1px solid ${SK.border}`,
+          padding: '0 12px',
+          transition: 'border-color 0.2s',
+        }}>
+          <span style={{ fontSize: 14, color: SK.textMuted, marginRight: 8 }}>💬</span>
+          <input
+            value={refinePrompt}
+            onChange={e => setRefinePrompt(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleRefine(); } }}
+            placeholder={t('automationRefinePlaceholder')}
+            disabled={refining}
+            style={{
+              flex: 1,
+              padding: '10px 0',
+              border: 'none',
+              outline: 'none',
+              background: 'transparent',
+              fontSize: 13,
+              color: SK.textPrimary,
+              fontFamily: SK.fontFamily,
+            }}
+            onFocus={e => e.target.parentElement.style.borderColor = SK.cranberry}
+            onBlur={e => e.target.parentElement.style.borderColor = SK.border}
+          />
+        </div>
+        <button
+          onClick={handleRefine}
+          disabled={!refinePrompt.trim() || refining}
+          style={{
+            ...btnPrimary,
+            padding: '8px 16px',
+            opacity: (!refinePrompt.trim() || refining) ? 0.5 : 1,
+            whiteSpace: 'nowrap',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+          }}
+        >
+          {refining ? (
+            <motion.span
+              animate={{ rotate: 360 }}
+              transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+              style={{ display: 'inline-block', width: 14, height: 14, border: `2px solid rgba(255,255,255,0.3)`, borderTopColor: SK.white, borderRadius: '50%' }}
+            />
+          ) : null}
+          {refining ? '...' : t('automationRefine')}
+        </button>
+      </div>
+
       {/* Metadata footer */}
       {data.metadata && (
         <div style={{
-          padding: '8px 20px',
+          padding: '6px 16px',
           background: SK.white,
           borderTop: `1px solid ${SK.border}`,
           display: 'flex',
-          gap: 20,
-          fontSize: 12,
-          color: SK.textSecondary,
+          flexWrap: 'wrap',
+          gap: 16,
+          fontSize: 11,
+          color: SK.textMuted,
         }}>
           {data.metadata.estimatedDuration && <span>{data.metadata.estimatedDuration}</span>}
           {data.metadata.complexity && <span>Complexity: {data.metadata.complexity}</span>}
