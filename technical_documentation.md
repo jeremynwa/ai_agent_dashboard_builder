@@ -58,7 +58,7 @@ Twelve Lambda functions deployed via SAM (Serverless Application Model):
 | ReviewCodeFunction | Function URL | 120s | Web app quality review (web-app-reviewer skill) |
 | GitPushFunction | Function URL | 30s | Create GitLab repo + push files + add members |
 | VmRequestFunction | API Gateway POST /vm-request | 60s | Generate VM spec + Teams notification |
-| AppsFunction | API Gateway GET+POST /apps | 15s | DynamoDB app registry per user |
+| AppsFunction | API Gateway GET+POST /apps + /preferences | 15s | DynamoDB app registry + user preferences |
 | EstimateCostFunction | API Gateway POST /estimate-cost | 5s | Token/cost estimation (no Claude call) |
 | ReviewResearchFunction | Function URL | 300s | Google Maps review analysis via Outscraper + Claude |
 
@@ -73,9 +73,17 @@ Twelve Lambda functions deployed via SAM (Serverless Application Model):
 ### 3.1 Generation Flow
 
 ```
-User Prompt + Data + Industry (optional)
+User Prompt + Data + Industry (optional) + User Preferences
         │
         ▼
+┌─── Phase -1: PLANNING ───────┐  (optional, dashboards with data only)
+│ Claude Haiku generates plan:   │
+│ • Pages, KPIs, charts, filters │
+│ • ignoredColumns, summary      │
+│ → User validates/skips plan    │
+│ → Plan injected into prompt    │
+└───────────┬────────────────────┘
+            ▼
 ┌─── Phase 0: DATA ANALYSIS ──┐  (optional, if DATA_ANALYZER_SKILL_ID set)
 │ data-analyzer skill           │
 │ Python scripts: column types, │
@@ -89,6 +97,7 @@ User Prompt + Data + Industry (optional)
 │ + data + analysis context  │
 │ + business rules           │
 │ + industry skill (if set)  │
+│ + user preferences context │
 └───────────┬────────────────┘
             ▼
 ┌─── Phase 2: COMPILATION ──┐
@@ -101,22 +110,27 @@ User Prompt + Data + Industry (optional)
 │ If error → auto-fix (3x)   │
 └───────────┬────────────────┘
             ▼
-┌─── Phase 3: QUALITY REVIEW ┐  (conditional: skip if simple prompt)
-│ dashboard-reviewer skill:    │
-│ • check_code.py (15 static   │
-│   checks: imports, PieChart, │
-│   COLORS, emojis, IDs, etc.) │
-│ • AI review: labels, spacing,│
-│   formatting, compliance     │
-│                              │
-│ Fallback: standard prompt    │
-│ If review breaks → revert    │
-└───────────┬──────────────────┘
+┌─── Phase 3: PARALLEL REVIEW ┐
+│ 4 Haiku agents in parallel:   │
+│ • Security (XSS, secrets)     │
+│ • Performance (re-renders)    │
+│ • Code quality (DRY, errors)  │
+│ • Data/Viz (IDs, PieChart)    │
+│                                │
+│ Merge → dedup → confidence≥80  │
+│ → Score = 100 - penalties      │
+│                                │
+│ If critical/high issues:       │
+│ → Sonnet skill fix (Phase 3b)  │
+│ If review breaks → revert      │
+└───────────┬────────────────────┘
             ▼
 ┌─── Phase 4: VISION ANALYSIS ┐
 │ html2canvas screenshot        │
 │ → vision-analyzer skill:      │
-│   common-issues.md reference  │
+│   ONLY screenshot + App.jsx   │
+│   (context reset: no prompt,  │
+│    no data, no analysis)      │
 │ → Fixes layout, overlap,      │
 │   readability issues           │
 │                                │
@@ -126,6 +140,7 @@ User Prompt + Data + Industry (optional)
             ▼
      Dashboard Ready
      (full-screen preview)
+     → Save user preferences (non-blocking)
 ```
 
 **Special cases:**
@@ -193,14 +208,15 @@ All skills are uploaded to Anthropic's platform via the Skills API and managed v
 
 ```
 skills/dashboard-generator/
-├── SKILL.md                     ← Entry point (frontmatter + core rules + 7 critical rules)
+├── SKILL.md                     ← Entry point (frontmatter + core rules + 10 critical rules)
 ├── references/
-│   ├── design-system.md         ← CSS classes + component classes
+│   ├── design-system.md         ← CSS classes + component classes + polish rules
 │   ├── structure.md             ← Drawer, header, content-area JSX templates
 │   ├── pages.md                 ← Page types (overview, analyses, settings)
 │   ├── filters.md               ← Dynamic filter bar pattern
 │   ├── kpis.md                  ← KPI cards, sparklines, zero fabrication rule
 │   ├── charts.md                ← Recharts config, COLORS, PieChart Cell rule
+│   ├── recharts-api.md          ← Recharts v2.15+ API reference (anti-hallucination)
 │   ├── tables.md                ← Table structure, alternating rows
 │   ├── formatting.md            ← fmt(), fmtCur(), fmtPct() definitions
 │   ├── insights.md              ← Key takeaways (points clés)
@@ -324,7 +340,110 @@ node manage-skills.mjs delete <skill-id>
 - `buildEnrichedPrompt()` appends Q&A to original prompt
 - Skip button available to jump directly to generation
 
-### 3.7 Web App Review Flow
+### 3.7 Dashboard Planning Phase
+
+After clarification and before generation, a Haiku call generates a structured dashboard plan:
+
+```
+POST {GENERATE_URL}
+{ "prompt": "...", "modelHint": "plan", "excelData": { headers, data (5 rows only) }, "industry": "finance" }
+→ { "plan": { "pages": [...], "filters": [...], "ignoredColumns": [...], "summary": "..." } }
+```
+
+**Plan JSON:**
+```json
+{
+  "pages": [
+    {
+      "name": "Vue d'ensemble",
+      "kpis": [{ "label": "CA Total", "column": "revenue", "calculation": "sum" }],
+      "charts": [{ "type": "AreaChart", "x": "date", "y": "revenue", "title": "Évolution CA" }],
+      "hasInsights": true
+    }
+  ],
+  "filters": [{ "column": "category", "label": "Catégorie" }],
+  "ignoredColumns": ["order_id", "customer_id"],
+  "summary": "Dashboard de suivi commercial avec 3 pages..."
+}
+```
+
+**DashboardPlan.jsx** displays the plan with:
+- Pages with numbered headers, KPI chips, chart items with type icons
+- Filters and ignored columns sections
+- "Générer ce dashboard" (confirm) and "Passer" (skip) buttons
+
+On confirm, the validated plan is injected as JSON context into the generation prompt. On skip, generation proceeds without plan.
+
+Only activated for `appType === 'dashboard'` with uploaded data.
+
+### 3.8 Parallel Multi-Agent Review
+
+The review phase uses 4 specialized Haiku agents running in parallel via `parallelReview()`:
+
+| Agent | Focus | Example checks |
+|-------|-------|---------------|
+| Security | XSS, injection, secrets | `dangerouslySetInnerHTML`, `eval()`, hardcoded credentials |
+| Performance | Re-renders, memoization | Missing `useMemo`/`useCallback`, computations in render |
+| Code Quality | Conventions, DRY | Error handling, naming, dead code |
+| Data/Viz | Data integrity, chart correctness | Fabricated data, raw IDs as axes, PieChart without Cell |
+
+**Flow:**
+1. Launch 4 `callClaude()` calls with Haiku in `Promise.all()`
+2. Each agent returns `{ issues: [{ rule, severity, message, confidence }] }`
+3. `mergeReviewResults()`: concatenate, deduplicate by `rule+message`, filter `confidence ≥ 80`
+4. Compute score: `100 - Σ(severity penalties)` (critical: -15, high: -10, medium: -5, low: -2)
+5. If critical or high issues found → Phase 3b: Sonnet skill-based fix
+
+**Cost**: ~$0.03-0.05 per review (4× Haiku < 1× Sonnet). **Latency**: ~5-8s (parallel).
+
+### 3.9 User Preferences (Persistent Memory)
+
+DynamoDB table `UserPreferences` stores per-user preferences across sessions:
+
+```json
+{
+  "userId": "cognito-sub",
+  "industry": "finance",
+  "language": "fr",
+  "chartPreferences": "préfère bar charts aux pie charts",
+  "feedbackHistory": ["agrandir les graphiques", "moins de tableaux"],
+  "generationCount": 12,
+  "lastUsed": "2026-03-09T14:30:00Z"
+}
+```
+
+**Endpoints** (in `apps` Lambda):
+- `GET /preferences` → returns user preferences
+- `PUT /preferences` → updates allowed fields + optional `incrementGeneration`
+
+**Frontend integration:**
+- Loaded on mount via `getUserPreferences()`
+- Pre-selects industry chip if previously used
+- Injected into `generateApp()` request body
+- Saved after successful generation (non-blocking `saveUserPreferences()` call)
+
+**Prompt injection:**
+```
+## User Context (from previous sessions)
+- Preferred industry: Finance
+- Previous feedback: "make charts bigger", "less tables, more visuals"
+- Language: FR
+```
+
+### 3.10 Context Reset Between Phases
+
+Each pipeline phase receives only the strict minimum context:
+
+| Phase | Receives |
+|-------|----------|
+| Plan | System prompt + data schema (5 rows) + user prompt |
+| Generate | System prompt + skills + full data + user prompt + plan + preferences |
+| Review | `src/App.jsx` only (via `stripToAppOnly()`) |
+| Vision | Screenshot (base64) + `src/App.jsx` only — no prompt, no data, no analysis |
+
+This reduces token usage and prevents context contamination between phases.
+
+### 3.11 Web App Review Flow
 
 ```
 User drops ZIP
@@ -350,7 +469,7 @@ ReviewResults.jsx
 DeployForm.jsx (if approved)
 ```
 
-### 3.8 GitLab + VM Deployment Flow
+### 3.12 GitLab + VM Deployment Flow
 
 Three user workflows converge into a common deploy flow:
 
@@ -415,7 +534,7 @@ Table `AppRegistry` (PK: `userId` Cognito sub, SK: `appId` UUID):
 }
 ```
 
-### 3.9 Review Research Flow
+### 3.13 Review Research Flow
 
 Google Maps review analysis using Outscraper API + Claude:
 
@@ -448,7 +567,7 @@ GET {REVIEW_RESEARCH_URL}/results/:jobId
 
 **Env vars**: `OUTSCRAPER_API_KEY` (optional, SAM parameter), `REVIEW_RESEARCH_MODEL: claude-sonnet-4-20250514`
 
-### 3.10 Automation Builder Flow
+### 3.14 Automation Builder Flow
 
 ```
 AutomationChat.jsx
@@ -466,7 +585,7 @@ AutomationBuilder.jsx
 Templates accessible via: GET {AUTOMATION_URL}/templates
 ```
 
-### 3.11 Multi-Format Export (XLSX, PPTX, PDF)
+### 3.15 Multi-Format Export (XLSX, PPTX, PDF)
 
 Uses **Anthropic pre-built skills** (no custom skills needed):
 
@@ -497,7 +616,7 @@ const fileContent = await anthropic.beta.files.download(fileId, {
 - **Container pre-installed**: openpyxl, xlsxwriter, python-pptx, reportlab, pandas, numpy
 - **Cost**: ~$0.10-0.15 per export | **Timeout**: 120s
 
-### 3.12 Cost Estimation (estimate-cost Lambda)
+### 3.16 Cost Estimation (estimate-cost Lambda)
 
 Pure server-side calculation (no Claude call), returns breakdown per phase:
 
@@ -516,7 +635,7 @@ Pure server-side calculation (no Claude call), returns breakdown per phase:
 
 **Pricing used**: Sonnet (input $3/MTok, output $15/MTok, cached $0.30/MTok) | Haiku (input $0.80/MTok, output $4/MTok, cached $0.08/MTok)
 
-### 3.13 Cost Optimization
+### 3.17 Cost Optimization
 
 #### Prompt Caching
 
@@ -559,7 +678,7 @@ Frontend caches `_analysisResult` + data hash. Same dataset = skip `analyzeData(
 | Conditional review | -$0.145 (simple prompts) | Low |
 | stripToAppOnly | -$0.01 (-2%) | None |
 
-### 3.14 Monitoring
+### 3.18 Monitoring
 
 All `callClaude()` calls log structured JSON to CloudWatch:
 
@@ -578,7 +697,7 @@ All `callClaude()` calls log structured JSON to CloudWatch:
 }
 ```
 
-**Labels**: `generate`, `data-analyze`, `review`, `vision`, `review-fallback`, `vision-fallback`
+**Labels**: `generate`, `data-analyze`, `plan`, `review-security`, `review-perf`, `review-quality`, `review-dataviz`, `review-fix`, `vision`, `review-fallback`, `vision-fallback`
 
 **Query via CloudWatch Logs Insights:**
 ```
@@ -586,7 +705,7 @@ filter event = "claude_call"
 | stats avg(elapsed_ms) as avg_latency, sum(input_tokens) as total_input, sum(output_tokens) as total_output by label
 ```
 
-### 3.15 Data Injection
+### 3.19 Data Injection
 
 **Excel/CSV mode:**
 - Frontend reads file → sends headers + sample (30 rows) + fullData to Lambda
@@ -719,6 +838,7 @@ SERVICEDESK_URL=""                ← Service Desk API endpoint (deferred)
 SERVICEDESK_TOKEN                 (SAM parameter, optional)
 REVIEW_PASS_THRESHOLD="70"
 APP_REGISTRY_TABLE="AppRegistry"
+USER_PREFERENCES_TABLE="UserPreferences"
 
 # Review Research
 OUTSCRAPER_API_KEY                (SAM parameter, optional)
@@ -736,6 +856,7 @@ BUCKET_NAME=ai-app-builder-sk-2026
 | DbConnect | `DbConnect.jsx` | DB credentials form → schema fetch |
 | IntakeChat | `IntakeChat.jsx` | AI routing: upload \| generate \| clarify |
 | ClarificationChat | `ClarificationChat.jsx` | 2-3 AI questions → `onComplete(enrichedPrompt)` |
+| DashboardPlan | `DashboardPlan.jsx` | AI plan validation: pages, KPIs, charts → `onConfirm` / `onSkip` |
 | UploadCode | `UploadCode.jsx` | ZIP drop + file tree + Review button |
 | ReviewResults | `ReviewResults.jsx` | Score circle + issues + Apply Fixes + Proceed to Deploy |
 | DeployForm | `DeployForm.jsx` | GitLab project name + CI/CD toggle + VM form |
@@ -907,7 +1028,36 @@ Authorization: Bearer {JWT}
 Response: { "ticketId": "INC0012345", "vmSpec": {...}, "teamsMessageSent": true, "ticketPayload": {...} }
 ```
 
-### 9.7 Apps Registry
+### 9.7 Dashboard Plan
+
+```
+POST {GENERATE_URL}
+Authorization: Bearer {JWT}
+
+{
+  "prompt": "Dashboard des ventes",
+  "modelHint": "plan",
+  "excelData": { "headers": [...], "data": [5 rows], "fileName": "..." },
+  "industry": "finance"
+}
+
+Response: { "plan": { "pages": [...], "filters": [...], "ignoredColumns": [...], "summary": "..." } }
+```
+
+### 9.8 User Preferences
+
+```
+GET {API_URL}/prod/preferences
+Authorization: Bearer {JWT}
+→ { "preferences": { "userId": "...", "industry": "finance", "language": "fr", ... } }
+
+PUT {API_URL}/prod/preferences
+Authorization: Bearer {JWT}
+{ "industry": "finance", "language": "fr", "chartPreferences": "...", "incrementGeneration": true }
+→ { "success": true }
+```
+
+### 9.9 Apps Registry
 
 ```
 GET {API_URL}/prod/apps
@@ -920,7 +1070,7 @@ Authorization: Bearer {JWT}
 → { "appId": "uuid", ...payload }
 ```
 
-### 9.8 Estimate Cost
+### 9.10 Estimate Cost
 
 ```
 POST {API_URL}/prod/estimate-cost
@@ -931,7 +1081,7 @@ Authorization: Bearer {JWT}
 Response: { "total": 0.42, "breakdown": { "generation": 0.30, "analysis": 0.05, "review": 0.04, "vision": 0.03 }, "currency": "USD" }
 ```
 
-### 9.9 Review Research
+### 9.11 Review Research
 
 ```
 POST {REVIEW_RESEARCH_URL}/start
@@ -950,7 +1100,7 @@ POST {REVIEW_RESEARCH_URL}/estimate
 → { "cost": 2.50, "breakdown": { "scraping": 0.50, "analysis": 2.00 } }
 ```
 
-### 9.10 Export
+### 9.12 Export
 
 ```
 POST {EXPORT_URL}
@@ -961,7 +1111,7 @@ Authorization: Bearer {JWT}
 Response: { "base64": "...", "filename": "Mon Dashboard.pptx", "mimeType": "application/..." }
 ```
 
-### 9.11 DB Proxy
+### 9.13 DB Proxy
 
 ```
 POST {DB_PROXY_URL}

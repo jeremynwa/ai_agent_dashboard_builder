@@ -115,6 +115,17 @@
 - [x] `VITE_EXPORT_URL`, `VITE_REVIEW_RESEARCH_URL` dans frontend/.env (auto-écrit par deploy.ps1)
 - [x] `OUTSCRAPER_API_KEY` param SAM (optionnel) → ReviewResearchFunction
 - [x] App.jsx 2956 lignes — sidebar avec Upload & Review, Review Research, Automations, My Apps
+- [x] **Recharts API Reference** — `references/recharts-api.md` dans dashboard-generator skill (composants, props valides, patterns anti-hallucination)
+- [x] **Review Multi-Agents Parallèle** — 4 agents Haiku spécialisés (sécurité, perf, qualité code, data/viz) exécutés en parallèle via `parallelReview()`
+- [x] **Context Reset entre Phases** — vision ne reçoit que screenshot + App.jsx (plus de prompt/données/analyse)
+- [x] **Design Polish** — transitions hover sur cards/KPIs/tables/insights dans ds.css, règles de polish dans design-system.md
+- [x] **Mémoire Utilisateur Persistante** — DynamoDB `UserPreferencesTable` (industry, language, chartPreferences, feedbackHistory)
+- [x] Lambda `apps` — endpoints GET/PUT `/preferences` ajoutés (même Lambda)
+- [x] `getUserPreferences()`, `saveUserPreferences()` dans api.js
+- [x] **Phase de Planification** — Haiku génère un plan structuré (pages, KPIs, charts, filtres) avant génération Sonnet
+- [x] `planDashboard()` dans api.js — POST generate avec `modelHint: 'plan'`
+- [x] `DashboardPlan.jsx` — UI de validation du plan avant génération
+- [x] `requestPlan()`, `handleConfirmPlan()`, `handleSkipPlan()` dans App.jsx
 
 ### En cours / À faire
 
@@ -173,6 +184,7 @@ BROWSER DU CLIENT
 │  ┌─────────────────────────────────────┐ │
 │  │ DynamoDB                            │ │
 │  │ • AppRegistry (userId + appId)      │ │
+│  │ • UserPreferences (userId)          │ │
 │  └─────────────────────────────────────┘ │
 │                                          │
 │  ┌─────────────────────────────────────┐ │
@@ -215,9 +227,9 @@ ai_agent_dashboard_builder/
 │   ├── .env
 │   ├── vite.config.js
 │   └── src/
-│       ├── App.jsx                   ← 2956 lignes — orchestration complète
+│       ├── App.jsx                   ← orchestration complète + plan + prefs
 │       ├── services/
-│       │   ├── api.js                ← 20+ fonctions API (JWT injection)
+│       │   ├── api.js                ← 25+ fonctions API (JWT injection)
 │       │   ├── auth.js
 │       │   ├── export.js
 │       │   └── files-template.js     ← ds.css embarqué
@@ -229,6 +241,7 @@ ai_agent_dashboard_builder/
 │           ├── DbConnect.jsx
 │           ├── IntakeChat.jsx        ← AI routing chat (upload vs generate)
 │           ├── ClarificationChat.jsx ← 2-3 questions IA avant génération
+│           ├── DashboardPlan.jsx     ← validation plan AI avant génération
 │           ├── UploadCode.jsx        ← ZIP drop + file tree + review button
 │           ├── ReviewResults.jsx     ← score badge + issues + apply fixes
 │           ├── DeployForm.jsx        ← GitLab repo + VM request form
@@ -248,7 +261,7 @@ ai_agent_dashboard_builder/
     ├── test-data-analyzer.mjs
     ├── test-review-vision.mjs
     ├── shared/auth.mjs
-    ├── generate/index.mjs            ← system prompt + callClaude() + analyzeData()
+    ├── generate/index.mjs            ← system prompt + callClaude() + analyzeData() + parallelReview() + planDashboard()
     ├── publish/index.mjs
     ├── rules/index.mjs
     ├── db/index.mjs
@@ -257,11 +270,11 @@ ai_agent_dashboard_builder/
     ├── review-code/index.mjs         ← web-app-reviewer skill, score gate ≥ 70
     ├── git-push/index.mjs            ← GitLab API v4, CI/CD YAML, add members
     ├── vm-request/index.mjs          ← Claude VM spec + Teams webhook
-    ├── apps/index.mjs                ← DynamoDB AppRegistry CRUD
+    ├── apps/index.mjs                ← DynamoDB AppRegistry CRUD + UserPreferences GET/PUT
     ├── estimate-cost/index.mjs       ← calcul coût tokens (pur, sans Claude)
     ├── review-research/index.mjs     ← Outscraper GMaps + Claude analyse avis
     └── skills/
-        ├── dashboard-generator/      ← SKILL.md + 11 reference files + validate_output.py
+        ├── dashboard-generator/      ← SKILL.md + 12 reference files + validate_output.py
         ├── data-analyzer/            ← SKILL.md + 4 scripts Python
         ├── industry-finance/         ← SKILL.md + kpis.md + charts.md + vocabulary.md
         ├── industry-ecommerce/
@@ -352,7 +365,7 @@ Le mode est contrôlé par `USE_BETA_API` + `DASHBOARD_SKILL_ID` + `DATA_ANALYZE
 
 - **Review** : `check_code.py` (15 checks : imports, PieChart+Cell, COLORS, emojis, gradient IDs, insights, filtres, IDs bruts)
 - **Vision** : `common-issues.md` (12 patterns : overlaps, espaces vides, texte illisible, PieChart gris, filtres cassés)
-- **Pipeline** : Generate → Compile → Review (conditional) → Vision → Final Compile
+- **Pipeline** : Plan (Haiku) → Generate → Compile → parallelReview (4× Haiku) → Skill fix (Sonnet) → Vision → Final Compile
 - **Fallback** : si skill ID vide → graceful degradation vers prompts standards
 - **Test** : `REVIEWER_SKILL_ID=skill_01... VISION_SKILL_ID=skill_01... node test-review-vision.mjs`
 
@@ -394,6 +407,41 @@ Le mode est contrôlé par `USE_BETA_API` + `DASHBOARD_SKILL_ID` + `DATA_ANALYZE
 Claude Haiku reçoit le message de l'utilisateur → retourne `{ route: "upload|generate|clarify" }`.
 Mode `clarify` → **ClarificationChat** pose 2-3 questions → enrichit le prompt avant génération.
 
+### Phase de Planification (Haiku)
+
+Avant la génération, un appel Haiku rapide planifie la structure du dashboard :
+- **Flow** : Prompt + Data → Plan (Haiku, ~5s) → User valide/ajuste → Generate (Sonnet)
+- **Plan JSON** : `{ pages: [{ name, kpis, charts }], filters, ignoredColumns, summary }`
+- **Frontend** : `DashboardPlan.jsx` affiche le plan, boutons Confirmer / Passer
+- **Lambda** : `modelHint: 'plan'` dans le body → retourne le plan au lieu de générer
+- **Skip** : activé seulement pour `appType === 'dashboard'` avec données uploadées
+
+### Review Multi-Agents Parallèle
+
+La review utilise 4 agents Haiku spécialisés en parallèle (`parallelReview()`) :
+1. **Sécurité** — XSS, injection, secrets, eval, dangerouslySetInnerHTML
+2. **Performance** — re-renders, memo, calculs dans render
+3. **Qualité code** — conventions, DRY, error handling
+4. **Data/Viz** — données inventées, IDs bruts, PieChart sans Cell
+
+**Résultat** : issues avec `confidence` 0-100, seules celles ≥ 80 gardées. Score = 100 - pénalités sévérité.
+Si issues critiques/high → Phase 2 : skill-based fix avec Sonnet. Coût : ~$0.03-0.05 (4× Haiku < 1× Sonnet).
+
+### Mémoire Utilisateur Persistante
+
+Table DynamoDB `UserPreferences` (PK: userId) :
+- `industry`, `language`, `chartPreferences`, `feedbackHistory`, `generationCount`, `lastUsed`
+- Endpoints : GET/PUT `/preferences` (dans Lambda `apps`)
+- Frontend : charge au login, pré-sélectionne industrie, sauvegarde après génération
+- Injection prompt : section "User Context" avec préférences + feedback historique
+
+### Context Reset entre Phases
+
+Chaque phase ne reçoit que le strict nécessaire :
+- **Generate** : system prompt + skills + data + user prompt + prefs
+- **Review** : App.jsx uniquement
+- **Vision** : screenshot + App.jsx (pas de prompt, pas de données, pas d'analyse)
+
 ### GitLab — git-push Lambda
 
 - **URL base** : `https://git.simon-kucher.com` (`GITLAB_URL`)
@@ -425,6 +473,7 @@ WEB_APP_REVIEWER_SKILL_ID = "skill_01NGUU66Q3PCWWX5RgAbD7bz"
 SCRAPER_SKILL_ID          = "skill_015tnYwBrkp8e4sYevkvqsWX"
 REVIEW_PASS_THRESHOLD     = "70"
 APP_REGISTRY_TABLE        = "AppRegistry"
+USER_PREFERENCES_TABLE    = "UserPreferences"
 OUTSCRAPER_API_KEY        = !Ref OutscraperApiKey (param optionnel)
 ```
 
@@ -566,6 +615,14 @@ Quand un bug est corrigé et pourrait revenir, le documenter dans ce fichier (sy
 - `estimate-cost` Lambda : calcul pur côté serveur, sans Claude, retourne breakdown par phase
 - `review-research` Lambda : job-based asynchrone, S3 pour persistence jobs, Outscraper pour GMaps
 - `ClarificationChat.jsx` : 2-3 questions IA, construit `enrichedPrompt` = original + Q&A, skip possible
+- `DashboardPlan.jsx` : affiche plan AI (pages, KPIs, charts), boutons Confirmer/Passer, style SK
+- `planDashboard()` : POST generate avec `modelHint: 'plan'`, n'envoie que 5 rows pour le schema
+- `parallelReview()` : 4 agents Haiku en `Promise.all()`, merge + dedup issues, filtre confidence ≥ 80
+- `UserPreferences` DynamoDB : PK userId, fields industry/language/chartPreferences/feedbackHistory/generationCount
+- `userPreferences` : chargées au mount, injectées dans `generateApp()`, sauvegardées après génération
+- `recharts-api.md` : référence API Recharts v2.15+ avec props valides et "Props qui N'EXISTENT PAS"
+- ds.css polish : transitions hover sur `.card`, `.kpi-card`, `.insight-item`, `.table-row-even/odd`
+- Context reset vision : n'envoie que screenshot + App.jsx (plus de prompt/données/analyse)
 - `ReviewResearch.jsx` : 4 steps (scope → criteria → source → confirm) puis polling résultats
 - App.jsx `agentGenerate()` : gestion spéciale scraping/newsletter (code-only, skip preview WebContainer)
 - `trimDataToFit()` dans api.js : binary search pour limiter payload à 4.5MB (Lambda Function URL limit 6MB)
