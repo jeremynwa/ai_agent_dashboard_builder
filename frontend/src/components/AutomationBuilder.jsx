@@ -5,6 +5,7 @@ import { SK } from '../services/sk-theme';
 import { saveAutomationTemplate, startAutomationExecution } from '../services/api';
 import AutomationStep, { NODE_WIDTH, NODE_HEIGHT, PORT_SIZE } from './AutomationStep';
 import ExecutionPanel from './ExecutionPanel';
+import IntegrationSettings from './IntegrationSettings';
 
 const STEP_TYPES = ['trigger', 'action', 'condition', 'output'];
 const H_GAP = 300;
@@ -250,6 +251,7 @@ export default function AutomationBuilder({ data, setData, onBack, t }) {
   const [executionJobId, setExecutionJobId] = useState(null);
   const [executing, setExecuting] = useState(false);
   const [stepStatuses, setStepStatuses] = useState({});
+  const [showSettings, setShowSettings] = useState(false);
 
   const { steps, connections } = data;
   const positions = useMemo(() => computeLayout(steps, connections), [steps, connections]);
@@ -364,6 +366,9 @@ export default function AutomationBuilder({ data, setData, onBack, t }) {
           )}
         </div>
         <button onClick={addStep} style={btnSecondary}>+ {t('automationAddStep')}</button>
+        <button onClick={() => setShowSettings(true)} style={btnSecondary} title="Mes intégrations">
+          ⚙ Intégrations
+        </button>
         <button
           onClick={handleExecute}
           disabled={executing || !data.steps.length}
@@ -486,6 +491,11 @@ export default function AutomationBuilder({ data, setData, onBack, t }) {
       {/* Save modal */}
       {showSaveModal && (
         <SaveModal onSave={handleSave} onClose={() => setShowSaveModal(false)} t={t} />
+      )}
+
+      {/* Integration settings modal */}
+      {showSettings && (
+        <IntegrationSettings onClose={() => setShowSettings(false)} t={t} />
       )}
     </div>
   );

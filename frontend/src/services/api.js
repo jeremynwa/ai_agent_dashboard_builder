@@ -435,6 +435,39 @@ export async function saveAutomationTemplate(template) {
   return res.json();
 }
 
+// ============ USER SECRETS (per-user integration credentials) ============
+export async function getUserSecrets() {
+  const headers = await authHeaders();
+  const res = await fetch(`${API_BASE}/user-secrets`, { headers });
+  if (!res.ok) throw new Error('Failed to load integrations');
+  return res.json();
+}
+
+export async function saveUserSecret(integration, credentials) {
+  const headers = await authHeaders();
+  const res = await fetch(`${API_BASE}/user-secrets`, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify({ integration, credentials }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to save credentials');
+  }
+  return res.json();
+}
+
+export async function deleteUserSecret(integration) {
+  const headers = await authHeaders();
+  const res = await fetch(`${API_BASE}/user-secrets`, {
+    method: 'DELETE',
+    headers,
+    body: JSON.stringify({ integration }),
+  });
+  if (!res.ok) throw new Error('Failed to delete integration');
+  return res.json();
+}
+
 // ============ AUTOMATION EXECUTION ============
 export async function startAutomationExecution(workflow) {
   const headers = await authHeaders();

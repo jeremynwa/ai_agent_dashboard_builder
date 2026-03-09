@@ -1,13 +1,68 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, QueryCommand, PutCommand, GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, QueryCommand, PutCommand, GetCommand, UpdateCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
+import { KMSClient, EncryptCommand, DecryptCommand } from '@aws-sdk/client-kms';
 import { authenticateRequest } from './auth.mjs';
 import { randomUUID } from 'crypto';
 
 const ddb = DynamoDBDocumentClient.from(
   new DynamoDBClient({ region: process.env.MY_REGION || 'eu-north-1' })
 );
+const kms = new KMSClient({ region: process.env.MY_REGION || 'eu-north-1' });
 const TABLE = process.env.APP_REGISTRY_TABLE || 'AppRegistry';
 const PREFS_TABLE = process.env.USER_PREFERENCES_TABLE || 'UserPreferences';
+const SECRETS_TABLE = process.env.USER_SECRETS_TABLE || 'UserSecrets';
+const KMS_KEY_ID = process.env.USER_SECRETS_KEY_ID;
+
+// ============ KMS HELPERS ============
+async function encryptValue(plaintext) {
+  if (!KMS_KEY_ID) return plaintext; // dev mode fallback
+  const res = await kms.send(new EncryptCommand({
+    KeyId: KMS_KEY_ID,
+    Plaintext: new TextEncoder().encode(plaintext),
+  }));
+  return Buffer.from(res.CiphertextBlob).toString('base64');
+}
+
+async function decryptValue(ciphertext) {
+  if (!KMS_KEY_ID) return ciphertext; // dev mode fallback
+  const res = await kms.send(new DecryptCommand({
+    CiphertextBlob: Buffer.from(ciphertext, 'base64'),
+  }));
+  return new TextDecoder().decode(res.Plaintext);
+}
+
+// Integration definitions — what secrets each tool needs
+const INTEGRATION_DEFS = {
+  smtp: {
+    displayName: 'Email (SMTP)',
+    icon: '\u{1F4E7}',
+    fields: [
+      { key: 'SMTP_HOST', label: 'Serveur SMTP', placeholder: 'smtp.office365.com', secret: false },
+      { key: 'SMTP_PORT', label: 'Port', placeholder: '587', secret: false },
+      { key: 'SMTP_USER', label: 'Utilisateur', placeholder: 'user@company.com', secret: false },
+      { key: 'SMTP_PASS', label: 'Mot de passe', placeholder: '', secret: true },
+      { key: 'SMTP_FROM', label: 'Expéditeur (From)', placeholder: 'App Factory <noreply@company.com>', secret: false },
+    ],
+  },
+  teams: {
+    displayName: 'Microsoft Teams',
+    icon: '\u{1F4AC}',
+    fields: [
+      { key: 'TEAMS_WEBHOOK_URL', label: 'Webhook URL', placeholder: 'https://outlook.office.com/webhook/...', secret: true },
+    ],
+  },
+  sql: {
+    displayName: 'Base de données SQL',
+    icon: '\u{1F5C4}\u{FE0F}',
+    fields: [
+      { key: 'SQL_HOST', label: 'Hôte', placeholder: 'db.company.com', secret: false },
+      { key: 'SQL_PORT', label: 'Port', placeholder: '5432', secret: false },
+      { key: 'SQL_DATABASE', label: 'Base de données', placeholder: 'mydb', secret: false },
+      { key: 'SQL_USER', label: 'Utilisateur', placeholder: 'readonly', secret: false },
+      { key: 'SQL_PASS', label: 'Mot de passe', placeholder: '', secret: true },
+    ],
+  },
+};
 
 const HEADERS = {
   'Content-Type': 'application/json',
@@ -77,6 +132,119 @@ export const handler = async (event) => {
           ExpressionAttributeValues: values,
         }));
         return reply(200, { success: true });
+
+      } else {
+        return reply(405, { error: 'Method not allowed' });
+      }
+    }
+
+    // ============ /user-secrets endpoints ============
+    if (path.includes('/user-secrets')) {
+      if (method === 'GET') {
+        // Return configured integrations (with masked secret values)
+        const result = await ddb.send(new GetCommand({
+          TableName: SECRETS_TABLE,
+          Key: { userId },
+        }));
+
+        const item = result.Item || {};
+        const integrations = {};
+
+        for (const [integrationId, def] of Object.entries(INTEGRATION_DEFS)) {
+          const stored = item[integrationId] || {};
+          const fields = {};
+          let configured = false;
+
+          for (const field of def.fields) {
+            if (stored[field.key]) {
+              configured = true;
+              // Mask secret fields, show non-secret fields
+              fields[field.key] = field.secret ? '••••••••' : stored[field.key];
+            }
+          }
+
+          integrations[integrationId] = {
+            ...def,
+            configured,
+            fields: configured ? fields : {},
+          };
+        }
+
+        return reply(200, { integrations });
+
+      } else if (method === 'PUT') {
+        // Save credentials for an integration (encrypt secret fields)
+        const body = JSON.parse(event.body || '{}');
+        const { integration, credentials } = body;
+
+        if (!integration || !INTEGRATION_DEFS[integration]) {
+          return reply(400, { error: `Unknown integration: ${integration}. Valid: ${Object.keys(INTEGRATION_DEFS).join(', ')}` });
+        }
+        if (!credentials || typeof credentials !== 'object') {
+          return reply(400, { error: 'credentials object is required' });
+        }
+
+        const def = INTEGRATION_DEFS[integration];
+
+        // Encrypt secret fields, store non-secret fields as-is
+        const encrypted = {};
+        for (const field of def.fields) {
+          const value = credentials[field.key];
+          if (value && value !== '••••••••') {
+            encrypted[field.key] = field.secret ? await encryptValue(value) : value;
+          }
+        }
+
+        // Merge with existing (so partial updates work)
+        const existing = await ddb.send(new GetCommand({
+          TableName: SECRETS_TABLE,
+          Key: { userId },
+        }));
+        const current = existing.Item || { userId };
+        const currentIntegration = current[integration] || {};
+
+        // Update only provided fields
+        for (const [key, val] of Object.entries(encrypted)) {
+          currentIntegration[key] = val;
+        }
+        // Mark secret fields for decryption
+        currentIntegration._secretFields = def.fields.filter(f => f.secret).map(f => f.key);
+
+        current[integration] = currentIntegration;
+        current.userId = userId;
+        current.updatedAt = new Date().toISOString();
+
+        await ddb.send(new PutCommand({
+          TableName: SECRETS_TABLE,
+          Item: current,
+        }));
+
+        return reply(200, { success: true, integration });
+
+      } else if (method === 'DELETE') {
+        // Remove an integration's credentials
+        const body = JSON.parse(event.body || '{}');
+        const { integration } = body;
+
+        if (!integration) {
+          return reply(400, { error: 'integration field is required' });
+        }
+
+        const existing = await ddb.send(new GetCommand({
+          TableName: SECRETS_TABLE,
+          Key: { userId },
+        }));
+
+        if (existing.Item && existing.Item[integration]) {
+          delete existing.Item[integration];
+          existing.Item.updatedAt = new Date().toISOString();
+          await ddb.send(new PutCommand({
+            TableName: SECRETS_TABLE,
+            Item: existing.Item,
+          }));
+        }
+
+        return reply(200, { success: true, deleted: integration });
 
       } else {
         return reply(405, { error: 'Method not allowed' });

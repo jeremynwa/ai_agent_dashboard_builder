@@ -328,6 +328,50 @@ Resources:
         - AttributeName: userId
           KeyType: HASH
 
+  # ============ DYNAMODB — User Secrets (per-user integration credentials) ============
+  UserSecretsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: UserSecrets
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+
+  # ============ KMS — Encryption key for user secrets ============
+  UserSecretsKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: Encryption key for user automation secrets
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowRootAccount
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action: 'kms:*'
+            Resource: '*'
+          - Sid: AllowLambdaUsage
+            Effect: Allow
+            Principal:
+              AWS:
+                - !GetAtt AppsFunctionRole.Arn
+                - !GetAtt AutomationExecuteFunctionRole.Arn
+            Action:
+              - 'kms:Encrypt'
+              - 'kms:Decrypt'
+            Resource: '*'
+
+  UserSecretsKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: alias/app-factory-user-secrets
+      TargetKeyId: !Ref UserSecretsKey
+
   # ============ INTAKE (AI routing) ============
   IntakeFunction:
     Type: AWS::Serverless::Function
@@ -522,6 +566,8 @@ Resources:
         Variables:
           APP_REGISTRY_TABLE: AppRegistry
           USER_PREFERENCES_TABLE: UserPreferences
+          USER_SECRETS_TABLE: UserSecrets
+          USER_SECRETS_KEY_ID: !Ref UserSecretsKey
       Events:
         Get:
           Type: HttpApi
@@ -547,11 +593,35 @@ Resources:
             ApiId: !Ref AppFactoryApi
             Path: /preferences
             Method: PUT
+        GetUserSecrets:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref AppFactoryApi
+            Path: /user-secrets
+            Method: GET
+        PutUserSecrets:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref AppFactoryApi
+            Path: /user-secrets
+            Method: PUT
+        DeleteUserSecrets:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref AppFactoryApi
+            Path: /user-secrets
+            Method: DELETE
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref AppRegistryTable
         - DynamoDBCrudPolicy:
             TableName: !Ref UserPreferencesTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UserSecretsTable
+        - KMSEncryptPolicy:
+            KeyId: !Ref UserSecretsKey
+        - KMSDecryptPolicy:
+            KeyId: !Ref UserSecretsKey
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
@@ -631,6 +701,8 @@ Resources:
           ANTHROPIC_API_KEY: !Ref AnthropicApiKey
           AUTOMATION_EXECUTE_MODEL: "claude-sonnet-4-20250514"
           SECRETS_ID: "app-factory/automation-secrets"
+          USER_SECRETS_TABLE: UserSecrets
+          USER_SECRETS_KEY_ID: !Ref UserSecretsKey
       FunctionUrlConfig:
         AuthType: NONE
         Cors:
@@ -646,6 +718,10 @@ Resources:
       Policies:
         - S3CrudPolicy:
             BucketName: !Ref PublishBucket
+        - DynamoDBReadPolicy:
+            TableName: !Ref UserSecretsTable
+        - KMSDecryptPolicy:
+            KeyId: !Ref UserSecretsKey
         - Statement:
             - Effect: Allow
               Action: secretsmanager:GetSecretValue

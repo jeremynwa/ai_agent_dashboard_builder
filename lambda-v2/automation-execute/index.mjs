@@ -4,6 +4,9 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient, GetCommand } from '@aws-sdk/lib-dynamodb';
+import { KMSClient, DecryptCommand } from '@aws-sdk/client-kms';
 import { authenticateRequest } from './auth.mjs';
 import { randomUUID } from 'crypto';
 import { getAvailableTools, getClaudeToolDefinitions, getToolByName, getToolCatalog } from './tool-registry.mjs';
@@ -11,8 +14,11 @@ import { getAvailableTools, getClaudeToolDefinitions, getToolByName, getToolCata
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const s3 = new S3Client({ region: process.env.MY_REGION || 'eu-north-1' });
 const secretsManager = new SecretsManagerClient({ region: process.env.MY_REGION || 'eu-north-1' });
+const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({ region: process.env.MY_REGION || 'eu-north-1' }));
+const kms = new KMSClient({ region: process.env.MY_REGION || 'eu-north-1' });
 const BUCKET = process.env.PUBLISH_BUCKET;
 const SECRETS_ID = process.env.SECRETS_ID || 'app-factory/automation-secrets';
+const USER_SECRETS_TABLE = process.env.USER_SECRETS_TABLE || 'UserSecrets';
 const MODEL = process.env.AUTOMATION_EXECUTE_MODEL || 'claude-sonnet-4-20250514';
 const JOB_PREFIX = 'automation-executions/jobs';
 
@@ -49,6 +55,57 @@ async function getSecrets() {
     console.warn('Failed to load secrets:', err.message);
     return {};
   }
+}
+
+// ============ USER SECRETS (DynamoDB + KMS) ============
+async function getUserSecrets(userId) {
+  try {
+    const result = await ddb.send(new GetCommand({
+      TableName: USER_SECRETS_TABLE,
+      Key: { userId },
+    }));
+    if (!result.Item) return {};
+
+    const flat = {};
+    for (const [integrationId, data] of Object.entries(result.Item)) {
+      if (integrationId === 'userId' || integrationId === 'updatedAt') continue;
+      if (typeof data !== 'object') continue;
+
+      const secretFields = data._secretFields || [];
+      for (const [key, val] of Object.entries(data)) {
+        if (key === '_secretFields') continue;
+        // Decrypt secret fields
+        if (secretFields.includes(key) && val) {
+          try {
+            const decrypted = await kms.send(new DecryptCommand({
+              CiphertextBlob: Buffer.from(val, 'base64'),
+            }));
+            flat[key] = new TextDecoder().decode(decrypted.Plaintext);
+          } catch {
+            flat[key] = val; // fallback if decryption fails (dev mode)
+          }
+        } else {
+          flat[key] = val;
+        }
+      }
+    }
+    return flat;
+  } catch (err) {
+    console.warn('Failed to load user secrets:', err.message);
+    return {};
+  }
+}
+
+/**
+ * Merge org-level secrets with user-level secrets.
+ * User secrets override org secrets (per key).
+ */
+async function getMergedSecrets(userId) {
+  const [orgSecrets, userSecrets] = await Promise.all([
+    getSecrets(),
+    getUserSecrets(userId),
+  ]);
+  return { ...orgSecrets, ...userSecrets };
 }
 
 // ============ JOB STORE (S3-backed) ============
@@ -251,9 +308,9 @@ export const handler = async (event) => {
   const path = event.rawPath || event.requestContext?.http?.path || '';
 
   try {
-    // GET /tools — list available tools
+    // GET /tools — list available tools (filtered by user's configured secrets)
     if (method === 'GET' && path.endsWith('/tools')) {
-      const secrets = await getSecrets();
+      const secrets = await getMergedSecrets(user.sub);
       const availableTools = getAvailableTools(secrets);
       return reply(200, {
         tools: availableTools.map(t => ({
@@ -294,8 +351,8 @@ export const handler = async (event) => {
         createdAt: new Date().toISOString(),
       });
 
-      // Load secrets and execute
-      const secrets = await getSecrets();
+      // Load org + user secrets (user overrides org)
+      const secrets = await getMergedSecrets(user.sub);
 
       console.log(JSON.stringify({
         event: 'execution_start',
