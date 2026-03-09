@@ -3,7 +3,7 @@ import React, { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { SK } from '../services/sk-theme';
 import { saveAutomationTemplate, startAutomationExecution, generateAutomation } from '../services/api';
-import AutomationStep, { NODE_WIDTH, NODE_HEIGHT, PORT_SIZE } from './AutomationStep';
+import AutomationStep, { NODE_WIDTH, NODE_HEIGHT, LABEL_HEIGHT, PORT_SIZE } from './AutomationStep';
 import ExecutionPanel from './ExecutionPanel';
 import IntegrationSettings from './IntegrationSettings';
 
@@ -13,9 +13,9 @@ const STEP_TYPES = [
   { value: 'condition', label: 'Condition' },
   { value: 'output', label: 'Sortie' },
 ];
-const H_GAP = 300;
-const V_GAP = 140;
-const CANVAS_PADDING = 60;
+const H_GAP = 200;          // horizontal gap between columns
+const V_GAP = 60;           // vertical gap between rows (card+label = ~150px total)
+const CANVAS_PADDING = 80;  // padding around canvas
 
 // ============ AUTO-LAYOUT (topological BFS) ============
 function computeLayout(steps, connections) {
@@ -58,15 +58,15 @@ function computeLayout(steps, connections) {
     levels[d].push(s.id);
   });
 
-  // Position
+  // Position — account for card height + label height below
+  const SLOT_HEIGHT = NODE_HEIGHT + LABEL_HEIGHT + V_GAP;
   const positions = {};
   Object.entries(levels).forEach(([depth, ids]) => {
     const d = Number(depth);
-    const totalHeight = ids.length * (NODE_HEIGHT + V_GAP) - V_GAP;
     ids.forEach((id, idx) => {
       positions[id] = {
-        x: CANVAS_PADDING + d * H_GAP,
-        y: CANVAS_PADDING + idx * (NODE_HEIGHT + V_GAP) + (ids.length === 1 ? 80 : 0),
+        x: CANVAS_PADDING + d * (NODE_WIDTH + H_GAP),
+        y: CANVAS_PADDING + idx * SLOT_HEIGHT + (ids.length === 1 ? 60 : 0),
       };
     });
   });
@@ -75,22 +75,42 @@ function computeLayout(steps, connections) {
 }
 
 // ============ SVG CONNECTION ============
-function ConnectionLine({ fromPos, toPos, color }) {
-  const x1 = fromPos.x + NODE_WIDTH + PORT_SIZE / 2;
+function ConnectionLine({ fromPos, toPos, label }) {
+  const x1 = fromPos.x + NODE_WIDTH + PORT_SIZE / 2 + 1;
   const y1 = fromPos.y + NODE_HEIGHT / 2;
-  const x2 = toPos.x - PORT_SIZE / 2;
+  const x2 = toPos.x - PORT_SIZE / 2 - 1;
   const y2 = toPos.y + NODE_HEIGHT / 2;
-  const cx = Math.abs(x2 - x1) * 0.4;
+  const dx = x2 - x1;
+  const cx = Math.abs(dx) * 0.45;
+
+  const midX = (x1 + x2) / 2;
+  const midY = (y1 + y2) / 2;
 
   return (
-    <path
-      d={`M ${x1} ${y1} C ${x1 + cx} ${y1}, ${x2 - cx} ${y2}, ${x2} ${y2}`}
-      fill="none"
-      stroke={color}
-      strokeWidth={2}
-      strokeDasharray="none"
-      opacity={0.5}
-    />
+    <g>
+      <path
+        d={`M ${x1} ${y1} C ${x1 + cx} ${y1}, ${x2 - cx} ${y2}, ${x2} ${y2}`}
+        fill="none"
+        stroke="#CBD5DB"
+        strokeWidth={1.5}
+      />
+      {/* Arrow head */}
+      <circle cx={x2} cy={y2} r={2.5} fill="#CBD5DB" />
+      {/* Branch label (for conditions) */}
+      {label && (
+        <text
+          x={midX}
+          y={midY - 8}
+          textAnchor="middle"
+          fontSize={10}
+          fontWeight={500}
+          fill="#A8B9C3"
+          fontFamily={SK.fontFamily}
+        >
+          {label}
+        </text>
+      )}
+    </g>
   );
 }
 
@@ -274,7 +294,7 @@ export default function AutomationBuilder({ data, setData, onBack, t }) {
     const allPos = Object.values(positions);
     if (!allPos.length) return { width: 800, height: 400 };
     const maxX = Math.max(...allPos.map(p => p.x)) + NODE_WIDTH + CANVAS_PADDING * 2;
-    const maxY = Math.max(...allPos.map(p => p.y)) + NODE_HEIGHT + CANVAS_PADDING * 2;
+    const maxY = Math.max(...allPos.map(p => p.y)) + NODE_HEIGHT + LABEL_HEIGHT + CANVAS_PADDING * 2;
     return { width: Math.max(800, maxX), height: Math.max(400, maxY) };
   }, [positions]);
 
@@ -430,6 +450,9 @@ export default function AutomationBuilder({ data, setData, onBack, t }) {
             flex: 1,
             overflow: 'auto',
             position: 'relative',
+            background: '#F8FAFB',
+            backgroundImage: 'radial-gradient(circle, #E2E8F0 1px, transparent 1px)',
+            backgroundSize: '24px 24px',
           }}
           onClick={() => setSelectedId(null)}
         >
@@ -443,7 +466,7 @@ export default function AutomationBuilder({ data, setData, onBack, t }) {
               const from = positions[conn.from];
               const to = positions[conn.to];
               if (!from || !to) return null;
-              return <ConnectionLine key={i} fromPos={from} toPos={to} color={SK.iceBlue} />;
+              return <ConnectionLine key={i} fromPos={from} toPos={to} label={conn.label || null} />;
             })}
           </svg>
 
