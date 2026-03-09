@@ -76,6 +76,7 @@ Pour les regles KPI et la regle ZERO FABRICATION, voir `references/kpis.md`.
 Minimum 3 types de graphiques, palette COLORS obligatoire.
 
 Pour la configuration Recharts et la regle PieChart Cell, voir `references/charts.md`.
+Pour la reference API Recharts complete (props valides, erreurs courantes, composants inexistants), voir `references/recharts-api.md`.
 
 ## Tableaux
 

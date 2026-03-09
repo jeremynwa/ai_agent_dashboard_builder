@@ -555,8 +555,9 @@ export const handler = async (event) => {
 
     // ============ VISION ============
     if (screenshot && prompt === '__VISION_ANALYZE__') {
-      let codeContext = '';
-      if (existingApp) { for (const [p, c] of Object.entries(existingApp)) codeContext += `--- ${p} ---\n${c}\n\n`; }
+      // Context reset: only send App.jsx to vision (strip all other files, data, db context)
+      const appJsx = existingApp?.['src/App.jsx'] || '';
+      const codeContext = appJsx ? `--- src/App.jsx ---\n${appJsx}\n\n` : '';
 
       let visionResponse;
       const startVision = Date.now();

@@ -93,17 +93,10 @@ export async function generateApp(prompt, excelData = null, existingCode = null,
 export async function visionAnalyze(screenshot, currentCode, excelData = null, dbContext = null) {
   const headers = await authHeaders();
 
-  // Strip fullData for vision calls too (only schema needed)
-  let excelPayload = null;
-  if (excelData) {
-    const allData = excelData.fullData || excelData.data || [];
-    excelPayload = {
-      fileName: excelData.fileName,
-      headers: excelData.headers,
-      data: allData.slice(0, 30),
-      totalRows: excelData.totalRows,
-    };
-  }
+  // Context reset: vision only needs screenshot + App.jsx code — no data, no db context
+  const strippedCode = currentCode?.['src/App.jsx']
+    ? { 'src/App.jsx': currentCode['src/App.jsx'] }
+    : currentCode;
 
   const res = await fetch(GENERATE_URL, {
     method: 'POST',
@@ -111,10 +104,7 @@ export async function visionAnalyze(screenshot, currentCode, excelData = null, d
     body: JSON.stringify({
       prompt: '__VISION_ANALYZE__',
       screenshot,
-      existingCode: currentCode,
-      excelData: excelPayload,
-      dbContext,
-      useRules: true,
+      existingCode: strippedCode,
     }),
   });
   if (!res.ok) {
