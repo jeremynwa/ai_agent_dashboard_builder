@@ -74,3 +74,41 @@ animate-pulse
 - **table-header-cell**, **table-cell**, **table-row-even**, **table-row-odd** — tableau
 - **hover-card**, **hover-bg** — hover helpers
 - **skeleton** — loading placeholder avec pulse
+
+## Regles de Polish (Finition Visuelle)
+
+Les dashboards doivent avoir un rendu poli et professionnel. Ces regles sont automatiques via ds.css:
+
+### Transitions & Hover
+- `.card` et `.kpi-card` ont des transitions automatiques (border-color, box-shadow, transform au hover)
+- `.insight-item` s'eclaire au hover
+- `.table-row-even` et `.table-row-odd` s'eclairent au hover
+- NE PAS ajouter de transitions manuelles sur ces elements — ds.css les gere
+
+### Spacing Consistant
+- Gap minimum entre sections: `gap-6` (24px) ou `mb-6` (24px)
+- Padding interne des cards: toujours 24px (deja dans `.card`)
+- Padding KPI cards: 20px (deja dans `.kpi-card`)
+- NE PAS mettre gap-2 ou gap-3 entre des sections majeures
+
+### Hierarchie Typographique
+- Titre de page: `text-xl font-bold` (20px)
+- Titre de section/carte: `section-title` (15px semibold)
+- Labels KPI: `kpi-label` (11px uppercase)
+- Valeurs KPI: `kpi-value` (28px bold)
+- Body text: `text-sm` (14px) ou `text-13` (13px)
+- Captions/meta: `text-xs` (12px)
+- NE PAS utiliser text-2xl ou text-3xl dans le contenu (reserve aux KPI values)
+
+### Recharts Styling Uniforme
+- Tooltip: TOUJOURS `contentStyle={{ background:'#1A2332', border:'1px solid #2A3A50', borderRadius:'8px', color:'#F1F5F9' }}`
+- Legend: TOUJOURS `wrapperStyle={{ color:'#94A3B8', fontSize:'12px' }}`
+- CartesianGrid: TOUJOURS `strokeDasharray="3 3" stroke="#1E293B"`
+- XAxis/YAxis tick: TOUJOURS `{{ fill:'#64748B', fontSize:11 }}`
+- NE PAS varier ces styles entre graphiques d'un meme dashboard
+
+### Responsive
+- Utiliser `grid-kpis` pour les KPIs (auto-fit)
+- Utiliser `grid-charts-2` pour 2 colonnes de graphiques (breakpoint 768px)
+- Utiliser `grid-charts-3` pour 3 colonnes (breakpoints 768px + 1200px)
+- NE PAS creer des grids manuelles avec grid-cols-N pour les graphiques

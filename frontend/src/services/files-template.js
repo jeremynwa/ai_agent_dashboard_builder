@@ -229,8 +229,10 @@ table { border-collapse: collapse; }
    COMPONENT CLASSES
    ================================================ */
 
-.card { background: var(--card); border-radius: 14px; border: 1px solid var(--border); padding: 24px; }
-.kpi-card { background: var(--card); border-radius: 14px; border: 1px solid var(--border); padding: 20px; display: flex; flex-direction: column; gap: 6px; }
+.card { background: var(--card); border-radius: 14px; border: 1px solid var(--border); padding: 24px; transition: border-color 0.2s ease, box-shadow 0.2s ease; }
+.card:hover { border-color: var(--border-active); box-shadow: 0 4px 16px rgba(0,0,0,0.2); }
+.kpi-card { background: var(--card); border-radius: 14px; border: 1px solid var(--border); padding: 20px; display: flex; flex-direction: column; gap: 6px; transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease; }
+.kpi-card:hover { border-color: var(--border-active); box-shadow: 0 4px 16px rgba(0,0,0,0.2); transform: translateY(-1px); }
 .kpi-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-3); }
 .kpi-value { font-size: 28px; font-weight: 700; color: var(--text-1); line-height: 1.25; }
 .kpi-comparison { font-size: 12px; color: var(--text-2); }
@@ -265,7 +267,8 @@ table { border-collapse: collapse; }
 .content-area { padding: 28px; overflow-y: auto; height: calc(100vh - 60px); }
 
 /* Insights */
-.insight-item { display: flex; gap: 12px; padding: 14px 16px; background: var(--card-alt); border-radius: 10px; margin-bottom: 8px; }
+.insight-item { display: flex; gap: 12px; padding: 14px 16px; background: var(--card-alt); border-radius: 10px; margin-bottom: 8px; transition: background 0.2s ease; }
+.insight-item:hover { background: var(--card-hover); }
 .insight-bar { width: 3px; border-radius: 2px; flex-shrink: 0; align-self: stretch; }
 .insight-bar-up { background: var(--up); }
 .insight-bar-down { background: var(--down); }
@@ -276,8 +279,9 @@ table { border-collapse: collapse; }
 .w-full { width: 100%; border-collapse: collapse; border-spacing: 0; }
 .table-header-cell { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-3); padding: 10px 16px; text-align: left; white-space: nowrap; border-bottom: 1px solid var(--border); }
 .table-cell { padding: 10px 16px; color: var(--text-2); font-size: 13px; white-space: nowrap; border-bottom: 1px solid rgba(30,41,59,0.5); }
-.table-row-even { background: var(--card); }
-.table-row-odd { background: var(--card-alt); }
+.table-row-even { background: var(--card); transition: background 0.15s ease; }
+.table-row-odd { background: var(--card-alt); transition: background 0.15s ease; }
+.table-row-even:hover, .table-row-odd:hover { background: var(--card-hover); }
 .table-cell:first-child { color: var(--text-1); font-weight: 500; }
 
 /* Responsive Grid */
