@@ -15,8 +15,23 @@ const PORT_SIZE = 12;
 
 export { NODE_WIDTH, NODE_HEIGHT, PORT_SIZE };
 
-export default function AutomationStep({ step, isSelected, onSelect, position }) {
+const TOOL_ICONS = {
+  send_email: '\u{1F4E7}',
+  send_teams_message: '\u{1F4AC}',
+  read_excel: '\u{1F4CA}',
+  write_excel: '\u{1F4DD}',
+  call_api: '\u{1F310}',
+};
+
+const EXEC_STATUS_STYLES = {
+  running: { borderColor: '#06B6D4', shadow: '0 0 8px rgba(6, 182, 212, 0.4)' },
+  success: { borderColor: '#2FA74D', shadow: '0 0 8px rgba(47, 167, 77, 0.3)' },
+  error: { borderColor: '#E45444', shadow: '0 0 8px rgba(228, 84, 68, 0.3)' },
+};
+
+export default function AutomationStep({ step, isSelected, onSelect, position, executionStatus }) {
   const ts = TYPE_STYLES[step.type] || TYPE_STYLES.action;
+  const execStyle = executionStatus ? EXEC_STATUS_STYLES[executionStatus] : null;
 
   return (
     <div
@@ -28,9 +43,9 @@ export default function AutomationStep({ step, isSelected, onSelect, position })
         width: NODE_WIDTH,
         height: NODE_HEIGHT,
         background: SK.white,
-        border: `2px solid ${isSelected ? ts.color : SK.border}`,
+        border: `2px solid ${execStyle?.borderColor || (isSelected ? ts.color : SK.border)}`,
         borderRadius: SK.radiusMd,
-        boxShadow: isSelected ? `0 0 0 3px ${ts.color}30` : SK.shadowSm,
+        boxShadow: execStyle?.shadow || (isSelected ? `0 0 0 3px ${ts.color}30` : SK.shadowSm),
         cursor: 'pointer',
         transition: 'border-color 0.15s, box-shadow 0.15s',
         display: 'flex',
@@ -86,6 +101,26 @@ export default function AutomationStep({ step, isSelected, onSelect, position })
       }}>
         {step.description}
       </div>
+
+      {/* Tool badge */}
+      {step.tool && TOOL_ICONS[step.tool] && (
+        <div style={{
+          position: 'absolute',
+          bottom: 6,
+          right: 8,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 3,
+          fontSize: 10,
+          color: SK.textMuted,
+          background: 'rgba(0,0,0,0.03)',
+          padding: '1px 5px',
+          borderRadius: 4,
+        }}>
+          <span>{TOOL_ICONS[step.tool]}</span>
+          <span>{step.tool}</span>
+        </div>
+      )}
 
       {/* Input port (left center) */}
       {step.type !== 'trigger' && (

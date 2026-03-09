@@ -128,6 +128,7 @@ $REVIEW_CODE_URL = ($outputs | Where-Object { $_.OutputKey -eq "ReviewCodeUrl" }
 $GIT_PUSH_URL = ($outputs | Where-Object { $_.OutputKey -eq "GitPushUrl" }).OutputValue
 $REVIEW_RESEARCH_URL = ($outputs | Where-Object { $_.OutputKey -eq "ReviewResearchUrl" }).OutputValue
 $AUTOMATION_URL = ($outputs | Where-Object { $_.OutputKey -eq "AutomationUrl" }).OutputValue
+$AUTOMATION_EXECUTE_URL = ($outputs | Where-Object { $_.OutputKey -eq "AutomationExecuteUrl" }).OutputValue
 $COGNITO_POOL_ID = ($outputs | Where-Object { $_.OutputKey -eq "CognitoUserPoolId" }).OutputValue
 $COGNITO_CLIENT_ID = ($outputs | Where-Object { $_.OutputKey -eq "CognitoClientId" }).OutputValue
 
@@ -142,6 +143,7 @@ VITE_REVIEW_CODE_URL=$REVIEW_CODE_URL
 VITE_GIT_PUSH_URL=$GIT_PUSH_URL
 VITE_REVIEW_RESEARCH_URL=$REVIEW_RESEARCH_URL
 VITE_AUTOMATION_URL=$AUTOMATION_URL
+VITE_AUTOMATION_EXECUTE_URL=$AUTOMATION_EXECUTE_URL
 VITE_COGNITO_USER_POOL_ID=$COGNITO_POOL_ID
 VITE_COGNITO_CLIENT_ID=$COGNITO_CLIENT_ID
 "@

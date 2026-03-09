@@ -8,6 +8,7 @@ const EXPORT_URL = import.meta.env.VITE_EXPORT_URL || `${API_BASE}/export`;
 const REVIEW_CODE_URL = import.meta.env.VITE_REVIEW_CODE_URL || `${API_BASE}/review-code`;
 const GIT_PUSH_URL = import.meta.env.VITE_GIT_PUSH_URL || `${API_BASE}/git-push`;
 const AUTOMATION_URL = import.meta.env.VITE_AUTOMATION_URL || `${API_BASE}/automation`;
+const AUTOMATION_EXECUTE_URL = import.meta.env.VITE_AUTOMATION_EXECUTE_URL || `${API_BASE}/automation-execute`;
 
 // ============ AUTH HEADERS ============
 async function authHeaders() {
@@ -431,6 +432,43 @@ export async function saveAutomationTemplate(template) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || 'Save template failed');
   }
+  return res.json();
+}
+
+// ============ AUTOMATION EXECUTION ============
+export async function startAutomationExecution(workflow) {
+  const headers = await authHeaders();
+  const res = await fetch(`${AUTOMATION_EXECUTE_URL}/start`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ workflow }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    if (res.status === 401) throw new Error('Session expirée. Reconnectez-vous.');
+    throw new Error(err.error || 'Automation execution failed');
+  }
+  return res.json();
+}
+
+export async function getExecutionStatus(jobId) {
+  const headers = await authHeaders();
+  const res = await fetch(`${AUTOMATION_EXECUTE_URL}/status/${jobId}`, { headers });
+  if (!res.ok) throw new Error('Failed to get execution status');
+  return res.json();
+}
+
+export async function getExecutionResults(jobId) {
+  const headers = await authHeaders();
+  const res = await fetch(`${AUTOMATION_EXECUTE_URL}/results/${jobId}`, { headers });
+  if (!res.ok) throw new Error('Failed to get execution results');
+  return res.json();
+}
+
+export async function listAvailableTools() {
+  const headers = await authHeaders();
+  const res = await fetch(`${AUTOMATION_EXECUTE_URL}/tools`, { headers });
+  if (!res.ok) throw new Error('Failed to list tools');
   return res.json();
 }
 

@@ -2,8 +2,9 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { SK } from '../services/sk-theme';
-import { saveAutomationTemplate } from '../services/api';
+import { saveAutomationTemplate, startAutomationExecution } from '../services/api';
 import AutomationStep, { NODE_WIDTH, NODE_HEIGHT, PORT_SIZE } from './AutomationStep';
+import ExecutionPanel from './ExecutionPanel';
 
 const STEP_TYPES = ['trigger', 'action', 'condition', 'output'];
 const H_GAP = 300;
@@ -246,6 +247,9 @@ function DetailPanel({ step, onUpdate, onDelete, t }) {
 export default function AutomationBuilder({ data, setData, onBack, t }) {
   const [selectedId, setSelectedId] = useState(null);
   const [showSaveModal, setShowSaveModal] = useState(false);
+  const [executionJobId, setExecutionJobId] = useState(null);
+  const [executing, setExecuting] = useState(false);
+  const [stepStatuses, setStepStatuses] = useState({});
 
   const { steps, connections } = data;
   const positions = useMemo(() => computeLayout(steps, connections), [steps, connections]);
@@ -313,6 +317,29 @@ export default function AutomationBuilder({ data, setData, onBack, t }) {
     });
   };
 
+  const handleExecute = async () => {
+    if (executing || !data.steps.length) return;
+    setExecuting(true);
+    setStepStatuses({});
+    try {
+      const result = await startAutomationExecution({
+        name: data.name || 'Automation',
+        description: data.description || '',
+        steps: data.steps,
+        connections: data.connections,
+        metadata: data.metadata || {},
+      });
+      setExecutionJobId(result.jobId);
+    } catch (err) {
+      console.error('Execution failed:', err);
+      setExecuting(false);
+    }
+  };
+
+  const handleStepStatus = useCallback((stepName, status) => {
+    setStepStatuses(prev => ({ ...prev, [stepName]: status }));
+  }, []);
+
   return (
     <div style={{
       display: 'flex',
@@ -337,6 +364,17 @@ export default function AutomationBuilder({ data, setData, onBack, t }) {
           )}
         </div>
         <button onClick={addStep} style={btnSecondary}>+ {t('automationAddStep')}</button>
+        <button
+          onClick={handleExecute}
+          disabled={executing || !data.steps.length}
+          style={{
+            ...btnPrimary,
+            background: executing ? SK.textMuted : `linear-gradient(135deg, ${SK.signalGreen}, ${SK.aqua})`,
+            opacity: (!data.steps.length || executing) ? 0.5 : 1,
+          }}
+        >
+          {executing ? '...' : `▶ ${t('automationExecute') || 'Exécuter'}`}
+        </button>
         <button onClick={() => setShowSaveModal(true)} style={btnPrimary}>
           {t('automationSaveTemplate')}
         </button>
@@ -379,6 +417,7 @@ export default function AutomationBuilder({ data, setData, onBack, t }) {
                   isSelected={step.id === selectedId}
                   onSelect={setSelectedId}
                   position={pos}
+                  executionStatus={stepStatuses[step.tool] || null}
                 />
               );
             })}
@@ -431,6 +470,18 @@ export default function AutomationBuilder({ data, setData, onBack, t }) {
           )}
         </div>
       )}
+
+      {/* Execution panel */}
+      <AnimatePresence>
+        {executionJobId && (
+          <ExecutionPanel
+            jobId={executionJobId}
+            onClose={() => { setExecutionJobId(null); setExecuting(false); setStepStatuses({}); }}
+            onStepStatus={handleStepStatus}
+            t={t}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Save modal */}
       {showSaveModal && (
