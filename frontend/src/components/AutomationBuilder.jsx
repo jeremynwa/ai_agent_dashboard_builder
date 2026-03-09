@@ -7,7 +7,12 @@ import AutomationStep, { NODE_WIDTH, NODE_HEIGHT, PORT_SIZE } from './Automation
 import ExecutionPanel from './ExecutionPanel';
 import IntegrationSettings from './IntegrationSettings';
 
-const STEP_TYPES = ['trigger', 'action', 'condition', 'output'];
+const STEP_TYPES = [
+  { value: 'trigger', label: 'Déclencheur' },
+  { value: 'action', label: 'Action' },
+  { value: 'condition', label: 'Condition' },
+  { value: 'output', label: 'Sortie' },
+];
 const H_GAP = 300;
 const V_GAP = 140;
 const CANVAS_PADDING = 60;
@@ -200,8 +205,8 @@ function DetailPanel({ step, onUpdate, onDelete, t }) {
           onChange={e => update('type', e.target.value)}
           style={inputStyle}
         >
-          {STEP_TYPES.map(t => (
-            <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
+          {STEP_TYPES.map(st => (
+            <option key={st.value} value={st.value}>{st.label}</option>
           ))}
         </select>
       </label>
@@ -211,26 +216,30 @@ function DetailPanel({ step, onUpdate, onDelete, t }) {
         <textarea
           value={step.description}
           onChange={e => update('description', e.target.value)}
-          rows={3}
+          rows={4}
           style={{ ...inputStyle, resize: 'vertical' }}
         />
       </label>
 
-      <label style={labelStyle}>
-        Code
-        <textarea
-          value={step.code || ''}
-          onChange={e => update('code', e.target.value)}
-          rows={8}
-          style={{
-            ...inputStyle,
-            fontFamily: 'monospace',
-            fontSize: 12,
-            resize: 'vertical',
-            lineHeight: 1.5,
-          }}
-        />
-      </label>
+      {/* Tool info (read-only, if assigned) */}
+      {step.tool && (
+        <div style={{
+          padding: '8px 10px',
+          background: 'rgba(109, 177, 199, 0.06)',
+          borderRadius: SK.radiusSm,
+          border: `1px solid rgba(109, 177, 199, 0.15)`,
+          fontSize: 12,
+          color: SK.textSecondary,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+        }}>
+          <span style={{ fontSize: 14 }}>🔧</span>
+          Outil : <strong style={{ color: SK.textPrimary }}>{
+            { send_email: 'Email', send_teams_message: 'Teams', read_excel: 'Lire Excel', write_excel: 'Créer Excel', call_api: 'Appel API' }[step.tool] || step.tool
+          }</strong>
+        </div>
+      )}
 
       <button onClick={() => onDelete(step.id)} style={{
         ...btnSecondary,

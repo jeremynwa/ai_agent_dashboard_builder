@@ -23,6 +23,21 @@ const TOOL_ICONS = {
   call_api: '\u{1F310}',
 };
 
+const TOOL_LABELS = {
+  send_email: 'Email',
+  send_teams_message: 'Teams',
+  read_excel: 'Lire Excel',
+  write_excel: 'Créer Excel',
+  call_api: 'API',
+};
+
+const TYPE_LABELS = {
+  trigger: 'Déclencheur',
+  action: 'Action',
+  condition: 'Condition',
+  output: 'Sortie',
+};
+
 const EXEC_STATUS_STYLES = {
   running: { borderColor: '#06B6D4', shadow: '0 0 8px rgba(6, 182, 212, 0.4)' },
   success: { borderColor: '#2FA74D', shadow: '0 0 8px rgba(47, 167, 77, 0.3)' },
@@ -103,7 +118,7 @@ export default function AutomationStep({ step, isSelected, onSelect, position, e
       </div>
 
       {/* Tool badge */}
-      {step.tool && TOOL_ICONS[step.tool] && (
+      {step.tool && (TOOL_ICONS[step.tool] || TOOL_LABELS[step.tool]) && (
         <div style={{
           position: 'absolute',
           bottom: 6,
@@ -114,11 +129,11 @@ export default function AutomationStep({ step, isSelected, onSelect, position, e
           fontSize: 10,
           color: SK.textMuted,
           background: 'rgba(0,0,0,0.03)',
-          padding: '1px 5px',
+          padding: '2px 6px',
           borderRadius: 4,
         }}>
-          <span>{TOOL_ICONS[step.tool]}</span>
-          <span>{step.tool}</span>
+          {TOOL_ICONS[step.tool] && <span>{TOOL_ICONS[step.tool]}</span>}
+          <span>{TOOL_LABELS[step.tool] || step.tool}</span>
         </div>
       )}
 
@@ -162,7 +177,7 @@ export default function AutomationStep({ step, isSelected, onSelect, position, e
         color: ts.color,
         opacity: 0.7,
       }}>
-        {step.type}
+        {TYPE_LABELS[step.type] || step.type}
       </div>
     </div>
   );
