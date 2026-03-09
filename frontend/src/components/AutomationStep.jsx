@@ -127,12 +127,12 @@ export default function AutomationStep({ step, isSelected, onSelect, position, e
           </div>
         )}
 
-        {/* Input port (left center) */}
+        {/* Input port (top center) */}
         {step.type !== 'trigger' && (
           <div style={{
             position: 'absolute',
-            left: -(PORT_SIZE / 2) - 1,
-            top: NODE_HEIGHT / 2 - PORT_SIZE / 2,
+            top: -(PORT_SIZE / 2) - 1,
+            left: NODE_WIDTH / 2 - PORT_SIZE / 2,
             width: PORT_SIZE,
             height: PORT_SIZE,
             borderRadius: '50%',
@@ -142,20 +142,7 @@ export default function AutomationStep({ step, isSelected, onSelect, position, e
           }} />
         )}
 
-        {/* Output port (right center) */}
-        {step.type !== 'output' && (
-          <div style={{
-            position: 'absolute',
-            right: -(PORT_SIZE / 2) - 1,
-            top: NODE_HEIGHT / 2 - PORT_SIZE / 2,
-            width: PORT_SIZE,
-            height: PORT_SIZE,
-            borderRadius: '50%',
-            background: execStyle?.borderColor || '#CBD5DB',
-            border: `2px solid ${execStyle?.borderColor || '#CBD5DB'}`,
-            transition: 'background 0.2s, border-color 0.2s',
-          }} />
-        )}
+        {/* Output port (bottom center) — hidden, line connects below label */}
 
         {/* Execution status pulse */}
         {executionStatus === 'running' && (

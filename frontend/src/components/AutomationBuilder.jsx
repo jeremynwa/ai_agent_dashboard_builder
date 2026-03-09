@@ -13,11 +13,11 @@ const STEP_TYPES = [
   { value: 'condition', label: 'Condition' },
   { value: 'output', label: 'Sortie' },
 ];
-const H_GAP = 200;          // horizontal gap between columns
-const V_GAP = 60;           // vertical gap between rows (card+label = ~150px total)
-const CANVAS_PADDING = 80;  // padding around canvas
+const ROW_GAP = 80;         // vertical gap between depth rows
+const COL_GAP = 60;         // horizontal gap between siblings at same depth
+const CANVAS_PADDING = 50;  // padding around canvas
 
-// ============ AUTO-LAYOUT (topological BFS) ============
+// ============ AUTO-LAYOUT (top-to-bottom, BFS) ============
 function computeLayout(steps, connections) {
   if (!steps.length) return {};
 
@@ -58,15 +58,23 @@ function computeLayout(steps, connections) {
     levels[d].push(s.id);
   });
 
-  // Position — account for card height + label height below
-  const SLOT_HEIGHT = NODE_HEIGHT + LABEL_HEIGHT + V_GAP;
+  // Vertical layout: depth = row (y), siblings = columns (x centered)
+  const SLOT_H = NODE_HEIGHT + LABEL_HEIGHT + ROW_GAP;
+  const SLOT_W = NODE_WIDTH + COL_GAP;
   const positions = {};
+
+  // Find the widest level to center everything
+  const maxCols = Math.max(...Object.values(levels).map(ids => ids.length));
+  const totalWidth = maxCols * SLOT_W - COL_GAP;
+
   Object.entries(levels).forEach(([depth, ids]) => {
     const d = Number(depth);
+    const rowWidth = ids.length * SLOT_W - COL_GAP;
+    const offsetX = (totalWidth - rowWidth) / 2; // center this row
     ids.forEach((id, idx) => {
       positions[id] = {
-        x: CANVAS_PADDING + d * (NODE_WIDTH + H_GAP),
-        y: CANVAS_PADDING + idx * SLOT_HEIGHT + (ids.length === 1 ? 60 : 0),
+        x: CANVAS_PADDING + offsetX + idx * SLOT_W,
+        y: CANVAS_PADDING + d * SLOT_H,
       };
     });
   });
@@ -74,14 +82,15 @@ function computeLayout(steps, connections) {
   return positions;
 }
 
-// ============ SVG CONNECTION ============
+// ============ SVG CONNECTION (top-to-bottom) ============
 function ConnectionLine({ fromPos, toPos, label }) {
-  const x1 = fromPos.x + NODE_WIDTH + PORT_SIZE / 2 + 1;
-  const y1 = fromPos.y + NODE_HEIGHT / 2;
-  const x2 = toPos.x - PORT_SIZE / 2 - 1;
-  const y2 = toPos.y + NODE_HEIGHT / 2;
-  const dx = x2 - x1;
-  const cx = Math.abs(dx) * 0.45;
+  // From bottom-center of source card to top-center of target card
+  const x1 = fromPos.x + NODE_WIDTH / 2;
+  const y1 = fromPos.y + NODE_HEIGHT + LABEL_HEIGHT + 4; // below label
+  const x2 = toPos.x + NODE_WIDTH / 2;
+  const y2 = toPos.y - 4; // above card top
+  const dy = Math.abs(y2 - y1);
+  const cy = dy * 0.4;
 
   const midX = (x1 + x2) / 2;
   const midY = (y1 + y2) / 2;
@@ -89,19 +98,19 @@ function ConnectionLine({ fromPos, toPos, label }) {
   return (
     <g>
       <path
-        d={`M ${x1} ${y1} C ${x1 + cx} ${y1}, ${x2 - cx} ${y2}, ${x2} ${y2}`}
+        d={`M ${x1} ${y1} C ${x1} ${y1 + cy}, ${x2} ${y2 - cy}, ${x2} ${y2}`}
         fill="none"
         stroke="#CBD5DB"
         strokeWidth={1.5}
       />
-      {/* Arrow head */}
+      {/* Arrow dot at target */}
       <circle cx={x2} cy={y2} r={2.5} fill="#CBD5DB" />
       {/* Branch label (for conditions) */}
       {label && (
         <text
-          x={midX}
-          y={midY - 8}
-          textAnchor="middle"
+          x={midX + 12}
+          y={midY}
+          textAnchor="start"
           fontSize={10}
           fontWeight={500}
           fill="#A8B9C3"
@@ -289,13 +298,13 @@ export default function AutomationBuilder({ data, setData, onBack, t }) {
 
   const selectedStep = steps.find(s => s.id === selectedId);
 
-  // Canvas dimensions
+  // Canvas dimensions — fit to vertical layout
   const canvasSize = useMemo(() => {
     const allPos = Object.values(positions);
-    if (!allPos.length) return { width: 800, height: 400 };
-    const maxX = Math.max(...allPos.map(p => p.x)) + NODE_WIDTH + CANVAS_PADDING * 2;
-    const maxY = Math.max(...allPos.map(p => p.y)) + NODE_HEIGHT + LABEL_HEIGHT + CANVAS_PADDING * 2;
-    return { width: Math.max(800, maxX), height: Math.max(400, maxY) };
+    if (!allPos.length) return { width: 600, height: 400 };
+    const maxX = Math.max(...allPos.map(p => p.x)) + NODE_WIDTH + CANVAS_PADDING;
+    const maxY = Math.max(...allPos.map(p => p.y)) + NODE_HEIGHT + LABEL_HEIGHT + CANVAS_PADDING;
+    return { width: Math.max(400, maxX), height: Math.max(300, maxY) };
   }, [positions]);
 
   const updateStep = useCallback((id, updated) => {
@@ -456,49 +465,52 @@ export default function AutomationBuilder({ data, setData, onBack, t }) {
           }}
           onClick={() => setSelectedId(null)}
         >
-          {/* SVG connections layer */}
-          <svg
-            width={canvasSize.width}
-            height={canvasSize.height}
-            style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }}
-          >
-            {connections.map((conn, i) => {
-              const from = positions[conn.from];
-              const to = positions[conn.to];
-              if (!from || !to) return null;
-              return <ConnectionLine key={i} fromPos={from} toPos={to} label={conn.label || null} />;
-            })}
-          </svg>
+          {/* Workflow container (centered) */}
+          <div style={{ width: canvasSize.width, minHeight: canvasSize.height, position: 'relative', margin: '0 auto' }}>
+            {/* SVG connections layer */}
+            <svg
+              width={canvasSize.width}
+              height={canvasSize.height}
+              style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }}
+            >
+              {connections.map((conn, i) => {
+                const from = positions[conn.from];
+                const to = positions[conn.to];
+                if (!from || !to) return null;
+                return <ConnectionLine key={i} fromPos={from} toPos={to} label={conn.label || null} />;
+              })}
+            </svg>
 
-          {/* Nodes layer */}
-          <div style={{ width: canvasSize.width, height: canvasSize.height, position: 'relative' }}>
-            {steps.map(step => {
-              const pos = positions[step.id];
-              if (!pos) return null;
-              return (
-                <AutomationStep
-                  key={step.id}
-                  step={step}
-                  isSelected={step.id === selectedId}
-                  onSelect={setSelectedId}
-                  position={pos}
-                  executionStatus={stepStatuses[step.tool] || null}
-                />
-              );
-            })}
-          </div>
-
-          {/* Empty state */}
-          {steps.length === 0 && (
-            <div style={{
-              position: 'absolute', inset: 0,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: SK.textMuted, fontSize: 15,
-            }}>
-              {t('automationEmpty')}
+            {/* Nodes layer */}
+            <div style={{ width: canvasSize.width, height: canvasSize.height, position: 'relative' }}>
+              {steps.map(step => {
+                const pos = positions[step.id];
+                if (!pos) return null;
+                return (
+                  <AutomationStep
+                    key={step.id}
+                    step={step}
+                    isSelected={step.id === selectedId}
+                    onSelect={setSelectedId}
+                    position={pos}
+                    executionStatus={stepStatuses[step.tool] || null}
+                  />
+                );
+              })}
             </div>
-          )}
-        </div>
+
+            {/* Empty state */}
+            {steps.length === 0 && (
+              <div style={{
+                position: 'absolute', inset: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: SK.textMuted, fontSize: 15,
+              }}>
+                {t('automationEmpty')}
+              </div>
+            )}
+          </div>{/* /workflow container */}
+        </div>{/* /canvas */}
 
         {/* Detail panel */}
         <AnimatePresence>
